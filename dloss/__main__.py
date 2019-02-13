@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import torch as t
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 
 from torchvision.datasets import MNIST
 import torchvision.transforms as tvt
@@ -67,10 +67,10 @@ class VAE(t.nn.Module):
             latent_size=96,
     ):
         super().__init__()
-        self.activation = t.nn.Softplus()
+        self.activation = t.nn.LeakyReLU(inplace=True)
 
         self.enc1 = t.nn.Sequential(
-            t.nn.Linear(794, hidden_size),
+            t.nn.Linear(795, hidden_size),
             t.nn.BatchNorm1d(hidden_size),
         )
         self.enc2 = t.nn.Sequential(
@@ -91,15 +91,21 @@ class VAE(t.nn.Module):
         )
         self.dec13 = t.nn.Linear(hidden_size, 784)
 
-        self.dec21 = t.nn.Linear(latent_size, hidden_size)
-        self.dec22 = t.nn.Linear(hidden_size, hidden_size)
+        self.dec21 = t.nn.Sequential(
+            t.nn.Linear(latent_size, hidden_size),
+            t.nn.BatchNorm1d(hidden_size),
+        )
+        self.dec22 = t.nn.Sequential(
+            t.nn.Linear(hidden_size, hidden_size),
+            t.nn.BatchNorm1d(hidden_size),
+        )
         self.dec23 = t.nn.Linear(hidden_size, 10)
 
         self.softmax = t.nn.LogSoftmax(dim=1)
 
     def encode(self, x, label):
         x = x.reshape(x.shape[0], -1)
-        x = t.cat([x, t.eye(10).cuda()[label]], 1)
+        x = t.cat([x, t.eye(11)[label].to(DEVICE)], 1)
 
         x = self.activation(self.enc1(x))
         x = self.activation(self.enc2(x))
@@ -132,9 +138,15 @@ class VAE(t.nn.Module):
 class Discriminator(t.nn.Module):
     def __init__(self, input_size, hidden_size=1024):
         super().__init__()
-        self.activation = t.nn.Softplus()
-        self.fc1 = t.nn.Linear(input_size, hidden_size)
-        self.fc2 = t.nn.Linear(hidden_size, hidden_size)
+        self.activation = t.nn.LeakyReLU(inplace=True)
+        self.fc1 = t.nn.Sequential(
+            t.nn.Linear(input_size, hidden_size),
+            t.nn.BatchNorm1d(hidden_size),
+        )
+        self.fc2 = t.nn.Sequential(
+            t.nn.Linear(hidden_size, hidden_size),
+            t.nn.BatchNorm1d(hidden_size),
+        )
         self.prediction = t.nn.Linear(hidden_size, 1)
 
     def forward(self, x):
@@ -166,11 +178,33 @@ def restore_state(vae, discriminator, optimizers, file):
     return state['epoch']
 
 
+class PartiallyObservedMNIST(Dataset):
+    def __init__(self, obsprop):
+        self.dataset = MNIST(
+            DATA_DIR,
+            download=True,
+            transform=tvt.Compose([
+                tvt.ToTensor(),
+            ]),
+        )
+        self.observed = t.rand(len(self)) < obsprop
+        print(f'datset size = {len(self)}, '
+              f'observed = {self.observed.sum()}')
+
+    def __len__(self):
+        return len(self.dataset)
+
+    def __getitem__(self, idx):
+        img, label = self.dataset[idx]
+        return img, label, label if self.observed[idx] else t.tensor(10).long()
+
+
 def run(
         latent_size,
         output_prefix,
         state=None,
         report_interval=50,
+        observed=1.0,
 ):
     img_prefix = os.path.join(output_prefix, 'images')
     chkpt_prefix = os.path.join(output_prefix, 'checkpoints')
@@ -179,13 +213,7 @@ def run(
     os.makedirs(img_prefix, exist_ok=True)
     os.makedirs(chkpt_prefix, exist_ok=True)
 
-    dataset = MNIST(
-        DATA_DIR,
-        download=True,
-        transform=tvt.Compose([
-            tvt.ToTensor(),
-        ]),
-    )
+    dataset = PartiallyObservedMNIST(observed)
     dataloader = DataLoader(
         dataset,
         batch_size=4096,
@@ -200,12 +228,12 @@ def run(
 
     vae_optimizer = t.optim.Adam(
         vae.parameters(),
-        lr=0.0002,
+        lr=0.001,
         betas=(0.5, 0.999),
     )
     dis_optimizer = t.optim.Adam(
         discriminator.parameters(),
-        lr=0.0002,
+        lr=0.001,
         betas=(0.5, 0.999),
     )
 
@@ -221,27 +249,26 @@ def run(
 
     for epoch in it.count(start_epoch):
 
-        def _step(x, label):
+        def _step(x, label, observed_label):
             x = x.to(DEVICE)
             label = label.to(DEVICE)
+            observed_label = observed_label.to(DEVICE)
 
-            z, z_mu, z_sd, y1, y2 = vae(x, label)
+            z, z_mu, z_sd, y1, y2 = vae(x, observed_label)
 
-            label_likelihood = -t.nn.functional.nll_loss(
-                y2, label, reduction='sum')
+            plabel = y2[range(len(y2)), label].masked_select(
+                observed_label != 10)
 
             yz = t.cat([y1.reshape(y1.shape[0], -1), z], dim=1)
 
             pimg1 = t.nn.functional.logsigmoid(discriminator(yz))
 
             dkl = t.sum(
-                t.distributions.kl_divergence(
-                    t.distributions.Normal(z_mu, z_sd),
-                    t.distributions.Normal(0., 1.),
-                ))
+                t.distributions.Normal(z_mu, z_sd).log_prob(z)
+                - t.distributions.Normal(0., 1.).log_prob(z)
+            )
 
-            # generator_loss = -(label_likelihood + t.sum(pimg1)) + dkl
-            generator_loss = -(label_likelihood + t.sum(pimg1)) + 0.1 * dkl
+            generator_loss = -(t.sum(plabel) + t.sum(pimg1)) + dkl
 
             vae_optimizer.zero_grad()
             generator_loss.backward()
@@ -260,6 +287,8 @@ def run(
             discriminator_loss.backward()
             dis_optimizer.step()
 
+            correct = (t.argmax(y2, 1)) == label
+
             return (
                 len(x),
                 collect_items({
@@ -270,13 +299,19 @@ def run(
                     'g-loss':
                     generator_loss,
                     'p(lab|z)':
-                    label_likelihood,
+                    t.mean(t.exp(plabel)),
                     'p(img|z)':
                     t.mean(t.exp(pimg1)),
                     'dqp':
                     dkl,
-                    'accuracy':
-                    t.mean(((t.argmax(y2, 1)) == label).float()),
+                    'acc':
+                    t.mean(correct.float()),
+                    'obs. acc':
+                    t.mean(correct.masked_select(
+                        observed_label != 10).float()),
+                    'unobs. acc':
+                    t.mean(correct.masked_select(
+                        observed_label == 10).float()),
                 }),
             )
 
@@ -292,7 +327,7 @@ def run(
         print(
             f'epoch {epoch:4d}:',
             '  //  '.join([
-                '{} = {:>11s}'.format(k, f'{v:.4e}')
+                '{} = {:>9s}'.format(k, f'{v:.2e}')
                 for k, v in output.items()
             ]),
         )
@@ -336,12 +371,14 @@ def main():
 
     args = ap.ArgumentParser()
 
+    args.add_argument('--observed', type=float, default=1.0)
+    args.add_argument('--latent-size', type=int, default=256)
+
     args.add_argument(
         '--output-prefix',
         type=str,
         default=f'./dloss-{dt.now().isoformat()}',
     )
-    args.add_argument('--latent-size', type=int, default=256)
     args.add_argument('--state', type=str)
     args.add_argument('--report-interval', type=int, default=100)
 
