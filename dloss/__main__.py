@@ -69,37 +69,41 @@ class VAE(t.nn.Module):
         super().__init__()
         self.activation = t.nn.LeakyReLU(inplace=True)
 
-        self.enc1 = t.nn.Sequential(
+        self.encoder = t.nn.Sequential(
             t.nn.Linear(795, hidden_size),
             t.nn.BatchNorm1d(hidden_size),
-        )
-        self.enc2 = t.nn.Sequential(
+            t.nn.LeakyReLU(0.2, True),
             t.nn.Linear(hidden_size, hidden_size),
             t.nn.BatchNorm1d(hidden_size),
+            t.nn.LeakyReLU(0.2, True),
+            t.nn.Linear(hidden_size, hidden_size),
+            t.nn.BatchNorm1d(hidden_size),
+            t.nn.LeakyReLU(0.2, True),
         )
 
         self.z_mu = t.nn.Linear(hidden_size, latent_size)
         self.z_sd = t.nn.Linear(hidden_size, latent_size)
 
-        self.dec11 = t.nn.Sequential(
-            t.nn.Linear(latent_size, hidden_size),
-            t.nn.BatchNorm1d(hidden_size),
+        self.image_decoder = t.nn.Sequential(
+            t.nn.Linear(latent_size, 256),
+            t.nn.LeakyReLU(0.2, True),
+            t.nn.Linear(256, 512),
+            t.nn.LeakyReLU(0.2, True),
+            t.nn.Linear(512, 1024),
+            t.nn.LeakyReLU(0.2, True),
+            t.nn.Linear(1024, 784),
+            t.nn.Tanh(),
         )
-        self.dec12 = t.nn.Sequential(
-            t.nn.Linear(hidden_size, hidden_size),
-            t.nn.BatchNorm1d(hidden_size),
-        )
-        self.dec13 = t.nn.Linear(hidden_size, 784)
 
-        self.dec21 = t.nn.Sequential(
+        self.label_decoder = t.nn.Sequential(
             t.nn.Linear(latent_size, hidden_size),
-            t.nn.BatchNorm1d(hidden_size),
-        )
-        self.dec22 = t.nn.Sequential(
+            t.nn.LeakyReLU(0.2, True),
             t.nn.Linear(hidden_size, hidden_size),
-            t.nn.BatchNorm1d(hidden_size),
+            t.nn.LeakyReLU(0.2, True),
+            t.nn.Linear(hidden_size, hidden_size),
+            t.nn.LeakyReLU(0.2, True),
+            t.nn.Linear(hidden_size, 10),
         )
-        self.dec23 = t.nn.Linear(hidden_size, 10)
 
         self.softmax = t.nn.LogSoftmax(dim=1)
 
@@ -107,8 +111,7 @@ class VAE(t.nn.Module):
         x = x.reshape(x.shape[0], -1)
         x = t.cat([x, t.eye(11)[label].to(DEVICE)], 1)
 
-        x = self.activation(self.enc1(x))
-        x = self.activation(self.enc2(x))
+        x = self.encoder(x)
 
         z_mu = self.z_mu(x)
         z_sd = t.nn.functional.softplus(self.z_sd(x))
@@ -116,14 +119,10 @@ class VAE(t.nn.Module):
         return z_mu, z_sd
 
     def decode(self, z):
-        y1 = self.activation(self.dec11(z))
-        y1 = self.activation(self.dec12(y1))
-        y1 = t.sigmoid(self.dec13(y1))
+        y1 = self.image_decoder(z)
         y1 = y1.reshape(y1.shape[0], 1, 28, 28)
 
-        y2 = self.activation(self.dec21(z))
-        y2 = self.activation(self.dec22(y2))
-        y2 = self.activation(self.dec23(y2))
+        y2 = self.label_decoder(z)
         y2 = self.softmax(y2)
 
         return y1, y2
@@ -136,24 +135,21 @@ class VAE(t.nn.Module):
 
 
 class Discriminator(t.nn.Module):
-    def __init__(self, input_size, hidden_size=1024):
+    def __init__(self, input_size):
         super().__init__()
-        self.activation = t.nn.LeakyReLU(inplace=True)
-        self.fc1 = t.nn.Sequential(
-            t.nn.Linear(input_size, hidden_size),
-            t.nn.BatchNorm1d(hidden_size),
+        self.discriminator = t.nn.Sequential(
+            t.nn.Linear(input_size, 1024),
+            t.nn.LeakyReLU(0.2, True),
+            t.nn.Linear(1024, 512),
+            t.nn.LeakyReLU(0.2, True),
+            t.nn.Linear(512, 256),
+            t.nn.LeakyReLU(0.2, True),
+            t.nn.Linear(256, 1),
         )
-        self.fc2 = t.nn.Sequential(
-            t.nn.Linear(hidden_size, hidden_size),
-            t.nn.BatchNorm1d(hidden_size),
-        )
-        self.prediction = t.nn.Linear(hidden_size, 1)
 
     def forward(self, x):
         x = x.reshape(x.shape[0], -1)
-        x = self.activation(self.fc1(x))
-        x = self.activation(self.fc2(x))
-        x = self.prediction(x)
+        x = self.discriminator(x)
         return x
 
 
@@ -185,6 +181,7 @@ class PartiallyObservedMNIST(Dataset):
             download=True,
             transform=tvt.Compose([
                 tvt.ToTensor(),
+                tvt.Normalize((0.5, ), (0.5, )),
             ]),
         )
         self.observed = t.rand(len(self)) < obsprop
@@ -205,6 +202,7 @@ def run(
         state=None,
         report_interval=50,
         observed=1.0,
+        spike_prior=False,
 ):
     img_prefix = os.path.join(output_prefix, 'images')
     chkpt_prefix = os.path.join(output_prefix, 'checkpoints')
@@ -228,13 +226,15 @@ def run(
 
     vae_optimizer = t.optim.Adam(
         vae.parameters(),
-        lr=0.001,
+        lr=1e-3,
         betas=(0.5, 0.999),
+        weight_decay=1e-5,
     )
     dis_optimizer = t.optim.Adam(
         discriminator.parameters(),
-        lr=0.001,
+        lr=1e-3,
         betas=(0.5, 0.999),
+        weight_decay=1e-5,
     )
 
     if state:
@@ -256,30 +256,15 @@ def run(
 
             z, z_mu, z_sd, y1, y2 = vae(x, observed_label)
 
-            plabel = y2[range(len(y2)), label].masked_select(
-                observed_label != 10)
-
             yz = t.cat([y1.reshape(y1.shape[0], -1), z], dim=1)
 
-            pimg1 = t.nn.functional.logsigmoid(discriminator(yz))
-
-            dkl = t.sum(
-                t.distributions.Normal(z_mu, z_sd).log_prob(z)
-                - t.distributions.Normal(0., 1.).log_prob(z)
-            )
-
-            generator_loss = -(t.sum(plabel) + t.sum(pimg1)) + dkl
-
-            vae_optimizer.zero_grad()
-            generator_loss.backward()
-            vae_optimizer.step()
-
-            pimg2 = discriminator(yz.detach())
+            # -* discriminator loss *-
+            limg1 = discriminator(yz.detach())
             preal = discriminator(
                 t.cat([x.reshape(x.shape[0], -1), z.detach()], 1))
 
             discriminator_loss = (
-                - t.sum(t.nn.functional.logsigmoid(1 - pimg2))
+                - t.sum(t.nn.functional.logsigmoid(-limg1))
                 - t.sum(t.nn.functional.logsigmoid(preal))
             )
 
@@ -287,25 +272,54 @@ def run(
             discriminator_loss.backward()
             dis_optimizer.step()
 
+            # -* generator loss *-
+            limg2 = discriminator(yz)
+            plabl = y2[range(len(y2)), label].masked_select(
+                observed_label != 10)
+
+            dkl = t.sum(
+                t.distributions.Normal(z_mu, z_sd).log_prob(z)
+                - (
+                    np.log(0.5)
+                    +
+                    t.logsumexp(
+                        t.stack((
+                            t.distributions.Normal(0., 10.).log_prob(z),
+                            t.distributions.Normal(0., .1).log_prob(z),
+                        )),
+                        dim=0,
+                    )
+                    if spike_prior else
+                    t.distributions.Normal(0., 1.).log_prob(z)
+                )
+            )
+
+            generator_loss = (
+                - (t.sum(plabl) + t.sum(t.nn.functional.logsigmoid(limg2)))
+                + dkl * t.tanh(t.as_tensor(epoch).float().to(DEVICE) / 100)
+            )
+
+            vae_optimizer.zero_grad()
+            generator_loss.backward()
+            vae_optimizer.step()
+
             correct = (t.argmax(y2, 1)) == label
 
             return (
                 len(x),
                 collect_items({
-                    'loss':
-                    generator_loss + discriminator_loss,
                     'd-loss':
                     discriminator_loss,
                     'g-loss':
                     generator_loss,
                     'p(lab|z)':
-                    t.mean(t.exp(plabel)),
-                    'p(img|z)':
-                    t.mean(t.exp(pimg1)),
+                    t.mean(t.exp(plabl)),
+                    'p1(img|z)':
+                    t.mean(t.sigmoid(limg1)),
+                    'p2(img|z)':
+                    t.mean(t.sigmoid(limg2)),
                     'dqp':
                     dkl,
-                    'acc':
-                    t.mean(correct.float()),
                     'obs. acc':
                     t.mean(correct.masked_select(
                         observed_label != 10).float()),
@@ -373,6 +387,7 @@ def main():
 
     args.add_argument('--observed', type=float, default=1.0)
     args.add_argument('--latent-size', type=int, default=256)
+    args.add_argument('--spike-prior', action='store_true')
 
     args.add_argument(
         '--output-prefix',
