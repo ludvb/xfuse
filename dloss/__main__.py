@@ -227,15 +227,15 @@ def run(
 
     vae_optimizer = t.optim.Adam(
         vae.parameters(),
-        lr=2e-4,
+        lr=1e-6,
         betas=(0.5, 0.999),
-        weight_decay=1e-6,
+        weight_decay=1e-8,
     )
     dis_optimizer = t.optim.Adam(
         discriminator.parameters(),
-        lr=2e-4,
+        lr=1e-6,
         betas=(0.5, 0.999),
-        weight_decay=1e-6,
+        weight_decay=1e-8,
     )
 
     if state:
