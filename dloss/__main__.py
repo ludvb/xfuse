@@ -248,6 +248,8 @@ def run(
     else:
         start_epoch = 1
 
+    fixed_noise = t.randn((64, latent_size)).to(DEVICE)
+
     for epoch in it.count(start_epoch):
         dkl_attenuation = (
             t.tanh(t.as_tensor(epoch).float().to(DEVICE) / 1000)
@@ -368,8 +370,7 @@ def run(
             t.no_grad()
             vae.eval()
 
-            imgs, logits = vae.module.decode(
-                t.randn((64, latent_size)).to(DEVICE))
+            imgs, logits = vae.module.decode(fixed_noise)
 
             visualize_batch(imgs.detach().cpu())
             plt.axis('off')
