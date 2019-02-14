@@ -203,6 +203,7 @@ def run(
         report_interval=50,
         observed=1.0,
         spike_prior=False,
+        anneal_dkl=False,
 ):
     img_prefix = os.path.join(output_prefix, 'images')
     chkpt_prefix = os.path.join(output_prefix, 'checkpoints')
@@ -248,6 +249,11 @@ def run(
         start_epoch = 1
 
     for epoch in it.count(start_epoch):
+        dkl_attenuation = (
+            t.tanh(t.as_tensor(epoch).float().to(DEVICE) / 1000)
+            if anneal_dkl else
+            1.0
+        )
 
         def _step(x, label, observed_label):
             x = x.to(DEVICE)
@@ -297,7 +303,7 @@ def run(
 
             generator_loss = (
                 - (t.sum(plabl) + t.sum(t.nn.functional.logsigmoid(limg2)))
-                + dkl * t.tanh(t.as_tensor(epoch).float().to(DEVICE) / 100)
+                + dkl * dkl_attenuation
             )
 
             vae_optimizer.zero_grad()
@@ -389,6 +395,7 @@ def main():
     args.add_argument('--observed', type=float, default=1.0)
     args.add_argument('--latent-size', type=int, default=256)
     args.add_argument('--spike-prior', action='store_true')
+    args.add_argument('--anneal-dkl', action='store_true')
 
     args.add_argument(
         '--output-prefix',
