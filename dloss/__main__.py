@@ -215,7 +215,7 @@ def run(
     dataset = PartiallyObservedMNIST(observed)
     dataloader = DataLoader(
         dataset,
-        batch_size=4096,
+        batch_size=512,
         shuffle=True,
         num_workers=len(os.sched_getaffinity(0)),
     )
@@ -227,15 +227,15 @@ def run(
 
     vae_optimizer = t.optim.Adam(
         vae.parameters(),
-        lr=1e-6,
+        lr=2e-4,
         betas=(0.5, 0.999),
-        weight_decay=1e-8,
+        # weight_decay=1e-8,
     )
     dis_optimizer = t.optim.Adam(
         discriminator.parameters(),
-        lr=1e-6,
+        lr=2e-4 / 10,
         betas=(0.5, 0.999),
-        weight_decay=1e-8,
+        # weight_decay=1e-8,
     )
 
     if state:
@@ -262,22 +262,24 @@ def run(
 
             z, z_mu, z_sd, y1, y2 = vae(x, observed_label)
 
-            yz = t.cat([y1.reshape(y1.shape[0], -1), z], dim=1)
+            yz = t.cat([y1.reshape(y1.shape[0], -1), z], 1)
 
             # -* discriminator loss *-
             limg1 = discriminator(yz.detach())
-            preal = discriminator(
+            lreal = discriminator(
                 t.cat([x.reshape(x.shape[0], -1), z.detach()], 1))
 
             discriminator_loss = (
                 - t.sum(t.nn.functional.logsigmoid(-limg1))
-                - t.sum(t.nn.functional.logsigmoid(preal))
+                - t.sum(t.nn.functional.logsigmoid(lreal))
             )
 
-            if t.mean(t.sigmoid(limg1)) >= 0.3:
+            if t.mean(t.sigmoid(limg1)) >= 0.45:
                 dis_optimizer.zero_grad()
                 discriminator_loss.backward()
                 dis_optimizer.step()
+            else:
+                print('discriminator is too strong, skipping update')
 
             # -* generator loss *-
             limg2 = discriminator(yz)
@@ -330,9 +332,9 @@ def run(
                     'obs. acc':
                     t.mean(correct.masked_select(
                         observed_label != 10).float()),
-                    'unobs. acc':
-                    t.mean(correct.masked_select(
-                        observed_label == 10).float()),
+                    # 'unobs. acc':
+                    # t.mean(correct.masked_select(
+                    #     observed_label == 10).float()),
                 }),
             )
 
@@ -393,7 +395,7 @@ def main():
     args = ap.ArgumentParser()
 
     args.add_argument('--observed', type=float, default=1.0)
-    args.add_argument('--latent-size', type=int, default=256)
+    args.add_argument('--latent-size', type=int, default=100)
     args.add_argument('--spike-prior', action='store_true')
     args.add_argument('--anneal-dkl', action='store_true')
 
