@@ -226,15 +226,15 @@ def run(
 
     vae_optimizer = t.optim.Adam(
         vae.parameters(),
-        lr=1e-3,
+        lr=2e-4,
         betas=(0.5, 0.999),
-        weight_decay=1e-5,
+        weight_decay=1e-6,
     )
     dis_optimizer = t.optim.Adam(
         discriminator.parameters(),
-        lr=1e-3,
+        lr=2e-4,
         betas=(0.5, 0.999),
-        weight_decay=1e-5,
+        weight_decay=1e-6,
     )
 
     if state:
@@ -268,9 +268,10 @@ def run(
                 - t.sum(t.nn.functional.logsigmoid(preal))
             )
 
-            dis_optimizer.zero_grad()
-            discriminator_loss.backward()
-            dis_optimizer.step()
+            if t.mean(t.sigmoid(limg1)) >= 0.3:
+                dis_optimizer.zero_grad()
+                discriminator_loss.backward()
+                dis_optimizer.step()
 
             # -* generator loss *-
             limg2 = discriminator(yz)
