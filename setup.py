@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-""" dloss setup script
+""" hssl setup script
 """
 
 import os.path as osp

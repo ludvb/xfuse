@@ -12,15 +12,12 @@ import matplotlib.pyplot as plt
 
 import numpy as np
 
-import torch as t
-from torch.utils.data import DataLoader, Dataset
+import pandas as pd
 
-from torchvision.datasets import MNIST
-import torchvision.transforms as tvt
+import torch as t
+
 from torchvision.utils import make_grid
 
-
-DATA_DIR = '~/.local/data'
 DEVICE = t.device('cuda' if t.cuda.is_available() else 'cpu')
 
 
@@ -60,52 +57,82 @@ def visualize_batch(batch, **kwargs):
     )
 
 
-class VAE(t.nn.Module):
+class Histonet(t.nn.Module):
     def __init__(
             self,
+            num_genes,
             hidden_size=512,
             latent_size=96,
+            nf=64,
     ):
         super().__init__()
-        self.activation = t.nn.LeakyReLU(inplace=True)
 
         self.encoder = t.nn.Sequential(
-            t.nn.Linear(795, hidden_size),
-            t.nn.BatchNorm1d(hidden_size),
-            t.nn.LeakyReLU(0.2, True),
-            t.nn.Linear(hidden_size, hidden_size),
-            t.nn.BatchNorm1d(hidden_size),
-            t.nn.LeakyReLU(0.2, True),
-            t.nn.Linear(hidden_size, hidden_size),
-            t.nn.BatchNorm1d(hidden_size),
-            t.nn.LeakyReLU(0.2, True),
+            t.nn.Conv2d(3 + num_genes, 2 * nf, 4, 2, 1),
+            t.nn.BatchNorm2d(2 * nf),
+            t.nn.LeakyReLU(0.2),
+            t.nn.Conv2d(2 * nf, 4 * nf, 4, 2, 1),
+            t.nn.BatchNorm2d(4 * nf),
+            t.nn.LeakyReLU(0.2),
+            t.nn.Conv2d(4 * nf, 8 * nf, 4, 2, 1),
+            t.nn.BatchNorm2d(8 * nf),
+            t.nn.LeakyReLU(0.2),
+            t.nn.Conv2d(8 * nf, 16 * nf, 4, 2, 1),
+            t.nn.BatchNorm2d(8 * nf),
+            t.nn.LeakyReLU(0.2),
+            t.nn.Conv2d(16 * nf, latent_size, 4, 1, 0),
         )
 
-        self.z_mu = t.nn.Linear(hidden_size, latent_size)
-        self.z_sd = t.nn.Linear(hidden_size, latent_size)
+        self.z_mu = t.nn.Conv2d(hidden_size, latent_size, 1)
+        self.z_sd = t.nn.Conv2d(hidden_size, latent_size, 1)
 
         self.image_decoder = t.nn.Sequential(
-            t.nn.Linear(latent_size, 256),
-            t.nn.LeakyReLU(0.2, True),
-            t.nn.Linear(256, 512),
-            t.nn.LeakyReLU(0.2, True),
-            t.nn.Linear(512, 1024),
-            t.nn.LeakyReLU(0.2, True),
-            t.nn.Linear(1024, 784),
+            t.nn.ConvTranspose2d(latent_size, 16 * nf, 4, 1, 0),
+            t.nn.BatchNorm2d(16 * nf),
+            t.nn.LeakyReLU(0.2),
+            t.nn.ConvTranspose2d(16 * nf, 8 * nf, 4, 2, 1),
+            t.nn.BatchNorm2d(8 * nf),
+            t.nn.LeakyReLU(0.2),
+            t.nn.ConvTranspose2d(8 * nf, 4 * nf, 4, 2, 1),
+            t.nn.BatchNorm2d(4 * nf),
+            t.nn.LeakyReLU(0.2),
+            t.nn.ConvTranspose2d(4 * nf, 2 * nf, 4, 2, 1),
+            t.nn.BatchNorm2d(2 * nf),
+            t.nn.LeakyReLU(0.2),
+            t.nn.ConvTranspose2d(2 * nf, 3, 4, 2, 1),
             t.nn.Tanh(),
         )
 
-        self.label_decoder = t.nn.Sequential(
-            t.nn.Linear(latent_size, hidden_size),
-            t.nn.LeakyReLU(0.2, True),
-            t.nn.Linear(hidden_size, hidden_size),
-            t.nn.LeakyReLU(0.2, True),
-            t.nn.Linear(hidden_size, hidden_size),
-            t.nn.LeakyReLU(0.2, True),
-            t.nn.Linear(hidden_size, 10),
+        self.transcriptome_decoder = t.nn.Sequential(
+            t.nn.ConvTranspose2d(latent_size, 16 * nf, 4, 1, 0),
+            t.nn.BatchNorm2d(16 * nf),
+            t.nn.LeakyReLU(0.2),
+            t.nn.ConvTranspose2d(16 * nf, 8 * nf, 4, 2, 1),
+            t.nn.BatchNorm2d(8 * nf),
+            t.nn.LeakyReLU(0.2),
+            t.nn.ConvTranspose2d(8 * nf, 4 * nf, 4, 2, 1),
+            t.nn.BatchNorm2d(4 * nf),
+            t.nn.LeakyReLU(0.2),
+            t.nn.ConvTranspose2d(4 * nf, 2 * nf, 4, 2, 1),
+            t.nn.BatchNorm2d(2 * nf),
+            t.nn.LeakyReLU(0.2),
+            t.nn.ConvTranspose2d(2 * nf, nf, 4, 2, 1),
+            t.nn.BatchNorm2d(num_genes),
+            t.nn.LeakyReLU(0.2),
         )
 
-        self.softmax = t.nn.LogSoftmax(dim=1)
+        self.lrate = t.nn.Sequential(
+            t.nn.Conv2d(nf, nf, 3, 1, 1),
+            t.nn.BatchNorm2d(num_genes),
+            t.nn.LeakyReLU(0.2),
+            t.nn.Conv2d(nf, num_genes, 3, 1, 1),
+        )
+        self.logit = t.nn.Sequential(
+            t.nn.Conv2d(nf, nf, 3, 1, 1),
+            t.nn.BatchNorm2d(num_genes),
+            t.nn.LeakyReLU(0.2),
+            t.nn.Conv2d(nf, num_genes, 3, 1, 1),
+        )
 
     def encode(self, x, label):
         x = x.reshape(x.shape[0], -1)
@@ -119,13 +146,15 @@ class VAE(t.nn.Module):
         return z_mu, z_sd
 
     def decode(self, z):
-        y1 = self.image_decoder(z)
-        y1 = y1.reshape(y1.shape[0], 1, 28, 28)
+        img = self.image_decoder(z)
 
-        y2 = self.label_decoder(z)
-        y2 = self.softmax(y2)
+        transcriptome_state = self.transcriptome_decoder(z)
 
-        return y1, y2
+        lrate = self.lrate(transcriptome_state)
+        logit = self.logit(transcriptome_state)
+
+        return img, t.distributions.NegativeBinomial(
+            t.exp(lrate) + 1e-10, logits=logit)
 
     def forward(self, x, label):
         z_mu, z_sd = self.encode(x, label)
@@ -135,20 +164,25 @@ class VAE(t.nn.Module):
 
 
 class Discriminator(t.nn.Module):
-    def __init__(self, input_size):
+    def __init__(self, input_size, nf=3):
         super().__init__()
         self.discriminator = t.nn.Sequential(
-            t.nn.Linear(input_size, 1024),
-            t.nn.LeakyReLU(0.2, True),
-            t.nn.Linear(1024, 512),
-            t.nn.LeakyReLU(0.2, True),
-            t.nn.Linear(512, 256),
-            t.nn.LeakyReLU(0.2, True),
-            t.nn.Linear(256, 1),
+            t.nn.Conv2d(3, nf, 4, 2, 1),
+            t.nn.BatchNorm2d(nf),
+            t.nn.LeakyReLU(0.2),
+            t.nn.Conv2d(nf, 2 * nf, 4, 2, 1),
+            t.nn.BatchNorm2d(2 * nf),
+            t.nn.LeakyReLU(0.2),
+            t.nn.Conv2d(2 * nf, 4 * nf, 4, 2, 1),
+            t.nn.BatchNorm2d(4 * nf),
+            t.nn.LeakyReLU(0.2),
+            t.nn.Conv2d(4 * nf, 8 * nf, 4, 2, 1),
+            t.nn.BatchNorm2d(8 * nf),
+            t.nn.LeakyReLU(0.2),
+            t.nn.Conv2d(8 * nf, 1, 4),
         )
 
     def forward(self, x):
-        x = x.reshape(x.shape[0], -1)
         x = self.discriminator(x)
         return x
 
@@ -174,34 +208,12 @@ def restore_state(vae, discriminator, optimizers, file):
     return state['epoch']
 
 
-class PartiallyObservedMNIST(Dataset):
-    def __init__(self, obsprop):
-        self.dataset = MNIST(
-            DATA_DIR,
-            download=True,
-            transform=tvt.Compose([
-                tvt.ToTensor(),
-                tvt.Normalize((0.5, ), (0.5, )),
-            ]),
-        )
-        self.observed = t.rand(len(self)) < obsprop
-        print(f'datset size = {len(self)}, '
-              f'observed = {self.observed.sum()}')
-
-    def __len__(self):
-        return len(self.dataset)
-
-    def __getitem__(self, idx):
-        img, label = self.dataset[idx]
-        return img, label, label if self.observed[idx] else t.tensor(10).long()
-
-
 def run(
+        image, label, data,
         latent_size,
         output_prefix,
         state=None,
         report_interval=50,
-        observed=1.0,
         spike_prior=False,
         anneal_dkl=False,
 ):
@@ -212,16 +224,10 @@ def run(
     os.makedirs(img_prefix, exist_ok=True)
     os.makedirs(chkpt_prefix, exist_ok=True)
 
-    dataset = PartiallyObservedMNIST(observed)
-    dataloader = DataLoader(
-        dataset,
-        batch_size=512,
-        shuffle=True,
-        num_workers=len(os.sched_getaffinity(0)),
-    )
-
-    vae = t.nn.DataParallel(
-        VAE(latent_size=latent_size).to(DEVICE))
+    vae = t.nn.DataParallel(Histonet(
+        num_genes=len(data.columns),
+        latent_size=latent_size,
+    ).to(DEVICE))
     discriminator = t.nn.DataParallel(
         Discriminator(28 * 28 + latent_size).to(DEVICE))
 
@@ -395,7 +401,8 @@ def main():
 
     args = ap.ArgumentParser()
 
-    args.add_argument('--observed', type=float, default=1.0)
+    args.add_argument('data-dir', type=str)
+
     args.add_argument('--latent-size', type=int, default=100)
     args.add_argument('--spike-prior', action='store_true')
     args.add_argument('--anneal-dkl', action='store_true')
@@ -403,14 +410,26 @@ def main():
     args.add_argument(
         '--output-prefix',
         type=str,
-        default=f'./dloss-{dt.now().isoformat()}',
+        default=f'./hssl-{dt.now().isoformat()}',
     )
     args.add_argument('--state', type=str)
     args.add_argument('--report-interval', type=int, default=100)
 
     opts = vars(args.parse_args())
 
-    run(**opts)
+    data_dir = opts.pop('data-dir')
+
+    from imageio import imread
+    image = imread(os.path.join(data_dir, 'image.tif'))
+    label = imread(os.path.join(data_dir, 'label.tif'))
+    data = pd.read_csv(
+        os.path.join(data_dir, 'data.gz'),
+        sep=' ',
+        header=0,
+        index_col=0,
+    )
+
+    run(image, label, data, **opts)
 
 
 if __name__ == '__main__':

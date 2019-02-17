@@ -2,7 +2,7 @@
 
 """ refresh_version.py
 
-writes dloss/__version__ to correspond to the current git version
+writes hssl/__version__ to correspond to the current git version
 """
 
 import re
@@ -50,7 +50,7 @@ except (FileNotFoundError, sp.CalledProcessError):
 with open(
     osp.join(
         osp.dirname(__file__),
-        'dloss',
+        'hssl',
         '__version__.py',
     ),
     'w',
