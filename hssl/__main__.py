@@ -8,6 +8,8 @@ import itertools as it
 
 import os
 
+from imageio import imread, imwrite
+
 import matplotlib.pyplot as plt
 
 import numpy as np
@@ -57,143 +59,135 @@ def visualize_batch(batch, **kwargs):
     )
 
 
+def center_crop(input, target_shape):
+    return input[tuple([
+        slice((a - b) // 2, (a - b) // 2 + b)
+        if b is not None else
+        slice(None)
+        for a, b in zip(input.shape, target_shape)
+    ])]
+
+
 class Histonet(t.nn.Module):
     def __init__(
             self,
-            num_genes,
+            image,
+            data,
             hidden_size=512,
             latent_size=96,
-            nf=64,
+            nf=16,
     ):
         super().__init__()
 
-        self.encoder = t.nn.Sequential(
-            t.nn.Conv2d(3 + num_genes, 2 * nf, 4, 2, 1),
-            t.nn.BatchNorm2d(2 * nf),
-            t.nn.LeakyReLU(0.2),
-            t.nn.Conv2d(2 * nf, 4 * nf, 4, 2, 1),
-            t.nn.BatchNorm2d(4 * nf),
-            t.nn.LeakyReLU(0.2),
-            t.nn.Conv2d(4 * nf, 8 * nf, 4, 2, 1),
-            t.nn.BatchNorm2d(8 * nf),
-            t.nn.LeakyReLU(0.2),
-            t.nn.Conv2d(8 * nf, 16 * nf, 4, 2, 1),
-            t.nn.BatchNorm2d(8 * nf),
-            t.nn.LeakyReLU(0.2),
-            t.nn.Conv2d(16 * nf, latent_size, 4, 1, 0),
-        )
+        num_genes = len(data.columns)
 
-        self.z_mu = t.nn.Conv2d(hidden_size, latent_size, 1)
-        self.z_sd = t.nn.Conv2d(hidden_size, latent_size, 1)
+        self._shape = [None, None, *image.shape[:2]]
+
+        self.z_mu = t.nn.Parameter(t.zeros(
+            [1, latent_size]
+            + [np.ceil(x / 16).astype(int) for x in image.shape[:2]]
+        ))
+        self.z_sd = t.nn.Parameter(t.zeros(
+            [1, latent_size]
+            + [np.ceil(x / 16).astype(int) for x in image.shape[:2]]
+        ))
 
         self.image_decoder = t.nn.Sequential(
             t.nn.ConvTranspose2d(latent_size, 16 * nf, 4, 1, 0),
-            t.nn.BatchNorm2d(16 * nf),
-            t.nn.LeakyReLU(0.2),
+            # x16
+            t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.ConvTranspose2d(16 * nf, 8 * nf, 4, 2, 1),
-            t.nn.BatchNorm2d(8 * nf),
-            t.nn.LeakyReLU(0.2),
+            # x8
+            t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.ConvTranspose2d(8 * nf, 4 * nf, 4, 2, 1),
-            t.nn.BatchNorm2d(4 * nf),
-            t.nn.LeakyReLU(0.2),
+            # x4
+            t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.ConvTranspose2d(4 * nf, 2 * nf, 4, 2, 1),
-            t.nn.BatchNorm2d(2 * nf),
-            t.nn.LeakyReLU(0.2),
+            # x2
+            t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.ConvTranspose2d(2 * nf, 3, 4, 2, 1),
+            # x1
             t.nn.Tanh(),
         )
 
-        self.transcriptome_decoder = t.nn.Sequential(
+        self.transcript_decoder = t.nn.Sequential(
             t.nn.ConvTranspose2d(latent_size, 16 * nf, 4, 1, 0),
-            t.nn.BatchNorm2d(16 * nf),
-            t.nn.LeakyReLU(0.2),
+            t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.ConvTranspose2d(16 * nf, 8 * nf, 4, 2, 1),
-            t.nn.BatchNorm2d(8 * nf),
-            t.nn.LeakyReLU(0.2),
+            t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.ConvTranspose2d(8 * nf, 4 * nf, 4, 2, 1),
-            t.nn.BatchNorm2d(4 * nf),
-            t.nn.LeakyReLU(0.2),
+            t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.ConvTranspose2d(4 * nf, 2 * nf, 4, 2, 1),
-            t.nn.BatchNorm2d(2 * nf),
-            t.nn.LeakyReLU(0.2),
+            t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.ConvTranspose2d(2 * nf, nf, 4, 2, 1),
-            t.nn.BatchNorm2d(num_genes),
-            t.nn.LeakyReLU(0.2),
+            t.nn.LeakyReLU(0.2, inplace=True),
         )
 
         self.lrate = t.nn.Sequential(
             t.nn.Conv2d(nf, nf, 3, 1, 1),
-            t.nn.BatchNorm2d(num_genes),
-            t.nn.LeakyReLU(0.2),
+            t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.Conv2d(nf, num_genes, 3, 1, 1),
         )
-        self.logit = t.nn.Sequential(
-            t.nn.Conv2d(nf, nf, 3, 1, 1),
-            t.nn.BatchNorm2d(num_genes),
-            t.nn.LeakyReLU(0.2),
-            t.nn.Conv2d(nf, num_genes, 3, 1, 1),
+        self.logit_mu = t.nn.Parameter(
+            t.zeros(1, num_genes, 1, 1),
+        )
+        self.logit_sd = t.nn.Parameter(
+            t.zeros(1, num_genes, 1, 1),
         )
 
-    def encode(self, x, label):
-        x = x.reshape(x.shape[0], -1)
-        x = t.cat([x, t.eye(11)[label].to(DEVICE)], 1)
+    def forward(self):
+        z = t.distributions.Normal(self.z_mu, self.z_sd).rsample()
 
-        x = self.encoder(x)
+        image = center_crop(self.image_decoder(z), self._shape)
+        transcript_state = center_crop(
+            self.transcript_decoder(z), self._shape)
 
-        z_mu = self.z_mu(x)
-        z_sd = t.nn.functional.softplus(self.z_sd(x))
+        lrate = self.lrate(transcript_state)
+        logit = t.distributions.Normal(self.logit_mu, self.logit_sd).rsample()
 
-        return z_mu, z_sd
-
-    def decode(self, z):
-        img = self.image_decoder(z)
-
-        transcriptome_state = self.transcriptome_decoder(z)
-
-        lrate = self.lrate(transcriptome_state)
-        logit = self.logit(transcriptome_state)
-
-        return img, t.distributions.NegativeBinomial(
-            t.exp(lrate) + 1e-10, logits=logit)
-
-    def forward(self, x, label):
-        z_mu, z_sd = self.encode(x, label)
-        z = t.distributions.Normal(z_mu, z_sd).rsample()
-        y1, y2 = self.decode(z)
-        return z, z_mu, z_sd, y1, y2
+        return (
+            z,
+            image,
+            lrate,
+            logit,
+        )
 
 
 class Discriminator(t.nn.Module):
-    def __init__(self, input_size, nf=3):
+    def __init__(self, nz, nf=3):
         super().__init__()
-        self.discriminator = t.nn.Sequential(
+        self.downsampler = t.nn.Sequential(
             t.nn.Conv2d(3, nf, 4, 2, 1),
-            t.nn.BatchNorm2d(nf),
-            t.nn.LeakyReLU(0.2),
+            t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.Conv2d(nf, 2 * nf, 4, 2, 1),
-            t.nn.BatchNorm2d(2 * nf),
-            t.nn.LeakyReLU(0.2),
+            t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.Conv2d(2 * nf, 4 * nf, 4, 2, 1),
-            t.nn.BatchNorm2d(4 * nf),
-            t.nn.LeakyReLU(0.2),
+            t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.Conv2d(4 * nf, 8 * nf, 4, 2, 1),
-            t.nn.BatchNorm2d(8 * nf),
-            t.nn.LeakyReLU(0.2),
-            t.nn.Conv2d(8 * nf, 1, 4),
+            t.nn.LeakyReLU(0.2, inplace=True),
+        )
+        self.predictor = t.nn.Sequential(
+            t.nn.Conv2d(8 * nf + nz, 16 * nf, 4),
+            t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.Conv2d(16 * nf, 16 * nf, 4),
+            t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.Conv2d(16 * nf, 1, 4),
         )
 
-    def forward(self, x):
-        x = self.discriminator(x)
+    def forward(self, img, z):
+        x = self.downsampler(img)
+        x = t.cat([x, center_crop(z, [None, None, *x.shape[-2:]])], dim=1)
+        x = self.predictor(x)
         return x
 
 
-def store_state(vae, discriminator, optimizers, epoch, file):
+def store_state(vae, discriminator, optimizers, iteration, file):
     t.save(
         dict(
             vae=vae.state_dict(),
             discriminator=discriminator.state_dict(),
             optimizers=[x.state_dict() for x in optimizers],
-            epoch=epoch,
+            iteration=iteration,
         ),
         file,
     )
@@ -205,12 +199,14 @@ def restore_state(vae, discriminator, optimizers, file):
     discriminator.load_state_dict(state['discriminator'])
     for optimizer, optimizer_state in zip(optimizers, state['optimizers']):
         optimizer.load_state_dict(optimizer_state)
-    return state['epoch']
+    return state['iteration']
 
 
 def run(
-        image, label, data,
-        latent_size,
+        image: np.array,
+        label: np.array,
+        data: pd.DataFrame,
+        latent_size: int,
         output_prefix,
         state=None,
         report_interval=50,
@@ -224,65 +220,75 @@ def run(
     os.makedirs(img_prefix, exist_ok=True)
     os.makedirs(chkpt_prefix, exist_ok=True)
 
-    vae = t.nn.DataParallel(Histonet(
-        num_genes=len(data.columns),
+    histonet = Histonet(
+        image=image,
+        data=data,
         latent_size=latent_size,
-    ).to(DEVICE))
-    discriminator = t.nn.DataParallel(
-        Discriminator(28 * 28 + latent_size).to(DEVICE))
+    ).to(DEVICE)
+    discriminator = Discriminator(latent_size).to(DEVICE)
 
-    vae_optimizer = t.optim.Adam(
-        vae.parameters(),
-        lr=2e-4,
+    his_optimizer = t.optim.Adam(
+        histonet.parameters(),
+        lr=1e-3,
         betas=(0.5, 0.999),
-        # weight_decay=1e-8,
     )
     dis_optimizer = t.optim.Adam(
         discriminator.parameters(),
-        lr=2e-4 / 10,
+        lr=2e-3 / 100,
         betas=(0.5, 0.999),
-        # weight_decay=1e-8,
     )
 
     if state:
         start_epoch = restore_state(
-            vae,
+            histonet,
             discriminator,
-            [vae_optimizer, dis_optimizer],
+            [his_optimizer, dis_optimizer],
             state,
         )
     else:
         start_epoch = 1
 
-    fixed_noise = t.randn((64, latent_size)).to(DEVICE)
+    obs = (
+        t.tensor(data.values)
+        .float()
+        .t()
+        .unsqueeze(0)
+        .to(DEVICE)
+    )
 
-    for epoch in it.count(start_epoch):
+    image = (
+        t.tensor(
+            image.transpose(2, 0, 1),
+            requires_grad=False,
+        )
+        .unsqueeze(0)
+        .float()
+        .to(DEVICE)
+    )
+    image = image / 255 * 2 - 1
+
+    label = t.eye(int(label.max()) + 1)[label.flatten()].to(DEVICE)
+
+    for iteration in it.count(start_epoch):
         dkl_attenuation = (
-            t.tanh(t.as_tensor(epoch).float().to(DEVICE) / 1000)
+            t.tanh(t.as_tensor(iteration).float().to(DEVICE) / 1000)
             if anneal_dkl else
             1.0
         )
 
-        def _step(x, label, observed_label):
-            x = x.to(DEVICE)
-            label = label.to(DEVICE)
-            observed_label = observed_label.to(DEVICE)
-
-            z, z_mu, z_sd, y1, y2 = vae(x, observed_label)
-
-            yz = t.cat([y1.reshape(y1.shape[0], -1), z], 1)
+        def _step():
+            z, gen_img, lrate, logit = histonet()
 
             # -* discriminator loss *-
-            limg1 = discriminator(yz.detach())
-            lreal = discriminator(
-                t.cat([x.reshape(x.shape[0], -1), z.detach()], 1))
+            limg1 = discriminator(gen_img.detach(), z.detach())
+            lreal = discriminator(image, z.detach())
 
             discriminator_loss = (
                 - t.sum(t.nn.functional.logsigmoid(-limg1))
                 - t.sum(t.nn.functional.logsigmoid(lreal))
             )
 
-            if t.mean(t.sigmoid(limg1)) >= 0.45:
+            if t.mean(t.sigmoid(limg1)) >= 0.35:
                 dis_optimizer.zero_grad()
                 discriminator_loss.backward()
                 dis_optimizer.step()
@@ -290,110 +296,123 @@ def run(
                 print('discriminator is too strong, skipping update')
 
             # -* generator loss *-
-            limg2 = discriminator(yz)
-            plabl = y2[range(len(y2)), label].masked_select(
-                observed_label != 10)
+            limg2 = discriminator(gen_img, z.detach())
 
-            dkl = t.sum(
-                t.distributions.Normal(z_mu, z_sd).log_prob(z)
-                - (
-                    np.log(0.5)
-                    +
-                    t.logsumexp(
-                        t.stack((
-                            t.distributions.Normal(0., 10.).log_prob(z),
-                            t.distributions.Normal(0., .1).log_prob(z),
-                        )),
-                        dim=0,
-                    )
-                    if spike_prior else
-                    t.distributions.Normal(0., 1.).log_prob(z)
-                )
+            rates = (
+                (t.exp(lrate).reshape(*lrate.shape[:2], -1) @ label)
+                [:, :, 1:]
+                + 1e-10
             )
+            # ^ NOTE large memory requirements
+
+            # rates = t.stack(
+            #     [
+            #         t.exp(lrate.masked_select(label == i))
+            #         .reshape(len(data.columns), -1)
+            #         .sum(1)
+            #         for i in data.index
+            #     ],
+            #     dim=0,
+            # )
+            # ^ NOTE slow
+
+            # rates = (
+            #     t.stack([
+            #         t.bincount(label.flatten(), t.exp(lrate[0, i].flatten()))
+            #         for i in range(len(data.columns))
+            #     ], dim=-1)
+            #     [1:]
+            # )
+            # ^ NOTE gradient for t.bincount not implemented
+
+            d = t.distributions.NegativeBinomial(
+                rates,
+                logits=logit.reshape(*logit.shape[:2], -1),
+            )
+            lpobs = d.log_prob(obs)
+
+            dkl = 0.
 
             generator_loss = (
-                - (t.sum(plabl) + t.sum(t.nn.functional.logsigmoid(limg2)))
+                - (t.sum(lpobs) + t.sum(t.nn.functional.logsigmoid(limg2)))
                 + dkl * dkl_attenuation
             )
 
-            vae_optimizer.zero_grad()
+            if t.isnan(generator_loss):
+                import ipdb; ipdb.set_trace()
+
+            his_optimizer.zero_grad()
             generator_loss.backward()
-            vae_optimizer.step()
+            his_optimizer.step()
 
-            correct = (t.argmax(y2, 1)) == label
-
-            return (
-                len(x),
-                collect_items({
-                    'd-loss':
-                    discriminator_loss,
-                    'g-loss':
-                    generator_loss,
-                    'p(lab|z)':
-                    t.mean(t.exp(plabl)),
-                    'p1(img|z)':
-                    t.mean(t.sigmoid(limg1)),
-                    'p2(img|z)':
-                    t.mean(t.sigmoid(limg2)),
-                    'dqp':
-                    dkl,
-                    'obs. acc':
-                    t.mean(correct.masked_select(
-                        observed_label != 10).float()),
-                    # 'unobs. acc':
-                    # t.mean(correct.masked_select(
-                    #     observed_label == 10).float()),
-                }),
-            )
+            return collect_items({
+                'd-loss':
+                discriminator_loss,
+                'g-loss':
+                generator_loss,
+                'p(lab|z)':
+                t.mean(t.exp(lpobs)),
+                'rmse':
+                t.sqrt(t.mean((d.mean - obs) ** 2)),
+                'p1(img|z)':
+                t.mean(t.sigmoid(limg1)),
+                'p2(img|z)':
+                t.mean(t.sigmoid(limg2)),
+                'dqp':
+                dkl,
+            })
 
         t.enable_grad()
-        vae.train()
+        histonet.train()
         discriminator.train()
 
-        bs, ds = zip(*it.starmap(_step, dataloader))
-        output = {
-            k: np.sum(np.array(bs) * vs) / len(dataset)
-            for k, vs in zip_dicts(iter(ds)).items()
-        }
-        print(
-            f'epoch {epoch:4d}:',
-            '  //  '.join([
-                '{} = {:>9s}'.format(k, f'{v:.2e}')
-                for k, v in output.items()
-            ]),
-        )
-
-        with gzip.open(
-                os.path.join(output_prefix, 'training_data.csv.gz'),
-                'ab',
-        ) as fh:
-            fh.writelines([
-                f'{epoch},{k},{v}\n'.encode()
-                for k, v in output.items()
-            ])
-
-        if epoch % report_interval == 0:
-            t.no_grad()
-            vae.eval()
-
-            imgs, logits = vae.module.decode(fixed_noise)
-
-            visualize_batch(imgs.detach().cpu())
-            plt.axis('off')
-            plt.savefig(
-                os.path.join(img_prefix, f'epoch-{epoch:04d}.png'),
-                bbox_inches='tight',
+        def _postprocess(iteration, output):
+            print(
+                f'iteration {iteration:4d}:',
+                '  //  '.join([
+                    '{} = {:>9s}'.format(k, f'{v:.2e}')
+                    for k, v in output.items()
+                ]),
             )
 
-            plt.close()
+            if iteration % report_interval == 0:
+                t.no_grad()
+                histonet.eval()
 
-            store_state(
-                vae,
-                discriminator,
-                [vae_optimizer, dis_optimizer],
-                epoch,
-                os.path.join(chkpt_prefix, f'epoch-{epoch:04d}.model'),
-            )
+                _, img, *_ = histonet()
+
+                imwrite(
+                    os.path.join(img_prefix, f'iteration-{iteration:04d}.jpg'),
+                    ((
+                        img[0]
+                        .detach()
+                        .cpu()
+                        .numpy()
+                        .transpose(1, 2, 0)
+                        + 1
+                    ) / 2 * 255).astype(np.uint8),
+                )
+
+                # store_state(
+                #     histonet,
+                #     discriminator,
+                #     [his_optimizer, dis_optimizer],
+                #     iteration,
+                #     os.path.join(
+                #         chkpt_prefix,
+                #         f'iteration-{iteration:04d}.model',
+                #     ),
+                # )
+
+                t.enable_grad()
+                histonet.train()
+
+        ds = (_postprocess(i, _step()) for i in it.count(1))
+        [*ds]
+        # _ = {
+        #     k: np.mean(vs)
+        #     for k, vs in zip_dicts(ds).items()
+        # }
 
 
 def main():
@@ -407,6 +426,8 @@ def main():
     args.add_argument('--spike-prior', action='store_true')
     args.add_argument('--anneal-dkl', action='store_true')
 
+    args.add_argument('--zoom', type=float, default=0.1)
+
     args.add_argument(
         '--output-prefix',
         type=str,
@@ -419,7 +440,6 @@ def main():
 
     data_dir = opts.pop('data-dir')
 
-    from imageio import imread
     image = imread(os.path.join(data_dir, 'image.tif'))
     label = imread(os.path.join(data_dir, 'label.tif'))
     data = pd.read_csv(
@@ -429,8 +449,33 @@ def main():
         index_col=0,
     )
 
+    from scipy.ndimage.interpolation import zoom
+    zoom_level = opts.pop('zoom')
+    label = zoom(label, (zoom_level, zoom_level), order=0)
+    image = zoom(image, (zoom_level, zoom_level, 1))
+
+    data = data[
+        data.sum(0)
+        [[x for x in data.columns if 'ambiguous' not in x]]
+        .sort_values()
+        [-50:]
+        .index
+    ]
+
     run(image, label, data, **opts)
 
 
 if __name__ == '__main__':
     main()
+
+
+if False:
+    from imageio import imread
+    from scipy.ndimage.interpolation import zoom
+    data = pd.read_csv('~/histonet-test-data/data.gz', sep=' ').set_index('n')
+    s = data.sum(0)
+    data = data[s[[x for x in s.index if 'ambiguous' not in x]].sort_values()[-50:].index]
+    lab = imread('~/histonet-test-data/label.tif')
+    img = imread('~/histonet-test-data/image.tif')
+    lab = zoom(lab, (0.1, 0.1), order=0)
+    img = zoom(img, (0.1, 0.1, 1))
