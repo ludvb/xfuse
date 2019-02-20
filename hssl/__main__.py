@@ -229,12 +229,12 @@ def run(
 
     his_optimizer = t.optim.Adam(
         histonet.parameters(),
-        lr=1e-3,
+        lr=2e-4,
         betas=(0.5, 0.999),
     )
     dis_optimizer = t.optim.Adam(
         discriminator.parameters(),
-        lr=2e-3 / 100,
+        lr=2e-4 / 10,
         betas=(0.5, 0.999),
     )
 
@@ -427,6 +427,7 @@ def main():
     args.add_argument('--anneal-dkl', action='store_true')
 
     args.add_argument('--zoom', type=float, default=0.1)
+    args.add_argument('--genes', type=int, default=50)
 
     args.add_argument(
         '--output-prefix',
@@ -458,7 +459,7 @@ def main():
         data.sum(0)
         [[x for x in data.columns if 'ambiguous' not in x]]
         .sort_values()
-        [-50:]
+        [-opts.pop('genes'):]
         .index
     ]
 
