@@ -20,6 +20,7 @@ import torch as t
 
 from torchvision.utils import make_grid
 
+
 DEVICE = t.device('cuda' if t.cuda.is_available() else 'cpu')
 
 
@@ -75,7 +76,7 @@ class Histonet(t.nn.Module):
             data,
             hidden_size=512,
             latent_size=96,
-            nf=16,
+            nf=64,
     ):
         super().__init__()
 
@@ -92,41 +93,40 @@ class Histonet(t.nn.Module):
             + [np.ceil(x / 16).astype(int) for x in image.shape[:2]]
         ))
 
-        self.image_decoder = t.nn.Sequential(
-            t.nn.ConvTranspose2d(latent_size, 16 * nf, 4, 1, 0),
+        self.decoder = t.nn.Sequential(
+            t.nn.ConvTranspose2d(latent_size, 16 * nf, 4, 1, 0, bias=True),
             # x16
             t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.ConvTranspose2d(16 * nf, 8 * nf, 4, 2, 1),
+            t.nn.ConvTranspose2d(16 * nf, 8 * nf, 4, 2, 1, bias=True),
             # x8
             t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.ConvTranspose2d(8 * nf, 4 * nf, 4, 2, 1),
+            t.nn.ConvTranspose2d(8 * nf, 4 * nf, 4, 2, 1, bias=True),
             # x4
             t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.ConvTranspose2d(4 * nf, 2 * nf, 4, 2, 1),
+            t.nn.ConvTranspose2d(4 * nf, 2 * nf, 4, 2, 1, bias=True),
             # x2
             t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.ConvTranspose2d(2 * nf, 3, 4, 2, 1),
+            t.nn.ConvTranspose2d(2 * nf, nf, 4, 2, 1, bias=True),
             # x1
-            t.nn.Tanh(),
         )
 
-        self.transcript_decoder = t.nn.Sequential(
-            t.nn.ConvTranspose2d(latent_size, 16 * nf, 4, 1, 0),
+        self.img_mu = t.nn.Sequential(
+            t.nn.Conv2d(nf, nf, 3, 1, 1, bias=True),
             t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.ConvTranspose2d(16 * nf, 8 * nf, 4, 2, 1),
+            t.nn.Conv2d(nf, 3, 3, 1, 1, bias=True),
+            t.nn.Sigmoid(),
+        )
+        self.img_sd = t.nn.Sequential(
+            t.nn.Conv2d(nf, nf, 3, 1, 1, bias=True),
             t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.ConvTranspose2d(8 * nf, 4 * nf, 4, 2, 1),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.ConvTranspose2d(4 * nf, 2 * nf, 4, 2, 1),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.ConvTranspose2d(2 * nf, nf, 4, 2, 1),
-            t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.Conv2d(nf, 3, 3, 1, 1, bias=True),
+            t.nn.Softplus(),
         )
 
         self.lrate = t.nn.Sequential(
-            t.nn.Conv2d(nf, nf, 3, 1, 1),
+            t.nn.Conv2d(nf, nf, 3, 1, 1, bias=True),
             t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.Conv2d(nf, num_genes, 3, 1, 1),
+            t.nn.Conv2d(nf, num_genes, 3, 1, 1, bias=True),
         )
         self.logit_mu = t.nn.Parameter(
             t.zeros(1, num_genes, 1, 1),
@@ -135,57 +135,43 @@ class Histonet(t.nn.Module):
             t.zeros(1, num_genes, 1, 1),
         )
 
-    def forward(self):
-        z = t.distributions.Normal(self.z_mu, self.z_sd).rsample()
+    def decode(self, z):
+        state = self.decoder(z)
 
-        image = center_crop(self.image_decoder(z), self._shape)
-        transcript_state = center_crop(
-            self.transcript_decoder(z), self._shape)
-
-        lrate = self.lrate(transcript_state)
-        logit = t.distributions.Normal(self.logit_mu, self.logit_sd).rsample()
+        img_mu = self.img_mu(state)
+        img_sd = self.img_sd(state)
+        lrate = self.lrate(state)
+        logit = t.distributions.Normal(
+            self.logit_mu,
+            t.nn.functional.softplus(self.logit_sd),
+        ).rsample()
 
         return (
             z,
-            image,
+            img_mu,
+            img_sd,
             lrate,
             logit,
         )
 
+    def forward(self):
+        z = t.distributions.Normal(
+            self.z_mu,
+            t.nn.functional.softplus(self.z_sd),
+        ).rsample()
 
-class Discriminator(t.nn.Module):
-    def __init__(self, nz, nf=3):
-        super().__init__()
-        self.downsampler = t.nn.Sequential(
-            t.nn.Conv2d(3, nf, 4, 2, 1),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.Conv2d(nf, 2 * nf, 4, 2, 1),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.Conv2d(2 * nf, 4 * nf, 4, 2, 1),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.Conv2d(4 * nf, 8 * nf, 4, 2, 1),
-            t.nn.LeakyReLU(0.2, inplace=True),
-        )
-        self.predictor = t.nn.Sequential(
-            t.nn.Conv2d(8 * nf + nz, 16 * nf, 4),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.Conv2d(16 * nf, 16 * nf, 4),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.Conv2d(16 * nf, 1, 4),
+        z, *xs = self.decode(z)
+
+        return (
+            z,
+            *[center_crop(x, self._shape) for x in xs]
         )
 
-    def forward(self, img, z):
-        x = self.downsampler(img)
-        x = t.cat([x, center_crop(z, [None, None, *x.shape[-2:]])], dim=1)
-        x = self.predictor(x)
-        return x
 
-
-def store_state(vae, discriminator, optimizers, iteration, file):
+def store_state(model, optimizers, iteration, file):
     t.save(
         dict(
-            vae=vae.state_dict(),
-            discriminator=discriminator.state_dict(),
+            model=model.state_dict(),
             optimizers=[x.state_dict() for x in optimizers],
             iteration=iteration,
         ),
@@ -193,18 +179,17 @@ def store_state(vae, discriminator, optimizers, iteration, file):
     )
 
 
-def restore_state(vae, discriminator, optimizers, file):
+def restore_state(model, optimizers, file):
     state = t.load(file)
-    vae.load_state_dict(state['vae'])
-    discriminator.load_state_dict(state['discriminator'])
+    model.load_state_dict(state['vae'])
     for optimizer, optimizer_state in zip(optimizers, state['optimizers']):
         optimizer.load_state_dict(optimizer_state)
     return state['iteration']
 
 
 def run(
-        image: np.array,
-        label: np.array,
+        image: np.ndarray,
+        label: np.ndarray,
         data: pd.DataFrame,
         latent_size: int,
         output_prefix,
@@ -214,10 +199,12 @@ def run(
         anneal_dkl=False,
 ):
     img_prefix = os.path.join(output_prefix, 'images')
+    noise_prefix = os.path.join(output_prefix, 'noise')
     chkpt_prefix = os.path.join(output_prefix, 'checkpoints')
 
     os.makedirs(output_prefix, exist_ok=True)
     os.makedirs(img_prefix, exist_ok=True)
+    os.makedirs(noise_prefix, exist_ok=True)
     os.makedirs(chkpt_prefix, exist_ok=True)
 
     histonet = Histonet(
@@ -225,24 +212,16 @@ def run(
         data=data,
         latent_size=latent_size,
     ).to(DEVICE)
-    discriminator = Discriminator(latent_size).to(DEVICE)
 
-    his_optimizer = t.optim.Adam(
+    optimizer = t.optim.Adam(
         histonet.parameters(),
-        lr=2e-4,
-        betas=(0.5, 0.999),
+        lr=1e-3,
+        # betas=(0.5, 0.999),
     )
-    dis_optimizer = t.optim.Adam(
-        discriminator.parameters(),
-        lr=2e-4 / 10,
-        betas=(0.5, 0.999),
-    )
-
     if state:
         start_epoch = restore_state(
             histonet,
-            discriminator,
-            [his_optimizer, dis_optimizer],
+            [optimizer],
             state,
         )
     else:
@@ -265,38 +244,27 @@ def run(
         .float()
         .to(DEVICE)
     )
-    image = image / 255 * 2 - 1
+    image = image / 255
 
     label = t.eye(int(label.max()) + 1)[label.flatten()].to(DEVICE)
 
+    fixed_noise = t.distributions.Normal(
+        t.zeros([
+            int(x * s)
+            for x, s in zip(histonet.z_mu.shape, [1, 1, 1, 1])
+        ]),
+        t.ones([
+            int(x * s)
+            for x, s in zip(histonet.z_sd.shape, [1, 1, 1, 1])
+        ]),
+    ).sample().to(DEVICE)
+
     for iteration in it.count(start_epoch):
-        dkl_attenuation = (
-            t.tanh(t.as_tensor(iteration).float().to(DEVICE) / 1000)
-            if anneal_dkl else
-            1.0
-        )
-
         def _step():
-            z, gen_img, lrate, logit = histonet()
-
-            # -* discriminator loss *-
-            limg1 = discriminator(gen_img.detach(), z.detach())
-            lreal = discriminator(image, z.detach())
-
-            discriminator_loss = (
-                - t.sum(t.nn.functional.logsigmoid(-limg1))
-                - t.sum(t.nn.functional.logsigmoid(lreal))
-            )
-
-            if t.mean(t.sigmoid(limg1)) >= 0.35:
-                dis_optimizer.zero_grad()
-                discriminator_loss.backward()
-                dis_optimizer.step()
-            else:
-                print('discriminator is too strong, skipping update')
+            z, img_mu, img_sd, lrate, logit = histonet()
 
             # -* generator loss *-
-            limg2 = discriminator(gen_img, z.detach())
+            lpimg = t.distributions.Normal(img_mu, img_sd).log_prob(image)
 
             rates = (
                 (t.exp(lrate).reshape(*lrate.shape[:2], -1) @ label)
@@ -304,17 +272,6 @@ def run(
                 + 1e-10
             )
             # ^ NOTE large memory requirements
-
-            # rates = t.stack(
-            #     [
-            #         t.exp(lrate.masked_select(label == i))
-            #         .reshape(len(data.columns), -1)
-            #         .sum(1)
-            #         for i in data.index
-            #     ],
-            #     dim=0,
-            # )
-            # ^ NOTE slow
 
             # rates = (
             #     t.stack([
@@ -331,40 +288,49 @@ def run(
             )
             lpobs = d.log_prob(obs)
 
-            dkl = 0.
-
-            generator_loss = (
-                - (t.sum(lpobs) + t.sum(t.nn.functional.logsigmoid(limg2)))
-                + dkl * dkl_attenuation
+            dkl = (
+                t.sum(
+                    t.distributions.Normal(
+                        histonet.z_mu,
+                        t.nn.functional.softplus(histonet.z_sd),
+                    )
+                    .log_prob(z)
+                    -
+                    t.distributions.Normal(0., 1.).log_prob(z)
+                )
+                +
+                t.sum(
+                    t.distributions.Normal(
+                        histonet.logit_mu,
+                        t.nn.functional.softplus(histonet.logit_sd),
+                    )
+                    .log_prob(logit)
+                    -
+                    t.distributions.Normal(0., 1.).log_prob(logit)
+                )
             )
 
-            if t.isnan(generator_loss):
-                import ipdb; ipdb.set_trace()
+            loss = - (t.sum(lpobs) + t.sum(lpimg)) + dkl
 
-            his_optimizer.zero_grad()
-            generator_loss.backward()
-            his_optimizer.step()
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
             return collect_items({
-                'd-loss':
-                discriminator_loss,
-                'g-loss':
-                generator_loss,
+                'loss':
+                loss,
                 'p(lab|z)':
                 t.mean(t.exp(lpobs)),
                 'rmse':
                 t.sqrt(t.mean((d.mean - obs) ** 2)),
-                'p1(img|z)':
-                t.mean(t.sigmoid(limg1)),
-                'p2(img|z)':
-                t.mean(t.sigmoid(limg2)),
+                'p(img|z)':
+                t.mean(t.sigmoid(lpimg)),
                 'dqp':
                 dkl,
             })
 
         t.enable_grad()
         histonet.train()
-        discriminator.train()
 
         def _postprocess(iteration, output):
             print(
@@ -375,34 +341,45 @@ def run(
                 ]),
             )
 
+            if iteration % 50000 == 0:
+                store_state(
+                    histonet,
+                    [optimizer],
+                    iteration,
+                    os.path.join(chkpt_prefix, f'iteration-{iteration:05d}.pkl')
+                )
+
             if iteration % report_interval == 0:
                 t.no_grad()
                 histonet.eval()
 
-                _, img, *_ = histonet()
+                _, imu, isd, *_ = histonet()
+                _, imu_fixed, isd_fixed, *_ = histonet.decode(fixed_noise)
 
                 imwrite(
-                    os.path.join(img_prefix, f'iteration-{iteration:04d}.jpg'),
+                    os.path.join(img_prefix, f'iteration-{iteration:05d}.jpg'),
                     ((
-                        img[0]
+                        t.distributions.Normal(imu, isd)
+                        .sample()
+                        [0]
                         .detach()
                         .cpu()
                         .numpy()
                         .transpose(1, 2, 0)
-                        + 1
-                    ) / 2 * 255).astype(np.uint8),
+                    ) * 255).astype(np.uint8),
                 )
-
-                # store_state(
-                #     histonet,
-                #     discriminator,
-                #     [his_optimizer, dis_optimizer],
-                #     iteration,
-                #     os.path.join(
-                #         chkpt_prefix,
-                #         f'iteration-{iteration:04d}.model',
-                #     ),
-                # )
+                imwrite(
+                    os.path.join(noise_prefix, f'iteration-{iteration:05d}.jpg'),
+                    ((
+                        t.distributions.Normal(imu_fixed, isd_fixed)
+                        .sample()
+                        [0]
+                        .detach()
+                        .cpu()
+                        .numpy()
+                        .transpose(1, 2, 0)
+                    ) * 255).astype(np.uint8),
+                )
 
                 t.enable_grad()
                 histonet.train()
@@ -462,6 +439,8 @@ def main():
         [-opts.pop('genes'):]
         .index
     ]
+
+    print(f'using device: {str(DEVICE):s}')
 
     run(image, label, data, **opts)
 
