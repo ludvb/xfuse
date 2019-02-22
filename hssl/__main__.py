@@ -534,3 +534,28 @@ if False:
     img = imread('~/histonet-test-data/image.tif')
     lab = zoom(lab, (0.1, 0.1), order=0)
     img = zoom(img, (0.1, 0.1, 1))
+
+    def run_tsne(y, n_components=3, initial_dims=20):
+        from sklearn.decomposition import PCA
+        from sklearn.manifold import TSNE
+        x = y.reshape(-1, y.shape[-1])
+
+        def uniformize(x):
+            colmax = np.max(x, axis=0)
+            colmin = np.min(x, axis=0)
+            x = x - colmin.reshape(1, -1)
+            ranges = [ma - mi for ma, mi in zip(colmax, colmin)]
+            maxrange = max(ranges)
+            x = x / maxrange
+            return(x)
+        # TODO
+        # configure initial_dims via CLI
+        # set initial_dims intelligently
+        # np.savetxt(output_forward_path, x, delimiter='\t') # need to add spot names
+        print("performing PCA")
+        pca_map = PCA(n_components=initial_dims).fit_transform(x)
+        print("performing tSNE")
+        tsne_map = TSNE(n_components=n_components).fit_transform(pca_map)
+        tsne_map = uniformize(tsne_map)
+        # np.savetxt(output_forward_path + ".tsne.tsv", tsne_map, delimiter='\t') # this is 3-d data... need to add spot names
+        return tsne_map.reshape((*y.shape[:2], -1))
