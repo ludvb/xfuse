@@ -357,23 +357,22 @@ def run(
             )
         )
 
-        loss = - (t.sum(lpobs) + t.sum(lpimg)) + dkl
+        img_loss = -t.sum(lpimg)
+        xpr_loss = -t.sum(lpobs)
+        loss = img_loss + xpr_loss + dkl
 
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
 
         return collect_items({
-            'loss':
-            loss,
-            'p(lab|z)':
-            t.mean(t.exp(lpobs)),
-            'rmse':
-            t.sqrt(t.mean((d.mean - obs) ** 2)),
-            'p(img|z)':
-            t.mean(t.sigmoid(lpimg)),
-            'dqp':
-            dkl,
+            'L': loss,
+            'Li': img_loss,
+            'Lx': xpr_loss,
+            'dqp': dkl,
+            'p(img|z)': t.mean(t.sigmoid(lpimg)),
+            'p(xpr|z)': t.mean(t.exp(lpobs)),
+            'rmse': t.sqrt(t.mean((d.mean - obs) ** 2)),
         })
 
     t.enable_grad()
