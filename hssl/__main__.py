@@ -474,11 +474,17 @@ if __name__ == '__main__':
 
 
 if False:
-    from imageio import imread
     from scipy.ndimage.interpolation import zoom
     data = pd.read_csv('~/histonet-test-data/data.gz', sep=' ').set_index('n')
-    s = data.sum(0)
-    data = data[s[[x for x in s.index if 'ambiguous' not in x]].sort_values()[-50:].index]
+    num_genes = 50
+    data = data[
+        data.sum(0)[[
+            x for x in data.columns if 'ambiguous' not in x
+        ]]
+        .sort_values()
+        [-num_genes:]
+        .index
+    ]
     lab = imread('~/histonet-test-data/label.tif')
     img = imread('~/histonet-test-data/image.tif')
     lab = zoom(lab, (0.1, 0.1), order=0)
@@ -497,14 +503,25 @@ if False:
             maxrange = max(ranges)
             x = x / maxrange
             return(x)
-        # TODO
-        # configure initial_dims via CLI
-        # set initial_dims intelligently
-        # np.savetxt(output_forward_path, x, delimiter='\t') # need to add spot names
         print("performing PCA")
         pca_map = PCA(n_components=initial_dims).fit_transform(x)
         print("performing tSNE")
         tsne_map = TSNE(n_components=n_components).fit_transform(pca_map)
         tsne_map = uniformize(tsne_map)
-        # np.savetxt(output_forward_path + ".tsne.tsv", tsne_map, delimiter='\t') # this is 3-d data... need to add spot names
         return tsne_map.reshape((*y.shape[:2], -1))
+
+    def visualize(model, z):
+        _, nmu, nsd, *_ = model.decode(z)
+        return plt.imshow(nmu[0].detach().numpy().transpose(1, 2, 0))
+
+    def interpolate(z1, z2, to='/tmp/interpolation.mp4'):
+        from matplotlib.animation import ArtistAnimation
+        fig = plt.figure()
+        anim = ArtistAnimation(
+            fig,
+            [[visualize(z1 + (z2 - z1) * k)] for k in np.linspace(0, 1, 100)],
+            repeat_delay=1000,
+            interval=50,
+            blit=True,
+        )
+        anim.save(to)
