@@ -152,6 +152,7 @@ class Histonet(t.nn.Module):
             img_sd,
             lrate,
             logit,
+            state,
         )
 
     def forward(self):
@@ -259,7 +260,7 @@ def run(
     ).sample().to(DEVICE)
 
     def _step():
-        z, img_mu, img_sd, lrate, logit = histonet()
+        z, img_mu, img_sd, lrate, logit, _state = histonet()
 
         lpimg = (
             t.distributions.Normal(img_mu, img_sd)
