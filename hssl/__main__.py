@@ -77,7 +77,6 @@ class Histonet(t.nn.Module):
             hidden_size=512,
             latent_size=96,
             nf=64,
-            num_factors=30,
     ):
         super().__init__()
 
@@ -93,7 +92,6 @@ class Histonet(t.nn.Module):
             [1, latent_size]
             + [np.ceil(x / 16).astype(int) for x in image.shape[:2]]
         ))
-        self._z = t.zeros_like(self.z_mu)
 
         self.decoder = t.nn.Sequential(
             t.nn.ConvTranspose2d(latent_size, 16 * nf, 4, 1, 0, bias=True),
@@ -125,82 +123,49 @@ class Histonet(t.nn.Module):
             t.nn.Softplus(),
         )
 
-        self.mixes = t.nn.Sequential(
+        self.lrate = t.nn.Sequential(
             t.nn.Conv2d(nf, nf, 3, 1, 1, bias=True),
             t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.Conv2d(nf, num_factors, 3, 1, 1, bias=True),
-            t.nn.Softmax(dim=1),
+            t.nn.Conv2d(nf, num_genes, 3, 1, 1, bias=True),
         )
-        self.profiles_mu = t.nn.Parameter(t.zeros(num_factors, num_genes))
-        self.profiles_sd = t.nn.Parameter(t.zeros(num_factors, num_genes))
-        self._profiles = t.zeros(num_factors, num_genes)
-
-        self.logit_mu = t.nn.Parameter(t.zeros(num_genes))
-        self.logit_sd = t.nn.Parameter(t.zeros(num_genes))
-        self._logit = t.zeros(num_genes)
-
-    @property
-    def z(self):
-        return self._z
-
-    @property
-    def profiles(self):
-        return self._profiles
-
-    @property
-    def logit(self):
-        return self._logit
+        self.logit_mu = t.nn.Parameter(
+            t.zeros(1, num_genes, 1, 1),
+        )
+        self.logit_sd = t.nn.Parameter(
+            t.zeros(1, num_genes, 1, 1),
+        )
 
     def decode(self, z):
         state = self.decoder(z)
 
         img_mu = self.img_mu(state)
         img_sd = self.img_sd(state)
+        lrate = self.lrate(state)
+        logit = t.distributions.Normal(
+            self.logit_mu,
+            t.nn.functional.softplus(self.logit_sd),
+        ).rsample()
 
-        mixes = self.mixes(state)
-
-        rate = t.einsum('bfxy,fg->bgxy', mixes, t.exp(self.profiles))
-        logit = self.logit
-
-        return dict(
-            img_mu=img_mu,
-            img_sd=img_sd,
-            mixes=mixes,
-            rate=rate,
-            logit=logit,
+        return (
+            z,
+            img_mu,
+            img_sd,
+            lrate,
+            logit,
         )
 
     def forward(self):
-        self._profiles = (
-            t.distributions.Normal(
-                self.profiles_mu,
-                t.nn.functional.softplus(self.profiles_sd),
-            )
-            .rsample()
-        )
-        self._logit = (
-            t.distributions.Normal(
-                self.logit_mu,
-                t.nn.functional.softplus(self.logit_sd),
-            )
-            .rsample()
-            .reshape(1, -1, 1, 1)
-        )
-
-        self._z = t.distributions.Normal(
+        z = t.distributions.Normal(
             self.z_mu,
             t.nn.functional.softplus(self.z_sd),
         ).rsample()
 
-        return {
-            'z': self.z,
-            'profiles': self.profiles,
-            'logit': self.logit,
-            **{
-                k: center_crop(v, self._shape)
-                for k, v in self.decode(self._z).items()
-            },
-        }
+        z, *xs = self.decode(z)
+
+        return (
+            z,
+            *[center_crop(x, self._shape) for x in xs]
+        )
 
 
 def store_state(model, optimizers, iteration, file):
@@ -227,7 +192,6 @@ def run(
         label: np.ndarray,
         data: pd.DataFrame,
         latent_size: int,
-        factors: int,
         output_prefix: str,
         state: dict = None,
         image_interval: int = 50,
@@ -246,7 +210,6 @@ def run(
         image=image,
         data=data,
         latent_size=latent_size,
-        num_factors=factors,
     ).to(DEVICE)
 
     optimizer = t.optim.Adam(
@@ -296,15 +259,15 @@ def run(
     ).sample().to(DEVICE)
 
     def _step():
-        g = histonet()
+        z, img_mu, img_sd, lrate, logit = histonet()
 
         lpimg = (
-            t.distributions.Normal(g['img_mu'], g['img_sd'])
+            t.distributions.Normal(img_mu, img_sd)
             .log_prob(image)
         )
 
         rates = (
-            (g['rate'].reshape(*g['rate'].shape[:2], -1) @ label)
+            (t.exp(lrate).reshape(*lrate.shape[:2], -1) @ label)
             [:, :, 1:]
             + 1e-10
         )
@@ -321,7 +284,7 @@ def run(
 
         d = t.distributions.NegativeBinomial(
             rates,
-            logits=g['logit'].reshape(*g['logit'].shape[:2], -1),
+            logits=logit.reshape(*logit.shape[:2], -1),
         )
         lpobs = d.log_prob(obs)
 
@@ -331,19 +294,9 @@ def run(
                     histonet.z_mu,
                     t.nn.functional.softplus(histonet.z_sd),
                 )
-                .log_prob(g['z'])
+                .log_prob(z)
                 -
-                t.distributions.Normal(0., 1.).log_prob(g['z'])
-            )
-            +
-            t.sum(
-                t.distributions.Normal(
-                    histonet.profiles_mu,
-                    t.nn.functional.softplus(histonet.profiles_sd),
-                )
-                .log_prob(g['profiles'])
-                -
-                t.distributions.Normal(0., 1.).log_prob(g['profiles'])
+                t.distributions.Normal(0., 1.).log_prob(z)
             )
             +
             t.sum(
@@ -351,9 +304,9 @@ def run(
                     histonet.logit_mu,
                     t.nn.functional.softplus(histonet.logit_sd),
                 )
-                .log_prob(g['logit'])
+                .log_prob(logit)
                 -
-                t.distributions.Normal(0., 1.).log_prob(g['logit'])
+                t.distributions.Normal(0., 1.).log_prob(logit)
             )
         )
 
@@ -417,20 +370,17 @@ def run(
         t.no_grad()
         histonet.eval()
 
-        inferred = histonet()
-        noise = histonet.decode(fixed_noise)
+        _, imu, isd, *_ = histonet()
+        _, nmu, nsd, *_ = histonet.decode(fixed_noise)
 
-        for model, d in [
-                (inferred, img_prefix),
-                (noise, noise_prefix),
+        for (mu, sd), d in [
+                ((imu, isd), img_prefix),
+                ((nmu, nsd), noise_prefix),
         ]:
             imwrite(
                 os.path.join(d, f'iteration-{iteration:05d}.jpg'),
                 ((
-                    t.distributions.Normal(
-                        model['img_mu'],
-                        model['img_sd'],
-                    )
+                    t.distributions.Normal(mu, sd)
                     .sample()
                     [0]
                     .detach()
@@ -474,7 +424,6 @@ def main():
     args.add_argument('data-dir', type=str)
 
     args.add_argument('--latent-size', type=int, default=100)
-    args.add_argument('--factors', type=int, default=30)
 
     args.add_argument('--zoom', type=float, default=0.1)
     args.add_argument('--genes', type=int, default=50)
