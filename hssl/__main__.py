@@ -246,7 +246,8 @@ def run(
     )
     image = image / 255
 
-    label = t.eye(int(label.max()) + 1)[label.flatten()].to(DEVICE)
+    num_labels = int(label.max())
+    label = t.eye(num_labels + 1)[label.flatten()].to(DEVICE)
 
     fixed_noise = t.distributions.Normal(
         t.zeros([
@@ -258,6 +259,10 @@ def run(
             for x, s in zip(histonet.z_sd.shape, [1, 1, 1, 1])
         ]),
     ).sample().to(DEVICE)
+
+    np.random.seed(1337)
+    vset = np.random.choice(num_labels, int(0.2 * num_labels))
+    tset = np.setdiff1d(range(num_labels), vset)
 
     def _step():
         z, img_mu, img_sd, lrate, logit, _state = histonet()
@@ -312,7 +317,7 @@ def run(
         )
 
         img_loss = -t.sum(lpimg)
-        xpr_loss = -t.sum(lpobs)
+        xpr_loss = -t.sum(lpobs[:, :, tset])
         loss = img_loss + xpr_loss + dkl
 
         optimizer.zero_grad()
@@ -327,6 +332,10 @@ def run(
             'p(img|z)': t.mean(t.exp(lpimg)),
             'p(xpr|z)': t.mean(t.exp(lpobs)),
             'rmse': t.sqrt(t.mean((d.mean - obs) ** 2)),
+            'rmse tset': t.sqrt(t.mean(
+                (d.mean[:, :, tset] - obs[:, :, tset]) ** 2)),
+            'rmse vset': t.sqrt(t.mean(
+                (d.mean[:, :, vset] - obs[:, :, vset]) ** 2)),
         })
 
     t.enable_grad()
