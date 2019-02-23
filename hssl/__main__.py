@@ -214,7 +214,7 @@ def run(
 
     optimizer = t.optim.Adam(
         histonet.parameters(),
-        lr=1e-3,
+        lr=1e-4,
         # betas=(0.5, 0.999),
     )
     if state:
