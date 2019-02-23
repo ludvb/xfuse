@@ -475,11 +475,11 @@ def run(
 
         _report(subiteration, output)
 
-        if subiteration - last_image > image_interval:
+        if subiteration - last_image >= image_interval:
             _save_image(subiteration)
             last_image = subiteration
 
-        if subiteration - last_chkpt > chkpt_interval:
+        if subiteration - last_chkpt >= chkpt_interval:
             _save_chkpt(subiteration)
             last_chkpt = subiteration
 
