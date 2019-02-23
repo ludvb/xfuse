@@ -323,7 +323,7 @@ def run(
             'Li': img_loss,
             'Lx': xpr_loss,
             'dqp': dkl,
-            'p(img|z)': t.mean(t.sigmoid(lpimg)),
+            'p(img|z)': t.mean(t.exp(lpimg)),
             'p(xpr|z)': t.mean(t.exp(lpobs)),
             'rmse': t.sqrt(t.mean((d.mean - obs) ** 2)),
         })
