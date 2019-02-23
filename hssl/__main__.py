@@ -351,9 +351,9 @@ def run(
                     histonet.logit_mu,
                     t.nn.functional.softplus(histonet.logit_sd),
                 )
-                .log_prob(g['logit'].squeeze())
+                .log_prob(g['logit'])
                 -
-                t.distributions.Normal(0., 1.).log_prob(g['logit'].squeeze())
+                t.distributions.Normal(0., 1.).log_prob(g['logit'])
             )
         )
 
