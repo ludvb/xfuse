@@ -131,17 +131,9 @@ class Histonet(t.nn.Module):
             t.nn.Conv2d(nf, num_factors, 3, 1, 1, bias=True),
             t.nn.Softmax(dim=1),
         )
-        self.scale = t.nn.Sequential(
-            t.nn.Conv2d(nf, nf, 3, 1, 1, bias=True),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.Conv2d(nf, 1, 3, 1, 1, bias=True),
-        )
-
         self.profiles_mu = t.nn.Parameter(t.zeros(num_factors, num_genes))
         self.profiles_sd = t.nn.Parameter(t.zeros(num_factors, num_genes))
         self._profiles = t.zeros(num_factors, num_genes)
-
-        self.gene_baseline = t.nn.Parameter(t.zeros(num_genes))
 
         self.logit_mu = t.nn.Parameter(t.zeros(num_genes))
         self.logit_sd = t.nn.Parameter(t.zeros(num_genes))
@@ -166,24 +158,14 @@ class Histonet(t.nn.Module):
         img_sd = self.img_sd(state)
 
         mixes = self.mixes(state)
-        scale = self.scale(state)
 
-        rate = t.einsum(
-            'bfxy,fg,bxy->bgxy',
-            mixes,
-            t.exp(
-                self.gene_baseline.unsqueeze(0)
-                + self.profiles
-            ),
-            t.exp(scale).squeeze(1),
-        )
+        rate = t.einsum('bfxy,fg->bgxy', mixes, t.exp(self.profiles))
         logit = self.logit
 
         return dict(
             img_mu=img_mu,
             img_sd=img_sd,
             mixes=mixes,
-            scale=scale,
             rate=rate,
             logit=logit,
         )
