@@ -76,7 +76,7 @@ class Histonet(t.nn.Module):
             data,
             hidden_size=512,
             latent_size=96,
-            nf=64,
+            nf=10,
     ):
         super().__init__()
 
@@ -123,36 +123,62 @@ class Histonet(t.nn.Module):
             t.nn.Softplus(),
         )
 
-        self.lrate = t.nn.Sequential(
-            t.nn.Conv2d(nf, nf, 3, 1, 1, bias=True),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.Conv2d(nf, num_genes, 3, 1, 1, bias=True),
+        self.rate_mu = t.nn.Parameter(
+            t.zeros(num_genes, nf),
         )
+        self.rate_sd = t.nn.Parameter(
+            t.zeros(num_genes, nf),
+        )
+
         self.logit_mu = t.nn.Parameter(
-            t.zeros(1, num_genes, 1, 1),
+            t.zeros(num_genes, 1),
         )
         self.logit_sd = t.nn.Parameter(
-            t.zeros(1, num_genes, 1, 1),
+            t.zeros(num_genes, 1),
         )
 
     def decode(self, z):
-        state = self.decoder(z)
+        flogits = self.decoder(z)
 
-        img_mu = self.img_mu(state)
-        img_sd = self.img_sd(state)
-        lrate = self.lrate(state)
-        logit = t.distributions.Normal(
-            self.logit_mu,
-            t.nn.functional.softplus(self.logit_sd),
-        ).rsample()
+        assignments = (
+            # t.nn.Softmax2d()(flogits)
+            t.eye(flogits.shape[1])
+            .to(z)
+            [
+                t.distributions.Categorical(
+                    logits=flogits.permute(0, 2, 3, 1))
+                .sample()
+            ]
+            .permute(0, 3, 1, 2)
+        )
+
+        img_mu = self.img_mu(assignments)
+        img_sd = self.img_sd(assignments)
+
+        flrate = (
+            t.distributions.Normal(
+                self.rate_mu,
+                t.nn.functional.softplus(self.rate_sd),
+            )
+            .rsample()
+        )
+        rate = t.einsum('gf,bfxy->bgxy', t.exp(flrate), assignments)
+
+        logit = (
+            t.distributions.Normal(
+                self.logit_mu,
+                t.nn.functional.softplus(self.logit_sd),
+            )
+            .rsample()
+        )
 
         return (
             z,
             img_mu,
             img_sd,
-            lrate,
+            rate,
             logit,
-            state,
+            flogits,
         )
 
     def forward(self):
@@ -215,7 +241,7 @@ def run(
 
     optimizer = t.optim.Adam(
         histonet.parameters(),
-        lr=1e-4,
+        lr=1e-2,
         # betas=(0.5, 0.999),
     )
     if state:
@@ -265,7 +291,7 @@ def run(
     tset = np.setdiff1d(range(num_labels), vset)
 
     def _step():
-        z, img_mu, img_sd, lrate, logit, _state = histonet()
+        z, img_mu, img_sd, lrate, logit, _flogits = histonet()
 
         lpimg = (
             t.distributions.Normal(img_mu, img_sd)
