@@ -141,15 +141,15 @@ class Histonet(t.nn.Module):
         flogits = self.decoder(z)
 
         assignments = (
-            # t.nn.Softmax2d()(flogits)
-            t.eye(flogits.shape[1])
-            .to(z)
-            [
-                t.distributions.Categorical(
-                    logits=flogits.permute(0, 2, 3, 1))
-                .sample()
-            ]
-            .permute(0, 3, 1, 2)
+            t.nn.functional.softmax(flogits, dim=1)
+            # t.eye(flogits.shape[1])
+            # .to(z)
+            # [
+            #     t.distributions.Categorical(
+            #         logits=flogits.permute(0, 2, 3, 1))
+            #     .sample()
+            # ]
+            # .permute(0, 3, 1, 2)
         )
 
         img_mu = self.img_mu(assignments)
