@@ -8,7 +8,7 @@ import itertools as it
 
 import os
 
-from imageio import imread, imwrite
+from imageio import imread
 
 import matplotlib.pyplot as plt
 
@@ -72,7 +72,6 @@ def center_crop(input, target_shape):
 class Histonet(t.nn.Module):
     def __init__(
             self,
-            image,
             data,
             hidden_size=512,
             latent_size=96,
@@ -82,19 +81,35 @@ class Histonet(t.nn.Module):
 
         num_genes = len(data.columns)
 
-        self._shape = [None, None, *image.shape[:2]]
+        self.encoder = t.nn.Sequential(
+            # x1
+            t.nn.Conv2d(num_genes + 4, 2 * nf, 4, 2, 2, bias=True),
+            t.nn.LeakyReLU(0.2, inplace=True),
+            # x2
+            t.nn.Conv2d(2 * nf, 4 * nf, 4, 2, 2, bias=True),
+            t.nn.LeakyReLU(0.2, inplace=True),
+            # x4
+            t.nn.Conv2d(4 * nf, 8 * nf, 4, 2, 2, bias=True),
+            t.nn.LeakyReLU(0.2, inplace=True),
+            # x8
+            t.nn.Conv2d(8 * nf, 16 * nf, 4, 2, 2, bias=True),
+            t.nn.LeakyReLU(0.2, inplace=True),
+            # x16
+        )
 
-        self.z_mu = t.nn.Parameter(t.zeros(
-            [1, latent_size]
-            + [np.ceil(x / 16).astype(int) for x in image.shape[:2]]
-        ))
-        self.z_sd = t.nn.Parameter(t.zeros(
-            [1, latent_size]
-            + [np.ceil(x / 16).astype(int) for x in image.shape[:2]]
-        ))
+        self.z_mu = t.nn.Sequential(
+            t.nn.Conv2d(16 * nf, 16 * nf, 3, 1, 1, bias=True),
+            t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.Conv2d(16 * nf, latent_size, 3, 1, 1, bias=True),
+        )
+        self.z_sd = t.nn.Sequential(
+            t.nn.Conv2d(16 * nf, 16 * nf, 3, 1, 1, bias=True),
+            t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.Conv2d(16 * nf, latent_size, 3, 1, 1, bias=True),
+        )
 
         self.decoder = t.nn.Sequential(
-            t.nn.ConvTranspose2d(latent_size, 16 * nf, 4, 1, 0, bias=True),
+            t.nn.ConvTranspose2d(latent_size, 16 * nf, 3, 1, 1, bias=True),
             # x16
             t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.ConvTranspose2d(16 * nf, 8 * nf, 4, 2, 1, bias=True),
@@ -137,6 +152,17 @@ class Histonet(t.nn.Module):
             t.zeros(num_genes, 1),
         )
 
+    def encode(self, x):
+        x = self.encoder(x)
+        z_mu = self.z_mu(x)
+        z_sd = self.z_sd(x)
+        z = t.distributions.Normal(z_mu, z_sd).mean  # rsample()
+        return (
+            z,
+            z_mu,
+            z_sd,
+        )
+
     def decode(self, z):
         flogits = self.decoder(z)
 
@@ -160,7 +186,8 @@ class Histonet(t.nn.Module):
                 self.rate_mu,
                 t.nn.functional.softplus(self.rate_sd),
             )
-            .rsample()
+            # .rsample()
+            .mean
         )
         rate = t.einsum('gf,bfxy->bgxy', t.exp(flrate), assignments)
 
@@ -169,11 +196,11 @@ class Histonet(t.nn.Module):
                 self.logit_mu,
                 t.nn.functional.softplus(self.logit_sd),
             )
-            .rsample()
+            # .rsample()
+            .mean
         )
 
         return (
-            z,
             img_mu,
             img_sd,
             rate,
@@ -181,26 +208,27 @@ class Histonet(t.nn.Module):
             flogits,
         )
 
-    def forward(self):
-        z = t.distributions.Normal(
-            self.z_mu,
-            t.nn.functional.softplus(self.z_sd),
-        ).rsample()
-
-        z, *xs = self.decode(z)
-
+    def forward(self, x):
+        shape = x.shape[-2:]
+        z, z_mu, z_sd = self.encode(x)
+        ys = self.decode(z)
         return (
             z,
-            *[center_crop(x, self._shape) for x in xs]
+            *[
+                center_crop(y, [None, None, *shape])
+                if len(y.shape) == 4 else
+                y
+                for y in ys
+            ],
         )
 
 
-def store_state(model, optimizers, iteration, file):
+def store_state(model, optimizers, epoch, file):
     t.save(
         dict(
             model=model.state_dict(),
             optimizers=[x.state_dict() for x in optimizers],
-            iteration=iteration,
+            epoch=epoch,
         ),
         file,
     )
@@ -211,7 +239,49 @@ def restore_state(model, optimizers, file):
     model.load_state_dict(state['vae'])
     for optimizer, optimizer_state in zip(optimizers, state['optimizers']):
         optimizer.load_state_dict(optimizer_state)
-    return state['iteration']
+    return state['epoch']
+
+
+class Dataset(t.utils.data.Dataset):
+    def __init__(
+            self,
+            image: t.Tensor,
+            label: np.ndarray,
+            data: pd.DataFrame,
+            patch_size: int = 500,
+    ):
+        self.image = image
+        self.label = label
+
+        self.data = t.tensor(data.values).float()
+        self.data = t.cat([t.zeros(self.data.shape[0])[:, None], self.data], 1)
+        self.data = t.cat([t.zeros(self.data.shape[1])[None, :], self.data], 0)
+        self.data[0, 0] = 1.
+
+        self.h, self.w = [min(s, patch_size) for s in image.shape[-2:]]
+
+    def __len__(self):
+        return int(np.ceil(
+            np.product(self.image.shape) / self.h / self.w))
+
+    def __getitem__(self, idx):
+        y, x = [
+            np.random.randint(s - d + 1)
+            for s, d in zip(self.image.shape[-2:], (self.h, self.w))
+        ]
+
+        image = self.image[:, y:y + self.h, x:x + self.w]
+        label = self.label[y:y + self.h, x:x + self.w]
+
+        labels = [*sorted(np.unique(label))]
+        data = self.data[labels, :]
+        label = t.tensor(np.searchsorted(labels, label))
+
+        return dict(
+            image=image,
+            label=label,
+            data=data,
+        )
 
 
 def run(
@@ -234,7 +304,6 @@ def run(
     os.makedirs(chkpt_prefix, exist_ok=True)
 
     histonet = Histonet(
-        image=image,
         data=data,
         latent_size=latent_size,
     ).to(DEVICE)
@@ -245,105 +314,140 @@ def run(
         # betas=(0.5, 0.999),
     )
     if state:
-        start_iteration = restore_state(
+        start_epoch = restore_state(
             histonet,
             [optimizer],
             state,
         )
     else:
-        start_iteration = 1
+        start_epoch = 1
 
-    obs = (
-        t.tensor(data.values)
-        .float()
-        .t()
-        .unsqueeze(0)
-        .to(DEVICE)
-    )
+    image = t.tensor(image).permute(2, 0, 1).float() / 255
+    label = t.tensor(label).long()
 
-    image = (
-        t.tensor(
-            image.transpose(2, 0, 1),
-            requires_grad=False,
+    dataset = Dataset(image, label, data)
+
+    def _collate(xs):
+        data = [x.pop('data') for x in xs]
+        max_labels = max([d.shape[0] for d in data])
+        data = t.stack([
+            t.nn.functional.pad(
+                d.t(),
+                (0, max_labels - d.shape[0]),
+                value=float('nan'),
+            ).t()
+            for d in data
+        ])
+        return dict(
+            data=data,
+            **{k: t.stack([x[k] for x in xs]) for k in xs[0].keys()},
         )
-        .unsqueeze(0)
-        .float()
-        .to(DEVICE)
+
+    dataloader = t.utils.data.DataLoader(
+        dataset,
+        collate_fn=_collate,
+        batch_size=2,
     )
-    image = image / 255
 
-    num_labels = int(label.max())
-    label = t.eye(num_labels + 1)[label.flatten()].to(DEVICE)
+    num_genes = data.shape[1]
 
-    fixed_noise = t.distributions.Normal(
-        t.zeros([
-            int(x * s)
-            for x, s in zip(histonet.z_mu.shape, [1, 1, 1, 1])
-        ]),
-        t.ones([
-            int(x * s)
-            for x, s in zip(histonet.z_sd.shape, [1, 1, 1, 1])
-        ]),
-    ).sample().to(DEVICE)
+    fixed_data = next(iter(dataloader))
 
-    np.random.seed(1337)
-    vset = np.random.choice(num_labels, int(0.2 * num_labels))
-    tset = np.setdiff1d(range(num_labels), vset)
+    # fixed_noise = t.distributions.Normal(
+    #     t.zeros([
+    #         int(x * s)
+    #         for x, s in zip(histonet.z_mu.shape, [1, 1, 1, 1])
+    #     ]),
+    #     t.ones([
+    #         int(x * s)
+    #         for x, s in zip(histonet.z_sd.shape, [1, 1, 1, 1])
+    #     ]),
+    # ).sample().to(DEVICE)
 
-    def _step():
-        z, img_mu, img_sd, lrate, logit, _flogits = histonet()
+    # np.random.seed(1337)
+    # num_labels = label.max()
+    # vset = np.random.choice(num_labels, int(0.2 * num_labels))
+    # tset = np.setdiff1d(range(num_labels), vset)
+
+    def _run_histonet_on(x):
+        spatial_data = (
+            t.gather(
+                x['data'],
+                1,
+                (
+                    x['label']
+                    .expand(num_genes + 1, -1, -1, -1)
+                    .permute(1, 2, 3, 0)
+                    .reshape(x['label'].shape[0], -1, num_genes + 1)
+                ),
+            )
+            .reshape(*x['label'].shape, num_genes + 1)
+            .permute(0, 3, 1, 2)
+        )
+
+        return histonet(t.cat([x['image'], spatial_data], 1))
+
+    def _step(x):
+        x = {k: v.to(DEVICE) for k, v in x.items()}
+
+        z, img_mu, img_sd, lrate, logit, _flogits = _run_histonet_on(x)
 
         lpimg = (
             t.distributions.Normal(img_mu, img_sd)
-            .log_prob(image)
+            .log_prob(x['image'])
         )
 
-        rates = (
-            (t.exp(lrate).reshape(*lrate.shape[:2], -1) @ label)
-            [:, :, 1:]
-            + 1e-10
+        label = (
+            t.eye(t.max(x['label']) + 1, device=DEVICE)
+            [x['label'].flatten()]
+            .reshape(*x['label'].shape, -1)
+            .float()
         )
-        # ^ NOTE large memory requirements
+        rates = t.einsum('bgxy,bxyl->bgl', t.exp(lrate), label)
+        rates = rates[:, :, 1:] + 1e-10
 
-        # rates = (
-        #     t.stack([
-        #         t.bincount(label.flatten(), t.exp(lrate[0, i].flatten()))
-        #         for i in range(len(data.columns))
-        #     ], dim=-1)
-        #     [1:]
-        # )
-        # ^ NOTE gradient for t.bincount not implemented
+        data = x['data'][:, 1:, 1:].reshape(-1, num_genes)
+        data_mask = 1 - t.isnan(data)
+        data = data.masked_select(data_mask).reshape(-1, num_genes)
 
         d = t.distributions.NegativeBinomial(
-            rates,
-            logits=logit.reshape(*logit.shape[:2], -1),
+            (
+                rates
+                .permute(0, 2, 1)
+                .reshape(-1, num_genes)
+                .masked_select(data_mask)
+                .reshape(-1, num_genes)
+            ),
+            logits=logit.t(),
         )
-        lpobs = d.log_prob(obs)
 
-        dkl = (
-            t.sum(
-                t.distributions.Normal(
-                    histonet.z_mu,
-                    t.nn.functional.softplus(histonet.z_sd),
-                )
-                .log_prob(z)
-                -
-                t.distributions.Normal(0., 1.).log_prob(z)
-            )
-            +
-            t.sum(
-                t.distributions.Normal(
-                    histonet.logit_mu,
-                    t.nn.functional.softplus(histonet.logit_sd),
-                )
-                .log_prob(logit)
-                -
-                t.distributions.Normal(0., 1.).log_prob(logit)
-            )
-        )
+        lpobs = d.log_prob(data)
+
+        dkl = t.tensor(0.)
+        # (
+        #     t.sum(
+        #         t.distributions.Normal(
+        #             histonet.z_mu,
+        #             t.nn.functional.softplus(histonet.z_sd),
+        #         )
+        #         .log_prob(z)
+        #         -
+        #         t.distributions.Normal(0., 1.).log_prob(z)
+        #     )
+        #     +
+        #     t.sum(
+        #         t.distributions.Normal(
+        #             histonet.logit_mu,
+        #             t.nn.functional.softplus(histonet.logit_sd),
+        #         )
+        #         .log_prob(logit)
+        #         -
+        #         t.distributions.Normal(0., 1.).log_prob(logit)
+        #     )
+        # )
 
         img_loss = -t.sum(lpimg)
-        xpr_loss = -t.sum(lpobs[:, :, tset])
+        xpr_loss = -t.sum(lpobs)
         loss = img_loss + xpr_loss + dkl
 
         optimizer.zero_grad()
@@ -357,19 +461,15 @@ def run(
             'dqp': dkl,
             'p(img|z)': t.mean(t.exp(lpimg)),
             'p(xpr|z)': t.mean(t.exp(lpobs)),
-            'rmse': t.sqrt(t.mean((d.mean - obs) ** 2)),
-            'rmse tset': t.sqrt(t.mean(
-                (d.mean[:, :, tset] - obs[:, :, tset]) ** 2)),
-            'rmse vset': t.sqrt(t.mean(
-                (d.mean[:, :, vset] - obs[:, :, vset]) ** 2)),
+            'rmse': t.sqrt(t.mean((d.mean - data) ** 2)),
         })
 
     t.enable_grad()
     histonet.train()
 
-    def _report(iteration, outputs):
+    def _report(epoch, iteration, outputs):
         print(
-            f'iteration {iteration:4d}:',
+            f'epoch {epoch:4d} - iteration {iteration:4d}:',
             '  //  '.join([
                 '{} = {:>9s}'.format(k, f'{np.mean(v):.2e}')
                 for k, v in outputs.items()
@@ -384,6 +484,7 @@ def run(
                 for i, v in enumerate(vs, iteration - len(vs) + 1):
                     fh.write((
                         ','.join([
+                            str(epoch),
                             str(i),
                             str(k),
                             str(v),
@@ -391,65 +492,57 @@ def run(
                         + '\n'
                     ).encode())
 
-    def _save_chkpt(iteration):
+    def _save_chkpt(epoch):
         store_state(
             histonet,
             [optimizer],
-            iteration,
+            epoch,
             os.path.join(
                 chkpt_prefix,
-                f'iteration-{iteration:05d}.pkl',
+                f'epoch-{epoch:05d}.pkl',
             ),
         )
 
-    def _save_image(iteration):
+    def _save_image(epoch):
         t.no_grad()
         histonet.eval()
 
-        _, imu, isd, *_ = histonet()
-        _, nmu, nsd, *_ = histonet.decode(fixed_noise)
+        _, imu, isd, *_ = _run_histonet_on({
+            k: v.to(DEVICE) for k, v in fixed_data.items()
+        })
+        # _, nmu, nsd, *_ = histonet.decode(fixed_noise)
 
         for (mu, sd), d in [
                 ((imu, isd), img_prefix),
-                ((nmu, nsd), noise_prefix),
+                # ((nmu, nsd), noise_prefix),
         ]:
-            imwrite(
-                os.path.join(d, f'iteration-{iteration:05d}.jpg'),
-                ((
-                    t.distributions.Normal(mu, sd)
-                    .sample()
-                    [0]
-                    .detach()
-                    .cpu()
-                    .numpy()
-                    .transpose(1, 2, 0)
-                ) * 255).astype(np.uint8),
+            visualize_batch(
+                t.distributions.Normal(mu, sd)
+                .sample()
+                .detach()
+                .cpu()
             )
+            plt.savefig(os.path.join(d, f'epoch-{epoch:05d}.jpg'))
 
         t.enable_grad()
         histonet.train()
 
-    last_image = 0.
-    last_chkpt = 0.
+    for epoch in it.count(start_epoch):
+        for iteration, output in enumerate(
+                map(
+                    lambda x: zip_dicts(filter(lambda y: y is not None, x)),
+                    it.zip_longest(*[(_step(x) for x in dataloader)] * 10),
+                ),
+                start_epoch,
+        ):
+            subiteration = 10 * iteration
 
-    for iteration, output in enumerate(
-            map(
-                lambda x: zip_dicts(filter(lambda y: y is not None, x)),
-                it.zip_longest(*[(_step() for _ in it.count())] * 10),
-            ),
-            start_iteration,
-    ):
-        subiteration = 10 * iteration
+            _report(epoch, subiteration, output)
 
-        _report(subiteration, output)
-
-        if subiteration - last_image >= image_interval:
-            _save_image(subiteration)
-            last_image = subiteration
-
-        if subiteration - last_chkpt >= chkpt_interval:
-            _save_chkpt(subiteration)
-            last_chkpt = subiteration
+        if epoch % image_interval == 0:
+            _save_image(epoch)
+        if epoch % chkpt_interval == 0:
+            _save_chkpt(epoch)
 
 
 def main():
@@ -461,7 +554,7 @@ def main():
 
     args.add_argument('--latent-size', type=int, default=100)
 
-    args.add_argument('--zoom', type=float, default=0.1)
+    args.add_argument('--zoom', type=float, default=1.)
     args.add_argument('--genes', type=int, default=50)
 
     args.add_argument(
