@@ -78,7 +78,7 @@ class Histonet(t.nn.Module):
             num_genes,
             hidden_size=512,
             latent_size=96,
-            nf=10,
+            nf=32,
             gene_bias=None,
     ):
         super().__init__()
@@ -154,8 +154,19 @@ class Histonet(t.nn.Module):
             t.nn.Softplus(),
         )
 
-        self.rate_mu = t.nn.Parameter(t.zeros(num_genes, nf))
-        self.rate_sd = t.nn.Parameter(-5 * t.ones(num_genes, nf))
+        self.rate_mu = t.nn.Sequential(
+            t.nn.Conv2d(nf, nf, 3, 1, 1, bias=True),
+            t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(nf),
+            t.nn.Conv2d(nf, num_genes, 3, 1, 1, bias=True),
+        )
+        self.rate_sd = t.nn.Sequential(
+            t.nn.Conv2d(nf, nf, 3, 1, 1, bias=True),
+            t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(nf),
+            t.nn.Conv2d(nf, num_genes, 3, 1, 1, bias=True),
+            t.nn.Softplus(),
+        )
 
         self.rate_bias = t.nn.Parameter(
             (
@@ -181,36 +192,21 @@ class Histonet(t.nn.Module):
         )
 
     def decode(self, z):
-        flogits = self.decoder(z)
+        state = self.decoder(z)
 
-        assignments = (
-            t.nn.functional.softmax(flogits, dim=1)
-            # t.eye(flogits.shape[1])
-            # .to(z)
-            # [
-            #     t.distributions.Categorical(
-            #         logits=flogits.permute(0, 2, 3, 1))
-            #     .sample()
-            # ]
-            # .permute(0, 3, 1, 2)
-        )
+        img_mu = self.img_mu(state)
+        img_sd = self.img_sd(state)
 
-        img_mu = self.img_mu(assignments)
-        img_sd = self.img_sd(assignments)
-
-        flrate = (
+        lrate = (
             t.distributions.Normal(
-                self.rate_mu,
-                t.nn.functional.softplus(self.rate_sd),
+                self.rate_mu(state),
+                t.nn.functional.softplus(self.rate_sd(state)),
             )
             # .rsample()
             .mean
         )
-        rate = t.einsum(
-            'gf,bfxy->bgxy',
-            t.exp(self.rate_bias.unsqueeze(1) + flrate),
-            assignments,
-        )
+
+        rate = t.exp(self.rate_bias[None, ..., None, None] + lrate)
 
         logit = (
             t.distributions.Normal(
@@ -226,7 +222,6 @@ class Histonet(t.nn.Module):
             img_sd,
             rate,
             logit,
-            flogits,
         )
 
     def forward(self, x):
@@ -410,7 +405,7 @@ def run(
     def _step(x):
         x = {k: v.to(DEVICE) for k, v in x.items()}
 
-        z, img_mu, img_sd, rate, logit, _flogits = _run_histonet_on(x)
+        z, img_mu, img_sd, rate, logit = _run_histonet_on(x)
 
         lpimg = (
             t.distributions.Normal(img_mu, img_sd)
