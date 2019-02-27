@@ -391,7 +391,7 @@ def run(
     def _step(x):
         x = {k: v.to(DEVICE) for k, v in x.items()}
 
-        z, img_mu, img_sd, lrate, logit, _flogits = _run_histonet_on(x)
+        z, img_mu, img_sd, rate, logit, _flogits = _run_histonet_on(x)
 
         lpimg = (
             t.distributions.Normal(img_mu, img_sd)
@@ -404,10 +404,10 @@ def run(
             .reshape(*x['label'].shape, -1)
             .float()
         )
-        rates = t.einsum('bgxy,bxyi->ig', t.exp(lrate), label)
+        rates = t.einsum('bgxy,bxyi->ig', rate, label)
 
         d = t.distributions.NegativeBinomial(
-            rates[1:, :] + 1e-10,
+            rates[1:] + 1e-10,
             logits=logit.t(),
         )
 
