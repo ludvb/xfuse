@@ -76,6 +76,7 @@ class Histonet(t.nn.Module):
             hidden_size=512,
             latent_size=96,
             nf=10,
+            gene_bias=None,
     ):
         super().__init__()
 
@@ -136,19 +137,20 @@ class Histonet(t.nn.Module):
             t.nn.Softplus(),
         )
 
-        self.rate_mu = t.nn.Parameter(
-            t.zeros(num_genes, nf),
-        )
-        self.rate_sd = t.nn.Parameter(
-            t.zeros(num_genes, nf),
+        self.rate_mu = t.nn.Parameter(t.zeros(num_genes, nf))
+        self.rate_sd = t.nn.Parameter(-5 * t.ones(num_genes, nf))
+
+        self.rate_bias = t.nn.Parameter(
+            (
+                t.as_tensor(gene_bias).float()
+                if gene_bias is not None else
+                t.zeros(num_genes)
+            ),
+            requires_grad=False,
         )
 
-        self.logit_mu = t.nn.Parameter(
-            t.zeros(num_genes, 1),
-        )
-        self.logit_sd = t.nn.Parameter(
-            t.zeros(num_genes, 1),
-        )
+        self.logit_mu = t.nn.Parameter(t.zeros(num_genes, 1))
+        self.logit_sd = t.nn.Parameter(-5 * t.ones(num_genes, 1))
 
     def encode(self, x):
         x = self.encoder(x)
@@ -187,7 +189,11 @@ class Histonet(t.nn.Module):
             # .rsample()
             .mean
         )
-        rate = t.einsum('gf,bfxy->bgxy', t.exp(flrate), assignments)
+        rate = t.einsum(
+            'gf,bfxy->bgxy',
+            t.exp(self.rate_bias.unsqueeze(1) + flrate),
+            assignments,
+        )
 
         logit = (
             t.distributions.Normal(
@@ -309,6 +315,10 @@ def run(
     histonet = Histonet(
         num_genes=len(data.columns),
         latent_size=latent_size,
+        gene_bias=np.log(
+            (data.values / np.bincount(label.flatten())[1:][..., None])
+            .mean(0)
+        ),
     ).to(DEVICE)
 
     optimizer = t.optim.Adam(
