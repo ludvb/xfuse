@@ -1,0 +1,28 @@
+* data-based initialization
+
+** DONE gene bias
+   CLOSED: [2019-02-27 Wed 15:50]
+
+** TODO image channels?
+
+* TODO [#B] "distribution abstractions"
+
+* TODO how should we handle partially included spots in an image patch?
+  note that the data assumes that we predict expression values over the entire spot.
+  right now, the network needs to overpredict expression on the visible area.
+
+  - one possibility is to simply drop spots that aren't fully contained in the image patch.
+  - we could also interpolate new expression values.
+    the problem with that is that the visible part of the patch may have an entirely different expression vector.
+
+* TODO [#A] factorize after summing inside spots
+
+* TODO [#B] data augmentation
+
+* TODO [#B] multiple datasets
+
+* TODO [#C] try out different image likelihoods
+  for example,
+
+  - channel covariance
+  - spatial covariance
