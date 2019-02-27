@@ -52,7 +52,8 @@ def visualize_batch(batch, **kwargs):
     return plt.imshow(
         np.transpose(
             make_grid(
-                batch[:64],
+                batch,
+                nrow=int(np.floor(np.sqrt(len(batch)))),
                 padding=2,
                 normalize=True,
             ),
