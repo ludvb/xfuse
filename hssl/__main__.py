@@ -290,6 +290,7 @@ def run(
         data: pd.DataFrame,
         latent_size: int,
         output_prefix: str,
+        batch_size: int = 5,
         state: dict = None,
         image_interval: int = 50,
         chkpt_interval: int = 10000,
@@ -346,7 +347,7 @@ def run(
     dataloader = t.utils.data.DataLoader(
         dataset,
         collate_fn=_collate,
-        batch_size=2,
+        batch_size=batch_size,
     )
 
     num_genes = data.shape[1]
@@ -556,6 +557,7 @@ def main():
 
     args.add_argument('--zoom', type=float, default=1.)
     args.add_argument('--genes', type=int, default=50)
+    args.add_argument('--batch-size', type=int, default=5)
 
     args.add_argument(
         '--output-prefix',
