@@ -72,14 +72,12 @@ def center_crop(input, target_shape):
 class Histonet(t.nn.Module):
     def __init__(
             self,
-            data,
+            num_genes,
             hidden_size=512,
             latent_size=96,
             nf=10,
     ):
         super().__init__()
-
-        num_genes = len(data.columns)
 
         self.encoder = t.nn.Sequential(
             # x1
@@ -309,7 +307,7 @@ def run(
     os.makedirs(chkpt_prefix, exist_ok=True)
 
     histonet = Histonet(
-        data=data,
+        num_genes=len(data.columns),
         latent_size=latent_size,
     ).to(DEVICE)
 
@@ -334,17 +332,14 @@ def run(
 
     def _collate(xs):
         data = [x.pop('data') for x in xs]
-        max_labels = max([d.shape[0] for d in data])
-        data = t.stack([
-            t.nn.functional.pad(
-                d.t(),
-                (0, max_labels - d.shape[0]),
-                value=float('nan'),
-            ).t()
-            for d in data
-        ])
+        nlabels = [len(d) - 1 for d in data]
+        labels = [
+            (l + n) * (l != 0).long() for l, n in
+            zip((x.pop('label') for x in xs), it.accumulate((0, *nlabels)))
+        ]
         return dict(
-            data=data,
+            data=t.cat([data[0], *(d[1:] for d in data[1:])]),
+            label=t.stack(labels),
             **{k: t.stack([x[k] for x in xs]) for k in xs[0].keys()},
         )
 
@@ -354,8 +349,6 @@ def run(
         batch_size=batch_size,
         num_workers=workers,
     )
-
-    num_genes = data.shape[1]
 
     fixed_data = next(iter(dataloader))
 
@@ -377,17 +370,9 @@ def run(
 
     def _run_histonet_on(x):
         spatial_data = (
-            t.gather(
-                x['data'],
-                1,
-                (
-                    x['label']
-                    .expand(num_genes + 1, -1, -1, -1)
-                    .permute(1, 2, 3, 0)
-                    .reshape(x['label'].shape[0], -1, num_genes + 1)
-                ),
-            )
-            .reshape(*x['label'].shape, num_genes + 1)
+            x['data']
+            [x['label'].flatten()]
+            .reshape(*x['label'].shape, -1)
             .permute(0, 3, 1, 2)
         )
 
@@ -409,24 +394,14 @@ def run(
             .reshape(*x['label'].shape, -1)
             .float()
         )
-        rates = t.einsum('bgxy,bxyl->bgl', t.exp(lrate), label)
-        rates = rates[:, :, 1:] + 1e-10
-
-        data = x['data'][:, 1:, 1:].reshape(-1, num_genes)
-        data_mask = 1 - t.isnan(data)
-        data = data.masked_select(data_mask).reshape(-1, num_genes)
+        rates = t.einsum('bgxy,bxyi->ig', t.exp(lrate), label)
 
         d = t.distributions.NegativeBinomial(
-            (
-                rates
-                .permute(0, 2, 1)
-                .reshape(-1, num_genes)
-                .masked_select(data_mask)
-                .reshape(-1, num_genes)
-            ),
+            rates[1:, :] + 1e-10,
             logits=logit.t(),
         )
 
+        data = x['data'][1:, 1:]
         lpobs = d.log_prob(data)
 
         dkl = t.tensor(0.)
