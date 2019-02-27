@@ -294,7 +294,11 @@ def run(
         state: dict = None,
         image_interval: int = 50,
         chkpt_interval: int = 10000,
+        workers: int = None,
 ):
+    if workers is None:
+        workers = len(os.sched_getaffinity(0))
+
     img_prefix = os.path.join(output_prefix, 'images')
     noise_prefix = os.path.join(output_prefix, 'noise')
     chkpt_prefix = os.path.join(output_prefix, 'checkpoints')
@@ -348,6 +352,7 @@ def run(
         dataset,
         collate_fn=_collate,
         batch_size=batch_size,
+        num_workers=workers,
     )
 
     num_genes = data.shape[1]
@@ -567,6 +572,7 @@ def main():
     args.add_argument('--state', type=str)
     args.add_argument('--image-interval', type=int, default=100)
     args.add_argument('--chkpt-interval', type=int, default=100)
+    args.add_argument('--workers', type=int)
 
     opts = vars(args.parse_args())
 
