@@ -16,6 +16,8 @@ import numpy as np
 
 import pandas as pd
 
+from scipy.ndimage.morphology import binary_fill_holes
+
 import torch as t
 
 from torchvision.utils import make_grid
@@ -277,6 +279,9 @@ class Dataset(t.utils.data.Dataset):
         image = self.image[:, y:y + self.h, x:x + self.w]
         label = self.label[y:y + self.h, x:x + self.w]
 
+        # remove partially visible labels
+        label[np.invert(binary_fill_holes(label == 0))] = 0
+
         labels = [*sorted(np.unique(label))]
         data = self.data[labels, :]
         label = t.tensor(np.searchsorted(labels, label))
@@ -336,7 +341,6 @@ def run(
         start_epoch = 1
 
     image = t.tensor(image).permute(2, 0, 1).float() / 255
-    label = t.tensor(label).long()
 
     dataset = Dataset(image, label, data)
 
