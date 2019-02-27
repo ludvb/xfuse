@@ -596,8 +596,8 @@ if __name__ == '__main__':
 
 if False:
     from scipy.ndimage.interpolation import zoom
-    data = pd.read_csv('~/histonet-test-data/data.gz', sep=' ').set_index('n')
     num_genes = 50
+    data = pd.read_csv('~/histonet-test-data/data.gz', sep=' ').set_index('n')
     data = data[
         data.sum(0)[[
             x for x in data.columns if 'ambiguous' not in x
@@ -606,10 +606,10 @@ if False:
         [-num_genes:]
         .index
     ]
-    lab = imread('~/histonet-test-data/label.tif')
-    img = imread('~/histonet-test-data/image.tif')
-    lab = zoom(lab, (0.1, 0.1), order=0)
-    img = zoom(img, (0.1, 0.1, 1))
+    label = imread('~/histonet-test-data/label.tif')
+    image = imread('~/histonet-test-data/image.tif')
+    label = zoom(label, (0.1, 0.1), order=0)
+    image = zoom(image, (0.1, 0.1, 1))
 
     def run_tsne(y, n_components=3, initial_dims=20):
         from sklearn.decomposition import PCA
