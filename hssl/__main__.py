@@ -87,26 +87,32 @@ class Histonet(t.nn.Module):
             # x1
             t.nn.Conv2d(num_genes + 4, 2 * nf, 4, 2, 2, bias=True),
             t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(2 * nf),
             # x2
             t.nn.Conv2d(2 * nf, 4 * nf, 4, 2, 2, bias=True),
             t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(4 * nf),
             # x4
             t.nn.Conv2d(4 * nf, 8 * nf, 4, 2, 2, bias=True),
             t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(8 * nf),
             # x8
             t.nn.Conv2d(8 * nf, 16 * nf, 4, 2, 2, bias=True),
             t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(16 * nf),
             # x16
         )
 
         self.z_mu = t.nn.Sequential(
             t.nn.Conv2d(16 * nf, 16 * nf, 3, 1, 1, bias=True),
             t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(16 * nf),
             t.nn.Conv2d(16 * nf, latent_size, 3, 1, 1, bias=True),
         )
         self.z_sd = t.nn.Sequential(
             t.nn.Conv2d(16 * nf, 16 * nf, 3, 1, 1, bias=True),
             t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(16 * nf),
             t.nn.Conv2d(16 * nf, latent_size, 3, 1, 1, bias=True),
         )
 
@@ -114,28 +120,36 @@ class Histonet(t.nn.Module):
             t.nn.ConvTranspose2d(latent_size, 16 * nf, 3, 1, 1, bias=True),
             # x16
             t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(16 * nf),
             t.nn.ConvTranspose2d(16 * nf, 8 * nf, 4, 2, 1, bias=True),
             # x8
             t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(8 * nf),
             t.nn.ConvTranspose2d(8 * nf, 4 * nf, 4, 2, 1, bias=True),
             # x4
             t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(4 * nf),
             t.nn.ConvTranspose2d(4 * nf, 2 * nf, 4, 2, 1, bias=True),
             # x2
             t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(2 * nf),
             t.nn.ConvTranspose2d(2 * nf, nf, 4, 2, 1, bias=True),
             # x1
+            t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(nf),
         )
 
         self.img_mu = t.nn.Sequential(
             t.nn.Conv2d(nf, nf, 3, 1, 1, bias=True),
             t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(nf),
             t.nn.Conv2d(nf, 3, 3, 1, 1, bias=True),
             t.nn.Sigmoid(),
         )
         self.img_sd = t.nn.Sequential(
             t.nn.Conv2d(nf, nf, 3, 1, 1, bias=True),
             t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(nf),
             t.nn.Conv2d(nf, 3, 3, 1, 1, bias=True),
             t.nn.Softplus(),
         )
