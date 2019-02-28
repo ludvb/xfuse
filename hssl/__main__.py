@@ -22,6 +22,10 @@ import torch as t
 
 from torchvision.utils import make_grid
 
+from .distributions import Distribution, Normal, Variable
+
+from .logging import INFO, DEBUG, log
+
 
 DEVICE = t.device('cuda' if t.cuda.is_available() else 'cpu')
 
@@ -71,7 +75,33 @@ def center_crop(input, target_shape):
     ])]
 
 
-class Histonet(t.nn.Module):
+class Variational(t.nn.Module):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._latents = dict()
+
+    def _register_latent(
+            self,
+            variable: Variable,
+            prior: Distribution,
+            is_global: bool = False,
+    ):
+        varid = id(variable)
+        if varid in self._latents:
+            raise RuntimeError(f'variable {id} has already been registered')
+
+        log(DEBUG, 'registering latent variable %d', varid)
+        self._latents[varid] = variable, prior, is_global
+
+    def complexity_cost(self, batch_fraction):
+        return sum([
+            t.sum(x.distribution.log_prob(x.value) - p.log_prob(x.value))
+            * (batch_fraction if g else 1.)
+            for x, p, g in self._latents.values()
+        ])
+
+
+class Histonet(Variational):
     def __init__(
             self,
             num_genes,
@@ -114,6 +144,8 @@ class Histonet(t.nn.Module):
             t.nn.BatchNorm2d(16 * nf),
             t.nn.Conv2d(16 * nf, latent_size, 3, 1, 1, bias=True),
         )
+        self.z = Variable(Normal())
+        self._register_latent(self.z, Normal())
 
         self.decoder = t.nn.Sequential(
             t.nn.ConvTranspose2d(latent_size, 16 * nf, 3, 1, 1, bias=True),
@@ -153,18 +185,11 @@ class Histonet(t.nn.Module):
             t.nn.Softplus(),
         )
 
-        self.rate_mu = t.nn.Sequential(
+        self.rate = t.nn.Sequential(
             t.nn.Conv2d(nf, nf, 3, 1, 1, bias=True),
             t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.BatchNorm2d(nf),
             t.nn.Conv2d(nf, num_genes, 3, 1, 1, bias=True),
-        )
-        self.rate_sd = t.nn.Sequential(
-            t.nn.Conv2d(nf, nf, 3, 1, 1, bias=True),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(nf),
-            t.nn.Conv2d(nf, num_genes, 3, 1, 1, bias=True),
-            t.nn.Softplus(),
         )
 
         self.rate_bias = t.nn.Parameter(
@@ -178,12 +203,17 @@ class Histonet(t.nn.Module):
 
         self.logit_mu = t.nn.Parameter(t.zeros(num_genes, 1))
         self.logit_sd = t.nn.Parameter(-5 * t.ones(num_genes, 1))
+        self.logit = Variable(Normal())
+        self._register_latent(self.logit, Normal(), is_global=True)
 
     def encode(self, x):
         x = self.encoder(x)
         z_mu = self.z_mu(x)
         z_sd = self.z_sd(x)
-        z = t.distributions.Normal(z_mu, z_sd).mean  # rsample()
+
+        self.z.distribution.set(loc=z_mu, scale=z_sd, r_transform=True)
+        z = self.z.sample().value
+
         return (
             z,
             z_mu,
@@ -196,25 +226,11 @@ class Histonet(t.nn.Module):
         img_mu = self.img_mu(state)
         img_sd = self.img_sd(state)
 
-        lrate = (
-            t.distributions.Normal(
-                self.rate_mu(state),
-                t.nn.functional.softplus(self.rate_sd(state)),
-            )
-            # .rsample()
-            .mean
-        )
+        rate = t.exp(self.rate_bias[None, ..., None, None] + self.rate(state))
 
-        rate = t.exp(self.rate_bias[None, ..., None, None] + lrate)
-
-        logit = (
-            t.distributions.Normal(
-                self.logit_mu,
-                t.nn.functional.softplus(self.logit_sd),
-            )
-            # .rsample()
-            .mean
-        )
+        self.logit.distribution.set(
+            loc=self.logit_mu, scale=self.logit_sd, r_transform=True)
+        logit = self.logit.sample().value
 
         return (
             img_mu,
@@ -338,7 +354,7 @@ def run(
 
     optimizer = t.optim.Adam(
         histonet.parameters(),
-        lr=1e-5,
+        lr=1e-4,
         # betas=(0.5, 0.999),
     )
     if state:
@@ -415,28 +431,7 @@ def run(
         data = x['data'][1:, 1:]
         lpobs = d.log_prob(data)
 
-        dkl = t.tensor(0.)
-        # (
-        #     t.sum(
-        #         t.distributions.Normal(
-        #             histonet.z_mu,
-        #             t.nn.functional.softplus(histonet.z_sd),
-        #         )
-        #         .log_prob(z)
-        #         -
-        #         t.distributions.Normal(0., 1.).log_prob(z)
-        #     )
-        #     +
-        #     t.sum(
-        #         t.distributions.Normal(
-        #             histonet.logit_mu,
-        #             t.nn.functional.softplus(histonet.logit_sd),
-        #         )
-        #         .log_prob(logit)
-        #         -
-        #         t.distributions.Normal(0., 1.).log_prob(logit)
-        #     )
-        # )
+        dkl = histonet.complexity_cost(len(x) / len(dataset))
 
         img_loss = -t.sum(lpimg)
         xpr_loss = -t.sum(lpobs)
