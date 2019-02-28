@@ -342,10 +342,13 @@ def run(
         # betas=(0.5, 0.999),
     )
     if state:
-        start_epoch = restore_state(
-            histonet,
-            [optimizer],
-            state,
+        start_epoch = (
+            restore_state(
+                histonet,
+                [optimizer],
+                state,
+            )
+            + 1
         )
     else:
         start_epoch = 1
