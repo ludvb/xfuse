@@ -7,7 +7,8 @@
 
 * TODO [#B] "distribution abstractions"
 
-* TODO how should we handle partially included spots in an image patch?
+* DONE how should we handle partially included spots in an image patch?
+  CLOSED: [2019-02-28 Thu 18:05]
   note that the data assumes that we predict expression values over the entire spot.
   right now, the network needs to overpredict expression on the visible area.
 
@@ -16,6 +17,8 @@
     the problem with that is that the visible part of the patch may have an entirely different expression vector.
 
 * TODO [#A] factorize after summing inside spots
+  can we even get the factorization working? :/
+  if it is working in std, there is no reason why it wouldn't work here?
 
 * TODO [#B] data augmentation
 
@@ -26,3 +29,11 @@
 
   - channel covariance
   - spatial covariance
+
+* DONE [#B] add batchnorms?
+  CLOSED: [2019-02-28 Thu 18:06]
+
+* TODO [#C] improve logging
+  - timestamps
+
+* TODO [#C] improve code structure
