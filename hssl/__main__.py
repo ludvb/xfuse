@@ -54,8 +54,7 @@ def visualize_batch(batch, **kwargs):
             make_grid(
                 batch,
                 nrow=int(np.floor(np.sqrt(len(batch)))),
-                padding=2,
-                normalize=True,
+                padding=5,
             ),
             (1, 2, 0),
         ),
@@ -531,6 +530,7 @@ def run(
             visualize_batch(
                 t.distributions.Normal(mu, sd)
                 .sample()
+                .clamp(0, 1)
                 .detach()
                 .cpu()
             )
