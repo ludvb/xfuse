@@ -586,10 +586,11 @@ def main():
         index_col=0,
     )
 
-    from scipy.ndimage.interpolation import zoom
     zoom_level = opts.pop('zoom')
-    label = zoom(label, (zoom_level, zoom_level), order=0)
-    image = zoom(image, (zoom_level, zoom_level, 1))
+    if zoom_level < 1:
+        from scipy.ndimage.interpolation import zoom
+        label = zoom(label, (zoom_level, zoom_level), order=0)
+        image = zoom(image, (zoom_level, zoom_level, 1))
 
     data = data[
         data.sum(0)
