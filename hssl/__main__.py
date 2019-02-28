@@ -309,6 +309,7 @@ def run(
         data: pd.DataFrame,
         latent_size: int,
         output_prefix: str,
+        patch_size: int = 700,
         batch_size: int = 5,
         state: dict = None,
         image_interval: int = 50,
@@ -352,7 +353,7 @@ def run(
 
     image = t.tensor(image).permute(2, 0, 1).float() / 255
 
-    dataset = Dataset(image, label, data)
+    dataset = Dataset(image, label, data, patch_size=patch_size)
 
     def _collate(xs):
         data = [x.pop('data') for x in xs]
@@ -571,6 +572,7 @@ def main():
 
     args.add_argument('--zoom', type=float, default=1.)
     args.add_argument('--genes', type=int, default=50)
+    args.add_argument('--patch-size', type=int, default=700)
     args.add_argument('--batch-size', type=int, default=5)
 
     args.add_argument(
