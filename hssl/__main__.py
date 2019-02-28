@@ -538,7 +538,7 @@ def run(
                     lambda x: zip_dicts(filter(lambda y: y is not None, x)),
                     it.zip_longest(*[(_step(x) for x in dataloader)] * 10),
                 ),
-                start_epoch,
+                1,
         ):
             subiteration = 10 * iteration
 
