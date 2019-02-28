@@ -252,7 +252,7 @@ def store_state(model, optimizers, epoch, file):
 
 def restore_state(model, optimizers, file):
     state = t.load(file)
-    model.load_state_dict(state['vae'])
+    model.load_state_dict(state['model'])
     for optimizer, optimizer_state in zip(optimizers, state['optimizers']):
         optimizer.load_state_dict(optimizer_state)
     return state['epoch']
