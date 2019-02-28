@@ -472,12 +472,18 @@ def run(
     t.enable_grad()
     histonet.train()
 
-    def _report(epoch, iteration, outputs):
+    def _report(epoch, output):
+        iteration = output.pop('iteration')
+
         print(
-            f'epoch {epoch:4d} - iteration {iteration:4d}:',
+            f'epoch {epoch:4d}',
+            ' '
+            f'(%0{len(str(len(dataloader)))}d/{len(dataloader)})'
+            % iteration[-1],
+            ' :: ',
             '  //  '.join([
                 '{} = {:>9s}'.format(k, f'{np.mean(v):.2e}')
-                for k, v in outputs.items()
+                for k, v in output.items()
             ]),
         )
 
@@ -485,8 +491,8 @@ def run(
                 os.path.join(output_prefix, 'training_data.csv.gz'),
                 'ab',
         ) as fh:
-            for k, vs in outputs.items():
-                for i, v in enumerate(vs, iteration - len(vs) + 1):
+            for k, vs in output.items():
+                for i, v in zip(iteration, vs):
                     fh.write((
                         ','.join([
                             str(epoch),
@@ -533,16 +539,20 @@ def run(
         histonet.train()
 
     for epoch in it.count(start_epoch):
-        for iteration, output in enumerate(
-                map(
-                    lambda x: zip_dicts(filter(lambda y: y is not None, x)),
-                    it.zip_longest(*[(_step(x) for x in dataloader)] * 10),
+        for output in map(
+                lambda x: zip_dicts(
+                    map(
+                        lambda y: {'iteration': y[0], **y[1]},
+                        filter(lambda y: y is not None, x),
+                    ),
                 ),
-                1,
+                it.zip_longest(
+                    *[(
+                        (i, _step(x)) for i, x in enumerate(dataloader, 1)
+                    )] * 10
+                ),
         ):
-            subiteration = 10 * iteration
-
-            _report(epoch, subiteration, output)
+            _report(epoch, output)
 
         if epoch % image_interval == 0:
             _save_image(epoch)
