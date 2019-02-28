@@ -278,7 +278,7 @@ class Dataset(t.utils.data.Dataset):
 
     def __len__(self):
         return int(np.ceil(
-            np.product(self.image.shape) / self.h / self.w))
+            np.product(self.image.shape[-2:]) / self.h / self.w))
 
     def __getitem__(self, idx):
         y, x = [
