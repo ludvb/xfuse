@@ -379,22 +379,6 @@ def run(
 
     fixed_data = next(iter(dataloader))
 
-    # fixed_noise = t.distributions.Normal(
-    #     t.zeros([
-    #         int(x * s)
-    #         for x, s in zip(histonet.z_mu.shape, [1, 1, 1, 1])
-    #     ]),
-    #     t.ones([
-    #         int(x * s)
-    #         for x, s in zip(histonet.z_sd.shape, [1, 1, 1, 1])
-    #     ]),
-    # ).sample().to(DEVICE)
-
-    # np.random.seed(1337)
-    # num_labels = label.max()
-    # vset = np.random.choice(num_labels, int(0.2 * num_labels))
-    # tset = np.setdiff1d(range(num_labels), vset)
-
     def _run_histonet_on(x):
         spatial_data = (
             x['data']
@@ -524,11 +508,9 @@ def run(
         _, imu, isd, *_ = _run_histonet_on({
             k: v.to(DEVICE) for k, v in fixed_data.items()
         })
-        # _, nmu, nsd, *_ = histonet.decode(fixed_noise)
 
         for (mu, sd), d in [
                 ((imu, isd), img_prefix),
-                # ((nmu, nsd), noise_prefix),
         ]:
             visualize_batch(
                 t.distributions.Normal(mu, sd)
