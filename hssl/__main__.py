@@ -264,7 +264,7 @@ class Dataset(t.utils.data.Dataset):
             image: t.Tensor,
             label: np.ndarray,
             data: pd.DataFrame,
-            patch_size: int = 500,
+            patch_size: int = 700,
     ):
         self.image = image
         self.label = label
