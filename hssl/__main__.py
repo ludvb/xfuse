@@ -286,8 +286,8 @@ class Dataset(t.utils.data.Dataset):
             for s, d in zip(self.image.shape[-2:], (self.h, self.w))
         ]
 
-        image = self.image[:, y:y + self.h, x:x + self.w]
-        label = self.label[y:y + self.h, x:x + self.w]
+        image = self.image[:, y:y + self.h, x:x + self.w].clone()
+        label = self.label[y:y + self.h, x:x + self.w].copy()
 
         # remove partially visible labels
         label[np.invert(binary_fill_holes(label == 0))] = 0
