@@ -26,7 +26,9 @@ from torchvision.utils import make_grid
 
 from .distributions import Distribution, Normal, Variable
 
-from .logging import INFO, DEBUG, log, set_level
+from .logging import DEBUG, INFO, WARNING, log, set_level
+
+from .utility import set_rng_seed
 
 
 DEVICE = t.device('cuda' if t.cuda.is_available() else 'cpu')
@@ -360,7 +362,7 @@ def run(
         # betas=(0.5, 0.999),
     )
     if state:
-        start_epoch = (
+        epoch = (
             restore_state(
                 histonet,
                 [optimizer],
@@ -369,7 +371,7 @@ def run(
             + 1
         )
     else:
-        start_epoch = 1
+        epoch = 1
 
     image = t.tensor(image).permute(2, 0, 1).float() / 255
 
@@ -388,11 +390,17 @@ def run(
             **{k: t.stack([x[k] for x in xs]) for k in xs[0].keys()},
         )
 
+    def _worker_init(n):
+        np.random.seed(np.random.get_state()[1][0] + epoch)
+        np.random.seed(np.random.randint(
+            np.iinfo(np.int32).max) + n)
+
     dataloader = t.utils.data.DataLoader(
         dataset,
         collate_fn=_collate,
         batch_size=batch_size,
         num_workers=workers,
+        worker_init_fn=_worker_init,
     )
 
     fixed_data = next(iter(dataloader))
@@ -524,7 +532,7 @@ def run(
         t.enable_grad()
         histonet.train()
 
-    for epoch in it.count(start_epoch):
+    for epoch in it.count(epoch):
         for output in map(
                 lambda x: zip_dicts(
                     map(
@@ -569,6 +577,7 @@ def main():
     args.add_argument('--image-interval', type=int, default=100)
     args.add_argument('--chkpt-interval', type=int, default=100)
     args.add_argument('--workers', type=int)
+    args.add_argument('--seed', type=int)
 
     opts = vars(args.parse_args())
 
@@ -601,9 +610,21 @@ def main():
         .index
     ]
 
+    workers = opts.pop('workers')
+
+    seed = opts.pop('seed')
+    if seed is not None:
+        set_rng_seed(seed)
+
+        if workers is None:
+            log(WARNING,
+                'setting workers to 0 to avoid race conditions '
+                '(set --workers explicitly to override)')
+            workers = 0
+
     log(DEBUG, 'using device: %s', str(DEVICE))
 
-    run(image, label, data, **opts)
+    run(image, label, data, workers=workers, **opts)
 
 
 if __name__ == '__main__':
