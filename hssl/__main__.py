@@ -8,6 +8,8 @@ import itertools as it
 
 import os
 
+import sys
+
 from imageio import imread
 
 import matplotlib.pyplot as plt
@@ -24,7 +26,7 @@ from torchvision.utils import make_grid
 
 from .distributions import Distribution, Normal, Variable
 
-from .logging import INFO, DEBUG, log
+from .logging import INFO, DEBUG, log, set_level
 
 
 DEVICE = t.device('cuda' if t.cuda.is_available() else 'cpu')
@@ -457,16 +459,19 @@ def run(
     def _report(epoch, output):
         iteration = output.pop('iteration')
 
-        print(
-            f'epoch {epoch:4d}',
-            ' '
-            f'(%0{len(str(len(dataloader)))}d/{len(dataloader)})'
-            % iteration[-1],
-            ' :: ',
-            '  //  '.join([
-                '{} = {:>9s}'.format(k, f'{np.mean(v):.2e}')
-                for k, v in output.items()
-            ]),
+        log(
+            INFO,
+            ' '.join([
+                f'epoch {epoch:4d}',
+                ' '
+                f'(%0{len(str(len(dataloader)))}d/{len(dataloader)})'
+                % iteration[-1],
+                ' :: ',
+                '  //  '.join([
+                    '{} = {:>9s}'.format(k, f'{np.mean(v):.2e}')
+                    for k, v in output.items()
+                ]),
+            ])
         )
 
         with gzip.open(
@@ -567,6 +572,10 @@ def main():
 
     opts = vars(args.parse_args())
 
+    set_level(DEBUG)
+    log(DEBUG, 'invocation: %s', ' '.join(sys.argv))
+    log(INFO, '%s', ', '.join([f'{k}={v}' for k, v in opts.items()]))
+
     data_dir = opts.pop('data-dir')
 
     image = imread(os.path.join(data_dir, 'image.tif'))
@@ -592,7 +601,7 @@ def main():
         .index
     ]
 
-    print(f'using device: {str(DEVICE):s}')
+    log(DEBUG, 'using device: %s', str(DEVICE))
 
     run(image, label, data, **opts)
 
