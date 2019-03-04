@@ -32,6 +32,7 @@ def train(
         output_prefix: str,
         patch_size: int = 700,
         batch_size: int = 5,
+        learning_rate: float = 1e-5,
         state: dict = None,
         image_interval: int = 50,
         chkpt_interval: int = 10000,
@@ -60,11 +61,7 @@ def train(
         ),
     ).to(device)
 
-    optimizer = t.optim.Adam(
-        histonet.parameters(),
-        lr=1e-5,
-        # betas=(0.5, 0.999),
-    )
+    optimizer = t.optim.Adam(histonet.parameters(), lr=learning_rate)
     if state:
         epoch = (
             restore_state(

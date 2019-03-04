@@ -42,6 +42,7 @@ def main():
     args.add_argument('--chkpt-interval', type=int, default=100)
     args.add_argument('--workers', type=int)
     args.add_argument('--seed', type=int)
+    args.add_argument('--learning-rate', type=float, default=1e-5)
 
     opts = vars(args.parse_args())
 
