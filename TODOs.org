@@ -5,7 +5,8 @@
 
 ** TODO image channels?
 
-* TODO [#B] "distribution abstractions"
+* DONE [#B] "distribution abstractions"
+  CLOSED: [2019-03-01 Fri 17:58]
 
 * DONE how should we handle partially included spots in an image patch?
   CLOSED: [2019-02-28 Thu 18:05]
@@ -33,7 +34,8 @@
 * DONE [#B] add batchnorms?
   CLOSED: [2019-02-28 Thu 18:06]
 
-* TODO [#C] improve logging
+* DONE [#C] improve logging
+  CLOSED: [2019-03-01 Fri 17:57]
   - timestamps
 
 * TODO [#C] improve code structure
