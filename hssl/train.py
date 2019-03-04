@@ -45,12 +45,10 @@ def train(
         device = t.device('cuda' if t.cuda.is_available() else 'cpu')
 
     img_prefix = os.path.join(output_prefix, 'images')
-    noise_prefix = os.path.join(output_prefix, 'noise')
     chkpt_prefix = os.path.join(output_prefix, 'checkpoints')
 
     os.makedirs(output_prefix, exist_ok=True)
     os.makedirs(img_prefix, exist_ok=True)
-    os.makedirs(noise_prefix, exist_ok=True)
     os.makedirs(chkpt_prefix, exist_ok=True)
 
     histonet = Histonet(
