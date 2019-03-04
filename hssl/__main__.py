@@ -590,10 +590,10 @@ def main():
     image = imread(os.path.join(data_dir, 'image.tif'))
     label = imread(os.path.join(data_dir, 'label.tif'))
     data = pd.read_csv(
-        os.path.join(data_dir, 'data.gz'),
-        sep=' ',
+        os.path.join(data_dir, 'data.csv.gz'),
+        sep=',',
         header=0,
-        index_col=0,
+        index_col=False,
     )
 
     zoom_level = opts.pop('zoom')
