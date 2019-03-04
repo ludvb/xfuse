@@ -190,10 +190,10 @@ class Histonet(Variational):
         )
 
         self.rate = t.nn.Sequential(
-            t.nn.Conv2d(nf, nf, 3, 1, 1, bias=True),
+            t.nn.Conv2d(nf, nf, 5, 1, 2, bias=True),
             t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.BatchNorm2d(nf),
-            t.nn.Conv2d(nf, num_genes, 3, 1, 1, bias=True),
+            t.nn.Conv2d(nf, num_genes, 5, 1, 2, bias=True),
         )
 
         self.rate_bias = t.nn.Parameter(
