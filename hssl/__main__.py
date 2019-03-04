@@ -458,7 +458,7 @@ def run(
             'dqp': dkl,
             'p(img|z)': t.mean(t.exp(lpimg)),
             'p(xpr|z)': t.mean(t.exp(lpobs)),
-            'rmse': t.sqrt(t.mean((d.mean - data) ** 2)),
+            'rmse': t.mean(t.sqrt(t.mean((d.mean - data) ** 2, 1))),
         })
 
     t.enable_grad()
