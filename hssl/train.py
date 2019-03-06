@@ -171,7 +171,7 @@ def train(
         log(
             INFO,
             ' '.join([
-                f'epoch {epoch:4d}',
+                f'epoch {epoch:5d}',
                 ' '
                 f'(%0{len(str(len(dataloader)))}d/{len(dataloader)})'
                 % iteration[-1],
