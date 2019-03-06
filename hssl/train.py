@@ -218,6 +218,8 @@ def train(
             k: v.to(device) for k, v in fixed_data.items()
         })
 
+        xpr = rate * t.exp(logit.t()[..., None, None])
+
         for data, prefix in [
                 (
                     (
@@ -228,7 +230,8 @@ def train(
                     'he',
                 ),
                 (dim_red(z), 'z'),
-                (dim_red(rate), 'rate'),
+                (dim_red(xpr), 'xpr'),
+                (dim_red(xpr / xpr.sum(1).unsqueeze(1)), 'xpr-rel'),
                 (dim_red(state), 'state'),
         ]:
             visualize_batch(data)
