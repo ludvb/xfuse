@@ -12,6 +12,7 @@ import numpy as np
 
 import torch as t
 
+from .analyze import dim_red, visualize_batch
 from .dataset import Dataset
 from .logging import INFO, log
 from .network import Histonet
@@ -19,7 +20,6 @@ from .utility import (
     collect_items,
     restore_state,
     store_state,
-    visualize_batch,
     zip_dicts,
 )
 
@@ -105,6 +105,7 @@ def train(
     )
 
     fixed_data = next(iter(dataloader))
+    fixed_data['label'].zero_()
 
     def _run_histonet_on(x):
         spatial_data = (
@@ -214,19 +215,28 @@ def train(
         t.no_grad()
         histonet.eval()
 
-        _, imu, isd, *_ = _run_histonet_on({
+        z, mu, sd, rate, logit, state = _run_histonet_on({
             k: v.to(device) for k, v in fixed_data.items()
         })
 
-        for (mu, sd), d in [
-                ((imu, isd), img_prefix),
+        for data, prefix in [
+                (
+                    (
+                        t.distributions.Normal(mu, sd)
+                        .sample()
+                        .clamp(0, 1)
+                    ),
+                    'he',
+                ),
+                (dim_red(z), 'z'),
+                (dim_red(rate), 'rate'),
+                (dim_red(state), 'state'),
         ]:
-            visualize_batch(
-                t.distributions.Normal(mu, sd)
-                .sample()
-                .clamp(0, 1)
+            visualize_batch(data)
+            plt.savefig(
+                os.path.join(img_prefix, f'{prefix}-epoch-{epoch:06d}.png'),
+                dpi=200,
             )
-            plt.savefig(os.path.join(d, f'epoch-{epoch:05d}.jpg'))
 
         t.enable_grad()
         histonet.train()

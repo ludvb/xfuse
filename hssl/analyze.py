@@ -2,6 +2,10 @@ import matplotlib.pyplot as plt
 
 import numpy as np
 
+import torch as t
+
+from torchvision.utils import make_grid
+
 
 def run_tsne(y, n_components=3, initial_dims=20):
     from sklearn.decomposition import PCA
@@ -46,8 +50,7 @@ def interpolate(model, z1, z2, to='/tmp/interpolation.mp4'):
 
 def side_by_side(x, y):
     import matplotlib.pyplot as plt
-    # from sklearn.decomposition import PCA
-    from umap import UMAP as PCA
+    from sklearn.decomposition import PCA
     plt.subplot(1, 2, 1)
     plt.imshow(x['image'][0].permute(1, 2, 0).detach())
     plt.subplot(1, 2, 2)
@@ -60,3 +63,50 @@ def side_by_side(x, y):
     pca = pca.clip(_min, _max)
     plt.imshow((pca - _min) / (_max - _min))
     plt.show()
+
+
+def normalize(x):
+    _min = x.min((2, 3))[..., None, None]
+    _max = x.max((2, 3))[..., None, None]
+    return (x - _min) / (_max - _min)
+
+
+def dim_red(x, method='pca', n_components=3, **kwargs):
+    if method != 'pca':
+        raise NotImplementedError()
+
+    from sklearn.decomposition import PCA
+
+    if isinstance(x, t.Tensor):
+        x = x.detach().cpu().numpy()
+
+    return normalize(
+        PCA(n_components=n_components, **kwargs)
+        .fit_transform(
+            x
+            .transpose(0, 2, 3, 1)
+            .reshape(-1, x.shape[1])
+        )
+        .reshape(x.shape[0], *x.shape[2:], n_components)
+        .transpose(0, 3, 1, 2)
+    )
+
+
+def visualize_batch(batch, normalize=False, **kwargs):
+    if isinstance(batch, t.Tensor):
+        batch = batch.detach().cpu()
+    else:
+        batch = t.as_tensor(batch)
+    return plt.imshow(
+        np.transpose(
+            make_grid(
+                batch,
+                nrow=int(np.floor(np.sqrt(len(batch)))),
+                padding=int(np.ceil(np.sqrt(
+                    np.product(batch.shape[-2:])) / 100)),
+                normalize=normalize,
+            ),
+            (1, 2, 0),
+        ),
+        **kwargs,
+    )

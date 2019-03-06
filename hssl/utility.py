@@ -1,14 +1,10 @@
 import itertools as it
 
-import matplotlib.pyplot as plt
-
 import numpy as np
 
 import pandas as pd
 
 import torch as t
-
-from torchvision.utils import make_grid
 
 from .logging import INFO, log
 
@@ -78,21 +74,6 @@ def center_crop(input, target_shape):
         slice(None)
         for a, b in zip(input.shape, target_shape)
     ])]
-
-
-def visualize_batch(batch, normalize=False, **kwargs):
-    return plt.imshow(
-        np.transpose(
-            make_grid(
-                batch.detach().cpu(),
-                nrow=int(np.floor(np.sqrt(len(batch)))),
-                padding=5,
-                normalize=normalize,
-            ),
-            (1, 2, 0),
-        ),
-        **kwargs,
-    )
 
 
 def read_data(path, filter_ambiguous=True, genes=None):
