@@ -2,11 +2,15 @@
 
 from datetime import datetime as dt
 
+from functools import partial
+
 import os
 
 import sys
 
 from imageio import imread
+
+import numpy as np
 
 import torch as t
 
@@ -18,28 +22,29 @@ from .logging import (
     log,
     set_level,
 )
+from .analyze import analyze
+from .network import Histonet
 from .train import train
-from .utility import read_data, set_rng_seed
+from .utility import (
+    read_data,
+    set_rng_seed,
+    store_state,
+)
 
 
 DEVICE = t.device('cuda' if t.cuda.is_available() else 'cpu')
 
 
 def _train(
+        histonet,
+        optimizer,
         image,
         data,
         label,
-        genes=None,
-        zoom=1.,
         workers=None,
         seed=None,
         **kwargs,
 ):
-    if zoom < 1:
-        from scipy.ndimage.interpolation import zoom as zoom_fnc
-        label = zoom_fnc(label, (zoom, zoom), order=0)
-        image = zoom_fnc(image, (zoom, zoom, 1))
-
     if seed is not None:
         set_rng_seed(seed)
 
@@ -50,6 +55,8 @@ def _train(
             workers = 0
 
     train(
+        histonet,
+        optimizer,
         image,
         label,
         data,
@@ -60,11 +67,13 @@ def _train(
 
 
 def _analyze(
+        histonet,
         image,
         data=None,
         label=None,
+        **kwargs,
 ):
-    raise NotImplementedError()
+    analyze(histonet, image, data, label, **kwargs)
 
 
 def main():
@@ -106,6 +115,16 @@ def main():
         log(DEBUG, 'invocation: %s', ' '.join(sys.argv))
         log(INFO, '%s', ', '.join([f'{k}={v}' for k, v in opts.items()]))
 
+        run_func = opts.pop('f')
+
+        log(DEBUG, 'using device: %s', str(DEVICE))
+
+        state = opts.pop('state')
+        if state is None and run_func is not _train:
+            raise RuntimeError('--state must be provided if not training')
+        if state is not None:
+            state = t.load(state)
+
         data_dir = opts.pop('data-dir')
 
         image = imread(os.path.join(data_dir, 'image.tif'))
@@ -114,13 +133,70 @@ def main():
         data_path = os.path.join(data_dir, 'data.csv.gz')
         if all(map(os.path.exists, (label_path, data_path))):
             label = imread(label_path)
-            data = read_data(data_path, genes=opts.pop('genes'))
+            if run_func is _train:
+                num_genes = opts.pop('genes')
+            if state is not None:
+                num_genes = state['model_init_args']['num_genes']
+            data = read_data(data_path, genes=num_genes)
         else:
             label = data = None
 
-        log(DEBUG, 'using device: %s', str(DEVICE))
+        if run_func is _train:
+            zoom_level = opts.pop('zoom')
+        else:
+            zoom_level = None
+        if state is not None:
+            zoom_level = state['zoom_level']
+        if zoom_level < 1:
+            from scipy.ndimage.interpolation import zoom
+            if label is not None:
+                label = zoom(label, (zoom_level, zoom_level), order=0)
+            if image is not None:
+                image = zoom(image, (zoom_level, zoom_level, 1))
 
-        opts.pop('f')(image, data, label, **opts)
+        if state is not None:
+            histonet = Histonet(**state['model_init_args']).to(DEVICE)
+            histonet.load_state_dict(state['model'])
+        elif run_func is _train:
+            histonet = (
+                Histonet(
+                    num_genes=len(data.columns),
+                    latent_size=opts.pop('latent_size'),
+                    gene_bias=np.log(
+                        (data.values /
+                         np.bincount(label.flatten())[1:][..., None])
+                        .mean(0)
+                    ),
+                )
+                .to(DEVICE)
+            )
+        else:
+            raise RuntimeError()
+
+        image = t.tensor(image).permute(2, 0, 1).float() / 255
+
+        if run_func is _train:
+            optimizer = t.optim.Adam(
+                histonet.parameters(), lr=opts.pop('learning_rate'))
+            if state is not None:
+                optimizer.load_state_dict(state['optimizer'])
+
+            extra_kwargs = {
+                'start_epoch': 1 if state is None else state['epoch'] + 1,
+                'store_state': partial(store_state, zoom_level=zoom_level),
+                'optimizer': optimizer,
+            }
+        else:
+            extra_kwargs = {}
+
+        run_func(
+            histonet=histonet,
+            image=image,
+            data=data,
+            label=label,
+            **opts,
+            **extra_kwargs,
+        )
 
     os.makedirs(opts['output_prefix'], exist_ok=True)
 

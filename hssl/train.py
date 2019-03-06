@@ -18,26 +18,26 @@ from .logging import INFO, log
 from .network import Histonet
 from .utility import (
     collect_items,
-    restore_state,
-    store_state,
+    store_state as _store_state,
     zip_dicts,
 )
 
 
 def train(
+        histonet: Histonet,
+        optimizer: t.optim.Optimizer,
         image: np.ndarray,
         label: np.ndarray,
         data: pd.DataFrame,
-        latent_size: int,
         output_prefix: str,
         patch_size: int = 700,
         batch_size: int = 5,
-        learning_rate: float = 1e-5,
-        state: dict = None,
         image_interval: int = 50,
         chkpt_interval: int = 10000,
         workers: int = None,
         device: t.device = None,
+        start_epoch: int = 1,
+        store_state=None,
 ):
     if workers is None:
         workers = len(os.sched_getaffinity(0))
@@ -45,35 +45,16 @@ def train(
     if device is None:
         device = t.device('cuda' if t.cuda.is_available() else 'cpu')
 
+    if store_state is None:
+        store_state = _store_state
+
+    epoch = start_epoch
+
     img_prefix = os.path.join(output_prefix, 'images')
     chkpt_prefix = os.path.join(output_prefix, 'checkpoints')
 
     os.makedirs(img_prefix, exist_ok=True)
     os.makedirs(chkpt_prefix, exist_ok=True)
-
-    histonet = Histonet(
-        num_genes=len(data.columns),
-        latent_size=latent_size,
-        gene_bias=np.log(
-            (data.values / np.bincount(label.flatten())[1:][..., None])
-            .mean(0)
-        ),
-    ).to(device)
-
-    optimizer = t.optim.Adam(histonet.parameters(), lr=learning_rate)
-    if state:
-        epoch = (
-            restore_state(
-                histonet,
-                [optimizer],
-                state,
-            )
-            + 1
-        )
-    else:
-        epoch = 1
-
-    image = t.tensor(image).permute(2, 0, 1).float() / 255
 
     dataset = Dataset(image, label, data, patch_size=patch_size)
 
@@ -202,7 +183,7 @@ def train(
     def _save_chkpt(epoch):
         store_state(
             histonet,
-            [optimizer],
+            optimizer,
             epoch,
             os.path.join(
                 chkpt_prefix,

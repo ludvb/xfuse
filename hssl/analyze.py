@@ -1,3 +1,6 @@
+import os
+
+from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
 
 import numpy as np
@@ -5,6 +8,9 @@ import numpy as np
 import torch as t
 
 from torchvision.utils import make_grid
+
+from .network import Histonet
+from .logging import WARNING, log
 
 
 def run_tsne(y, n_components=3, initial_dims=20):
@@ -110,3 +116,75 @@ def visualize_batch(batch, normalize=False, **kwargs):
         ),
         **kwargs,
     )
+
+
+def analyze(
+        histonet: Histonet,
+        image,
+        data=None,
+        label=None,
+        output_prefix=None,
+        device=None,
+):
+    if data is not None or label is not None:
+        log(
+            WARNING,
+            'arguments `data` and `label` are currently not supported'
+            ' and will be ignored'
+        )
+
+    if output_prefix is None:
+        output_prefix = '.'
+
+    if device is None:
+        device = t.device('cpu')
+
+    histonet = histonet.to(device)
+
+    genes = histonet.init_args['num_genes']
+
+    z, mu, sd, rate, logit, state = histonet(
+        t.cat(
+            [
+                image[None, ...],
+                t.cat(
+                    [
+                        t.ones((1, 1, *image.shape[-2:])),
+                        t.zeros((1, genes, *image.shape[-2:])),
+                    ],
+                    dim=1,
+                )
+            ],
+            dim=1,
+        ),
+    )
+
+    xpr = rate * t.exp(logit.t()[..., None, None])
+
+    for b, prefix in [
+            (
+                (
+                    t.distributions.Normal(mu, sd)
+                    .sample()
+                    .clamp(0, 1)
+                ),
+                'he',
+            ),
+            (dim_red(z), 'z'),
+            (dim_red(xpr), 'xpr'),
+            (dim_red(xpr / xpr.sum(1).unsqueeze(1)), 'xpr-rel'),
+            (dim_red(state), 'state'),
+    ]:
+        visualize_batch(b)
+        plt.savefig(os.path.join(output_prefix, f'{prefix}.pdf'), dpi=200)
+
+    with PdfPages(os.path.join(output_prefix, f'gene_plots.pdf')) as pdf:
+        for p, g in zip(
+                xpr[0].detach().cpu().numpy()[::-1],
+                data.columns[::-1],
+        ):
+            plt.figure()
+            plt.imshow(p)
+            plt.title(g)
+            pdf.savefig()
+            plt.close()

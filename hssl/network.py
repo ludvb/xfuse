@@ -67,6 +67,10 @@ class Histonet(Variational):
             nf=32,
             gene_bias=None,
     ):
+        self._init_args = locals()
+        self._init_args.pop('__class__')
+        self._init_args.pop('self')
+
         super().__init__()
 
         self.encoder = t.nn.Sequential(
@@ -162,6 +166,10 @@ class Histonet(Variational):
         self.logit_sd = t.nn.Parameter(-5 * t.ones(num_genes, 1))
         self.logit = Variable(Normal())
         self._register_latent(self.logit, Normal(), is_global=True)
+
+    @property
+    def init_args(self):
+        return self._init_args
 
     def encode(self, x):
         x = self.encoder(x)

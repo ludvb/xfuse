@@ -26,23 +26,17 @@ def set_rng_seed(seed: int):
     ]), seed, n_seed, t_seed)
 
 
-def store_state(model, optimizers, epoch, file):
+def store_state(model, optimizer, epoch, file, **kwargs):
     t.save(
         dict(
             model=model.state_dict(),
-            optimizers=[x.state_dict() for x in optimizers],
+            model_init_args=model.init_args,
+            optimizer=optimizer.state_dict(),
             epoch=epoch,
+            **kwargs,
         ),
         file,
     )
-
-
-def restore_state(model, optimizers, file):
-    state = t.load(file)
-    model.load_state_dict(state['model'])
-    for optimizer, optimizer_state in zip(optimizers, state['optimizers']):
-        optimizer.load_state_dict(optimizer_state)
-    return state['epoch']
 
 
 def zip_dicts(ds):
