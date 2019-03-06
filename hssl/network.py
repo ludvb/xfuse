@@ -31,6 +31,33 @@ class Variational(t.nn.Module):
         ])
 
 
+class Unpool(t.nn.Module):
+    def __init__(
+            self,
+            in_channels,
+            out_channels=None,
+            kernel_size=3,
+            stride=2,
+            padding=None,
+    ):
+        super().__init__()
+
+        if out_channels is None:
+            out_channels = in_channels
+
+        if padding is None:
+            padding = kernel_size // 2
+
+        self.conv = t.nn.Conv2d(
+            in_channels, out_channels, kernel_size, padding=padding)
+        self.scale_factor = stride
+
+    def forward(self, x):
+        x = t.nn.functional.interpolate(x, scale_factor=self.scale_factor)
+        x = self.conv(x)
+        return x
+
+
 class Histonet(Variational):
     def __init__(
             self,
@@ -78,23 +105,23 @@ class Histonet(Variational):
         self._register_latent(self.z, Normal())
 
         self.decoder = t.nn.Sequential(
-            t.nn.ConvTranspose2d(latent_size, 16 * nf, 3, 1, 1, bias=True),
+            t.nn.Conv2d(latent_size, 16 * nf, 5, padding=2),
             # x16
             t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.BatchNorm2d(16 * nf),
-            t.nn.ConvTranspose2d(16 * nf, 8 * nf, 4, 2, 1, bias=True),
+            Unpool(16 * nf, 8 * nf, 5),
             # x8
             t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.BatchNorm2d(8 * nf),
-            t.nn.ConvTranspose2d(8 * nf, 4 * nf, 4, 2, 1, bias=True),
+            Unpool(8 * nf, 4 * nf, 5),
             # x4
             t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.BatchNorm2d(4 * nf),
-            t.nn.ConvTranspose2d(4 * nf, 2 * nf, 4, 2, 1, bias=True),
+            Unpool(4 * nf, 2 * nf, 5),
             # x2
             t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.BatchNorm2d(2 * nf),
-            t.nn.ConvTranspose2d(2 * nf, nf, 4, 2, 1, bias=True),
+            Unpool(2 * nf, nf, 5),
             # x1
             t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.BatchNorm2d(nf),
@@ -116,10 +143,10 @@ class Histonet(Variational):
         )
 
         self.rate = t.nn.Sequential(
-            t.nn.Conv2d(nf, nf, 5, 1, 2, bias=True),
+            t.nn.Conv2d(nf, nf, 3, 1, 2, bias=True),
             t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.BatchNorm2d(nf),
-            t.nn.Conv2d(nf, num_genes, 5, 1, 2, bias=True),
+            t.nn.Conv2d(nf, num_genes, 3, 1, 2, bias=True),
         )
 
         self.rate_bias = t.nn.Parameter(
