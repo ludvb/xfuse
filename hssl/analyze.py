@@ -73,9 +73,20 @@ def side_by_side(x, y):
     plt.show()
 
 
+def clip(x, q):
+    if isinstance(q, float):
+        minq, maxq = q, 1 - q
+    else:
+        try:
+            minq, maxq = q
+        except TypeError:
+            raise ValueError('`q` mus be float or iterable')
+    return np.clip(x, *np.quantile(x, [minq, maxq]))
+
+
 def normalize(x):
-    _min = x.min((2, 3))[..., None, None]
-    _max = x.max((2, 3))[..., None, None]
+    _min = x.min((0, 2, 3))[..., None, None]
+    _max = x.max((0, 2, 3))[..., None, None]
     return (x - _min) / (_max - _min)
 
 
@@ -88,16 +99,19 @@ def dim_red(x, method='pca', n_components=3, **kwargs):
     if isinstance(x, t.Tensor):
         x = x.detach().cpu().numpy()
 
-    return normalize(
-        PCA(n_components=n_components, **kwargs)
-        .fit_transform(
-            x
-            .transpose(0, 2, 3, 1)
-            .reshape(-1, x.shape[1])
-        )
-        .reshape(x.shape[0], *x.shape[2:], n_components)
-        .transpose(0, 3, 1, 2)
-    )
+    return normalize(clip(
+        (
+            PCA(n_components=n_components, **kwargs)
+            .fit_transform(
+                x
+                .transpose(0, 2, 3, 1)
+                .reshape(-1, x.shape[1])
+            )
+            .reshape(x.shape[0], *x.shape[2:], n_components)
+            .transpose(0, 3, 1, 2)
+        ),
+        0.01,
+    ))
 
 
 def visualize_batch(batch, normalize=False, **kwargs):
@@ -190,7 +204,7 @@ def analyze(
                 data.columns[::-1],
         ):
             plt.figure()
-            plt.imshow(p)
+            plt.imshow(clip(p, 0.01))
             plt.title(g)
             pdf.savefig()
             plt.close()
