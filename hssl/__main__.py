@@ -123,7 +123,7 @@ def main():
         if state is None and run_func is not _train:
             raise RuntimeError('--state must be provided if not training')
         if state is not None:
-            state = t.load(state)
+            state = t.load(state, map_location='cpu')
 
         data_dir = opts.pop('data-dir')
 
