@@ -1,5 +1,7 @@
 import os
 
+from imageio import imwrite
+
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
 
@@ -103,18 +105,20 @@ def visualize_batch(batch, normalize=False, **kwargs):
         batch = batch.detach().cpu()
     else:
         batch = t.as_tensor(batch)
-    return plt.imshow(
-        np.transpose(
+    return np.transpose(
+        (
             make_grid(
                 batch,
                 nrow=int(np.floor(np.sqrt(len(batch)))),
                 padding=int(np.ceil(np.sqrt(
                     np.product(batch.shape[-2:])) / 100)),
                 normalize=normalize,
-            ),
-            (1, 2, 0),
+            )
+            .detach()
+            .cpu()
+            .numpy()
         ),
-        **kwargs,
+        (1, 2, 0),
     )
 
 
@@ -175,8 +179,10 @@ def analyze(
             (dim_red(xpr / xpr.sum(1).unsqueeze(1)), 'xpr-rel'),
             (dim_red(state), 'state'),
     ]:
-        visualize_batch(b)
-        plt.savefig(os.path.join(output_prefix, f'{prefix}.pdf'), dpi=200)
+        imwrite(
+            os.path.join(output_prefix, f'{prefix}.png'),
+            visualize_batch(b),
+        )
 
     with PdfPages(os.path.join(output_prefix, f'gene_plots.pdf')) as pdf:
         for p, g in zip(

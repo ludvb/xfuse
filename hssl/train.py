@@ -4,9 +4,9 @@ import itertools as it
 
 import os
 
-import pandas as pd
+from imageio import imwrite
 
-import matplotlib.pyplot as plt
+import pandas as pd
 
 import numpy as np
 
@@ -215,10 +215,9 @@ def train(
                 (dim_red(xpr / xpr.sum(1).unsqueeze(1)), 'xpr-rel'),
                 (dim_red(state), 'state'),
         ]:
-            visualize_batch(data)
-            plt.savefig(
+            imwrite(
                 os.path.join(img_prefix, f'{prefix}-epoch-{epoch:06d}.png'),
-                dpi=200,
+                visualize_batch(data),
             )
 
         t.enable_grad()
