@@ -111,11 +111,11 @@ def main():
 
     opts = vars(parser.parse_args())
 
+    run_func = opts.pop('f')
+
     def _go():
         log(DEBUG, 'invocation: %s', ' '.join(sys.argv))
         log(INFO, '%s', ', '.join([f'{k}={v}' for k, v in opts.items()]))
-
-        run_func = opts.pop('f')
 
         log(DEBUG, 'using device: %s', str(DEVICE))
 
