@@ -157,6 +157,8 @@ def main():
         if state is not None:
             histonet = Histonet(**state['model_init_args']).to(DEVICE)
             histonet.load_state_dict(state['model'])
+            if run_func is _train:
+                opts.pop('latent_size')
         elif run_func is _train:
             histonet = (
                 Histonet(
