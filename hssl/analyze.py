@@ -178,6 +178,7 @@ def analyze(
     )
 
     xpr = rate * t.exp(logit.t()[..., None, None])
+    xpr_rel = xpr / xpr.sum(1).unsqueeze(1)
 
     for b, prefix in [
             (
@@ -190,7 +191,7 @@ def analyze(
             ),
             (dim_red(z), 'z'),
             (dim_red(xpr), 'xpr'),
-            (dim_red(xpr / xpr.sum(1).unsqueeze(1)), 'xpr-rel'),
+            (dim_red(xpr_rel), 'xpr-rel'),
             (dim_red(state), 'state'),
     ]:
         imwrite(
@@ -198,13 +199,15 @@ def analyze(
             visualize_batch(b),
         )
 
-    with PdfPages(os.path.join(output_prefix, f'gene_plots.pdf')) as pdf:
-        for p, g in zip(
-                xpr[0].detach().cpu().numpy()[::-1],
-                data.columns[::-1],
-        ):
-            plt.figure()
-            plt.imshow(clip(p, 0.01))
-            plt.title(g)
-            pdf.savefig()
-            plt.close()
+    for d, postfix in [
+            (xpr    [0].detach().cpu().numpy()[::-1], 'abs'),
+            (xpr_rel[0].detach().cpu().numpy()[::-1], 'rel'),
+    ]:
+        with PdfPages(os.path.join(
+                output_prefix, f'genes-{postfix}.pdf')) as pdf:
+            for p, g in zip(d, data.columns[::-1]):
+                plt.figure()
+                plt.imshow(clip(p, 0.01))
+                plt.title(g)
+                pdf.savefig()
+                plt.close()
