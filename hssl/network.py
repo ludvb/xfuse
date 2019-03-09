@@ -75,19 +75,19 @@ class Histonet(Variational):
 
         self.encoder = t.nn.Sequential(
             # x1
-            t.nn.Conv2d(num_genes + 4, 2 * nf, 4, 2, 2, bias=True),
+            t.nn.Conv2d(num_genes + 4, 2 * nf, 4, 2, 1, bias=True),
             t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.BatchNorm2d(2 * nf),
             # x2
-            t.nn.Conv2d(2 * nf, 4 * nf, 4, 2, 2, bias=True),
+            t.nn.Conv2d(2 * nf, 4 * nf, 4, 2, 1, bias=True),
             t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.BatchNorm2d(4 * nf),
             # x4
-            t.nn.Conv2d(4 * nf, 8 * nf, 4, 2, 2, bias=True),
+            t.nn.Conv2d(4 * nf, 8 * nf, 4, 2, 1, bias=True),
             t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.BatchNorm2d(8 * nf),
             # x8
-            t.nn.Conv2d(8 * nf, 16 * nf, 4, 2, 2, bias=True),
+            t.nn.Conv2d(8 * nf, 16 * nf, 4, 2, 1, bias=True),
             t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.BatchNorm2d(16 * nf),
             # x16
@@ -206,15 +206,6 @@ class Histonet(Variational):
         )
 
     def forward(self, x):
-        shape = x.shape[-2:]
         z, z_mu, z_sd = self.encode(x)
         ys = self.decode(z)
-        return (
-            z,
-            *[
-                center_crop(y, [None, None, *shape])
-                if len(y.shape) == 4 else
-                y
-                for y in ys
-            ],
-        )
+        return (z, *ys)
