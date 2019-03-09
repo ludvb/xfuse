@@ -39,3 +39,5 @@
   - timestamps
 
 * TODO [#C] improve code structure
+
+* TODO [#B] log version
