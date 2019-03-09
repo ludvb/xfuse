@@ -175,7 +175,7 @@ def main():
         else:
             raise RuntimeError()
 
-        image = t.tensor(image).permute(2, 0, 1).float() / 255
+        image = t.tensor(image).permute(2, 0, 1).float() / 255 * 2 - 1
 
         if run_func is _train:
             optimizer = t.optim.Adam(

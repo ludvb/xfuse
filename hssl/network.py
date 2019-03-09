@@ -136,7 +136,7 @@ class Histonet(Variational):
             t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.BatchNorm2d(nf),
             t.nn.Conv2d(nf, 3, 3, 1, 1, bias=True),
-            t.nn.Sigmoid(),
+            t.nn.Tanh(),
         )
         self.img_sd = t.nn.Sequential(
             t.nn.Conv2d(nf, nf, 3, 1, 1, bias=True),
