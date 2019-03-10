@@ -94,7 +94,7 @@ def main():
     train_parser = subparsers.add_parser('train')
     train_parser.set_defaults(f=_train)
 
-    train_parser.add_argument('--latent-size', type=int, default=100)
+    train_parser.add_argument('--latent-size', type=int, default=16)
     train_parser.add_argument('--zoom', type=float, default=1.)
     train_parser.add_argument('--genes', type=int, default=50)
     train_parser.add_argument('--patch-size', type=int, default=700)

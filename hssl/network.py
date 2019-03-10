@@ -63,7 +63,7 @@ class Histonet(Variational):
             self,
             num_genes,
             hidden_size=512,
-            latent_size=96,
+            latent_size=16,
             nf=32,
             gene_bias=None,
     ):
