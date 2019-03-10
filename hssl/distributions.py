@@ -145,7 +145,10 @@ class Normal(Distribution):
         ]
 
     def _set_scale(self, x):
-        return t.nn.functional.softplus(x)
+        return (
+            t.nn.functional.softplus(x)
+            .clamp_min(1e-10)
+        )
 
     def log_prob(self, x):
         return (
