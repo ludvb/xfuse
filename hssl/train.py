@@ -15,9 +15,10 @@ import torch as t
 from .analyze import dim_red, visualize_batch
 from .dataset import Dataset
 from .logging import INFO, log
-from .network import Histonet
+from .network import Histonet, STD
 from .utility import (
     collect_items,
+    spotwise_loadings,
     store_state as _store_state,
     zip_dicts,
 )
@@ -25,6 +26,7 @@ from .utility import (
 
 def train(
         histonet: Histonet,
+        std: STD,
         optimizer: t.optim.Optimizer,
         image: np.ndarray,
         label: np.ndarray,
@@ -85,45 +87,29 @@ def train(
     )
 
     fixed_data = next(iter(dataloader))
-    fixed_data['label'].zero_()
-
-    def _run_histonet_on(x):
-        spatial_data = (
-            x['data']
-            [x['label'].flatten()]
-            .reshape(*x['label'].shape, -1)
-            .permute(0, 3, 1, 2)
-        )
-
-        return histonet(t.cat([x['image'], spatial_data], 1))
 
     def _step(x):
         x = {k: v.to(device) for k, v in x.items()}
 
-        z, img_mu, img_sd, rate, logit, _state = _run_histonet_on(x)
+        z, img_mu, img_sd, loadings, _state = histonet(x['image'])
 
         lpimg = (
             t.distributions.Normal(img_mu, img_sd)
             .log_prob(x['image'])
         )
 
-        label = (
-            t.eye(t.max(x['label']) + 1, device=device)
-            [x['label'].flatten()]
-            .reshape(*x['label'].shape, -1)
-            .float()
-        )
-        rates = t.einsum('bgxy,bxyi->ig', rate, label)
-
+        rate, logit = std(spotwise_loadings(loadings, x['label']))
         d = t.distributions.NegativeBinomial(
-            rates[1:] + 1e-10,
-            logits=logit.t(),
+            rate,
+            logits=logit.unsqueeze(0),
         )
 
         data = x['data'][1:, 1:]
         lpobs = d.log_prob(data)
 
-        dkl = histonet.complexity_cost(len(x) / len(dataset))
+        hdkl = histonet.complexity_cost(len(x) / len(dataset))
+        sdkl = std.complexity_cost(len(x) / len(dataset))
+        dkl = hdkl + sdkl
 
         img_loss = -t.sum(lpimg)
         xpr_loss = -t.sum(lpobs)
@@ -182,8 +168,8 @@ def train(
 
     def _save_chkpt(epoch):
         store_state(
-            histonet,
-            optimizer,
+            {'histonet': histonet, 'std': std},
+            {'default': optimizer},
             epoch,
             os.path.join(
                 chkpt_prefix,
@@ -195,11 +181,8 @@ def train(
         t.no_grad()
         histonet.eval()
 
-        z, mu, sd, rate, logit, state = _run_histonet_on({
-            k: v.to(device) for k, v in fixed_data.items()
-        })
-
-        xpr = rate * t.exp(logit.t()[..., None, None])
+        z, mu, sd, loadings, state = histonet(
+            fixed_data['image'].to(device))
 
         for data, prefix in [
                 (
@@ -211,8 +194,8 @@ def train(
                     'he',
                 ),
                 (dim_red(z), 'z'),
-                (dim_red(xpr), 'xpr'),
-                (dim_red(xpr / xpr.sum(1).unsqueeze(1)), 'xpr-rel'),
+                (dim_red(loadings), 'fct'),
+                (dim_red(loadings / loadings.sum(1).unsqueeze(1)), 'fct-rel'),
                 (dim_red(state), 'state'),
         ]:
             imwrite(

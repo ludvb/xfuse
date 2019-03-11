@@ -1,8 +1,9 @@
+import numpy as np
+
 import torch as t
 
 from .distributions import Distribution, Normal, Variable
 from .logging import DEBUG, log
-from .utility import center_crop
 
 
 class Variational(t.nn.Module):
@@ -61,11 +62,10 @@ class Unpool(t.nn.Module):
 class Histonet(Variational):
     def __init__(
             self,
-            num_genes,
+            num_factors=50,
             hidden_size=512,
             latent_size=16,
             nf=32,
-            gene_bias=None,
     ):
         self._init_args = locals()
         self._init_args.pop('__class__')
@@ -75,7 +75,7 @@ class Histonet(Variational):
 
         self.encoder = t.nn.Sequential(
             # x1
-            t.nn.Conv2d(num_genes + 4, 2 * nf, 4, 2, 1, bias=True),
+            t.nn.Conv2d(3, 2 * nf, 4, 2, 1, bias=True),
             t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.BatchNorm2d(2 * nf),
             # x2
@@ -146,26 +146,12 @@ class Histonet(Variational):
             t.nn.Softplus(),
         )
 
-        self.rate = t.nn.Sequential(
+        self.mixture_loadings = t.nn.Sequential(
             t.nn.Conv2d(nf, nf, 3, 1, 1, bias=True),
             t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.BatchNorm2d(nf),
-            t.nn.Conv2d(nf, num_genes, 3, 1, 1, bias=True),
+            t.nn.Conv2d(nf, num_factors, 3, 1, 1, bias=True),
         )
-
-        self.rate_bias = t.nn.Parameter(
-            (
-                t.as_tensor(gene_bias).float()
-                if gene_bias is not None else
-                t.zeros(num_genes)
-            ),
-            requires_grad=False,
-        )
-
-        self.logit_mu = t.nn.Parameter(t.zeros(num_genes, 1))
-        self.logit_sd = t.nn.Parameter(-5 * t.ones(num_genes, 1))
-        self.logit = Variable(Normal())
-        self._register_latent(self.logit, Normal(), is_global=True)
 
     @property
     def init_args(self):
@@ -176,7 +162,11 @@ class Histonet(Variational):
         z_mu = self.z_mu(x)
         z_sd = self.z_sd(x)
 
-        self.z.distribution.set(loc=z_mu, scale=z_sd, r_transform=True)
+        self.z.distribution.set(
+            loc=z_mu,
+            scale=z_sd,
+            r_transform=True,
+        )
         z = self.z.sample().value
 
         return (
@@ -191,17 +181,12 @@ class Histonet(Variational):
         img_mu = self.img_mu(state)
         img_sd = self.img_sd(state)
 
-        rate = t.exp(self.rate_bias[None, ..., None, None] + self.rate(state))
-
-        self.logit.distribution.set(
-            loc=self.logit_mu, scale=self.logit_sd, r_transform=True)
-        logit = self.logit.sample().value
+        mixture_loadings = self.mixture_loadings(state)
 
         return (
             img_mu,
             img_sd,
-            rate,
-            logit,
+            mixture_loadings,
             state,
         )
 
@@ -209,3 +194,87 @@ class Histonet(Variational):
         z, z_mu, z_sd = self.encode(x)
         ys = self.decode(z)
         return (z, *ys)
+
+
+class STD(Variational):
+    @property
+    def init_args(self):
+        return self._init_args
+
+    def __init__(
+            self,
+            genes,
+            num_factors=50,
+            gene_baseline=None,
+    ):
+        self._init_args = locals()
+        self._init_args.pop('__class__')
+        self._init_args.pop('self')
+
+        super().__init__()
+
+        self.genes = list(genes)
+
+        def _make_covariate(name, shape, learn_prior):
+            mu = t.nn.Parameter(t.zeros(shape))
+            sd = t.nn.Parameter(-5 * t.ones(shape))
+            self.register_parameter(f'{name}_q_mu', mu)
+            self.register_parameter(f'{name}_q_sd', sd)
+            q = Normal().set(loc=mu, scale=sd, r_transform=True)
+            setattr(self, f'{name}_q', q)
+            v = Variable(q)
+            setattr(self, f'{name}', v)
+
+            p_mu = t.nn.Parameter(t.tensor(0.), requires_grad=learn_prior)
+            p_sd = t.nn.Parameter(t.tensor(0.), requires_grad=learn_prior)
+            self.register_parameter(f'{name}_p_mu', p_mu)
+            self.register_parameter(f'{name}_p_sd', p_sd)
+            p = Normal().set(loc=p_mu, scale=p_sd, r_transform=True)
+            setattr(self, f'{name}_p', p)
+
+            self._register_latent(v, p, True)
+
+        _make_covariate('r', (1, ), True)
+        _make_covariate('rg', (len(genes), ), True)
+        _make_covariate('rt', (num_factors, ), False)
+        _make_covariate('rgt', (len(genes), num_factors), False)
+
+        _make_covariate('l', (1, ), True)
+        _make_covariate('lg', (len(genes), ), True)
+
+        if gene_baseline is not None:
+            if len(gene_baseline) != len(genes):
+                raise ValueError(
+                    'size of `gene_baseline` does not match `genes`'
+                    f' ({gene_baseline.shape[1]} vs. {len(genes)})'
+                )
+            lgb = t.tensor(np.log(gene_baseline)).float()
+            lgb_mean = lgb.mean()[None]
+            self.r_q_mu.data = lgb_mean
+            self.r_p_mu.data = lgb_mean
+            self.rg_q_mu.data = lgb - lgb_mean
+            self.rg_p_mu.data = lgb - lgb_mean
+
+    @property
+    def rate_gt(self):
+        return t.exp(
+            self.r.value
+            + self.rg.value[..., None]
+            + self.rt.value[None, ...]
+            + self.rgt.value
+        )
+
+    @property
+    def logit(self):
+        return self.l.value + self.lg.value
+
+    def resample(self):
+        for v, *_ in self._latents.values():
+            v.sample()
+        return self
+
+    def forward(self, x):
+        self.resample()
+        rate = t.einsum('it,gt->ig', x, self.rate_gt)
+        logit = self.logit
+        return rate, logit

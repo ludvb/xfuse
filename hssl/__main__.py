@@ -2,6 +2,8 @@
 
 from datetime import datetime as dt
 
+import itertools as it
+
 from functools import partial
 
 import os
@@ -22,8 +24,8 @@ from .logging import (
     log,
     set_level,
 )
-from .analyze import analyze
-from .network import Histonet
+from .analyze import analyze, analyze_genes
+from .network import Histonet, STD
 from .train import train
 from .utility import (
     read_data,
@@ -37,6 +39,7 @@ DEVICE = t.device('cuda' if t.cuda.is_available() else 'cpu')
 
 def _train(
         histonet,
+        std,
         optimizer,
         image,
         data,
@@ -56,6 +59,7 @@ def _train(
 
     train(
         histonet,
+        std,
         optimizer,
         image,
         label,
@@ -68,12 +72,20 @@ def _train(
 
 def _analyze(
         histonet,
+        std,
         image,
+        analysis_type,
         data=None,
         label=None,
         **kwargs,
 ):
-    analyze(histonet, image, data, label, **kwargs)
+    if analysis_type == 'default':
+        analyze(histonet, std, image, data, label, **kwargs)
+    elif analysis_type == 'genes':
+        analyze_genes(histonet, std, image, **kwargs)
+    else:
+        raise ValueError(f'invalid analysis type "{analysis_type}"')
+
 
 
 def main():
@@ -96,7 +108,7 @@ def main():
 
     train_parser.add_argument('--latent-size', type=int, default=16)
     train_parser.add_argument('--zoom', type=float, default=1.)
-    train_parser.add_argument('--genes', type=int, default=50)
+    train_parser.add_argument('--genes', type=int)
     train_parser.add_argument('--patch-size', type=int, default=700)
     train_parser.add_argument('--batch-size', type=int, default=5)
 
@@ -108,6 +120,15 @@ def main():
 
     analyze_parser = subparsers.add_parser('analyze')
     analyze_parser.set_defaults(f=_analyze)
+
+    analyze_subparsers = analyze_parser.add_subparsers()
+
+    analyze_default = analyze_subparsers.add_parser('default')
+    analyze_default.set_defaults(analysis_type='default')
+
+    analyze_gene = analyze_subparsers.add_parser('genes')
+    analyze_gene.set_defaults(analysis_type='genes')
+    analyze_gene.add_argument('which', nargs='+', type=str)
 
     opts = vars(parser.parse_args())
 
@@ -136,10 +157,10 @@ def main():
         if all(map(os.path.exists, (label_path, data_path))):
             label = imread(label_path)
             if run_func is _train:
-                num_genes = opts.pop('genes')
+                genes = opts.pop('genes')
             if state is not None:
-                num_genes = state['model_init_args']['num_genes']
-            data = read_data(data_path, genes=num_genes)
+                genes = state['genes']
+            data = read_data(data_path, genes=genes)
         else:
             label = data = None
 
@@ -157,22 +178,38 @@ def main():
                 image = zoom(image, (zoom_level, zoom_level, 1))
 
         if state is not None:
-            histonet = Histonet(**state['model_init_args']).to(DEVICE)
-            histonet.load_state_dict(state['model'])
+            histonet = (
+                Histonet(**state['model_init_args']['histonet'])
+                .to(DEVICE)
+            )
+            std = (
+                STD(**state['model_init_args']['std'])
+                .to(DEVICE)
+            )
+            histonet.load_state_dict(state['model']['histonet'])
+            std.load_state_dict(state['model']['std'])
             if run_func is _train:
                 opts.pop('latent_size')
         elif run_func is _train:
             histonet = (
-                Histonet(
-                    num_genes=len(data.columns),
-                    latent_size=opts.pop('latent_size'),
-                    gene_bias=np.log(
-                        (data.values /
-                         np.bincount(label.flatten())[1:][..., None])
-                        .mean(0)
-                    ),
+                Histonet(latent_size=opts.pop('latent_size'))
+                .to(DEVICE)
+            )
+            std = (
+                STD(
+                    genes=data.columns,
+                    gene_baseline=data.values.mean(0),
                 )
                 .to(DEVICE)
+            )
+            t.nn.init.normal_(
+                histonet.mixture_loadings[-1].weight,
+                std=1e-5,
+            )
+            t.nn.init.normal_(
+                histonet.mixture_loadings[-1].bias,
+                mean=-np.log(np.mean(np.bincount(label.flatten())[1:]) * 50),
+                std=1e-5,
             )
         else:
             raise RuntimeError()
@@ -181,13 +218,22 @@ def main():
 
         if run_func is _train:
             optimizer = t.optim.Adam(
-                histonet.parameters(), lr=opts.pop('learning_rate'))
+                it.chain(
+                    histonet.parameters(),
+                    std.parameters(),
+                ),
+                lr=opts.pop('learning_rate'),
+            )
             if state is not None:
-                optimizer.load_state_dict(state['optimizer'])
+                optimizer.load_state_dict(state['optimizer']['default'])
 
             extra_kwargs = {
                 'start_epoch': 1 if state is None else state['epoch'] + 1,
-                'store_state': partial(store_state, zoom_level=zoom_level),
+                'store_state': partial(
+                    store_state,
+                    zoom_level=zoom_level,
+                    genes=list(data.columns),
+                ),
                 'optimizer': optimizer,
             }
         else:
@@ -195,6 +241,7 @@ def main():
 
         run_func(
             histonet=histonet,
+            std=std,
             image=image,
             data=data,
             label=label,

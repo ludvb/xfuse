@@ -1,5 +1,7 @@
 import os
 
+from typing import List
+
 from imageio import imwrite
 
 from matplotlib.backends.backend_pdf import PdfPages
@@ -7,13 +9,15 @@ import matplotlib.pyplot as plt
 
 import numpy as np
 
+import pandas as pd
+
 import torch as t
 
 from torchvision.utils import make_grid
 
-from .network import Histonet
-from .logging import INFO, log
-from .utility import center_crop
+from .logging import INFO, WARNING, log
+from .network import Histonet, STD
+from .utility import center_crop, spotwise_loadings
 
 
 def run_tsne(y, n_components=3, initial_dims=20):
@@ -137,13 +141,18 @@ def visualize_batch(batch, normalize=False, **kwargs):
     )
 
 
+def order_factors(std: STD):
+    return std.rgt_q.loc.exp().sum(0).argsort(descending=True)
+
+
 def analyze(
         histonet: Histonet,
-        image,
-        data=None,
-        label=None,
-        output_prefix=None,
-        device=None,
+        std: STD,
+        image: t.Tensor,
+        data: pd.DataFrame = None,
+        label: np.ndarray = None,
+        output_prefix: str = None,
+        device: t.device = None,
 ):
     if output_prefix is None:
         output_prefix = '.'
@@ -153,45 +162,26 @@ def analyze(
 
     histonet = histonet.to(device)
 
-    genes = histonet.init_args['num_genes']
+    z, mu, sd, loadings, state = histonet(image[None, ...])
 
-    z, mu, sd, rate, logit, state = histonet(
-        t.cat(
-            [
-                image[None, ...],
-                t.cat(
-                    [
-                        t.ones((1, 1, *image.shape[-2:])),
-                        t.zeros((1, genes, *image.shape[-2:])),
-                    ],
-                    dim=1,
-                )
-            ],
-            dim=1,
-        ),
-    )
+    mix = t.exp(loadings) / t.exp(loadings).sum(1).unsqueeze(1)
 
-    if data is not None and label is not None:
+    if label is not None and data is not None:
         label = (
-            t.eye(int(np.max(label)) + 1, device=device)
-            [label.flatten()]
-            .reshape(*label.shape, -1)
-            .float()
+            center_crop(
+                t.tensor(label, device=device),
+                loadings.shape[-2:],
+            )
+            [None]
         )
-        rates = t.einsum(
-            'bgxy,xyi->ig',
-            rate,
-            center_crop(label, [*rate.shape[-2:]]),
-        )
+        rate, logit = std(spotwise_loadings(loadings, label))
         d = t.distributions.NegativeBinomial(
-            rates[1:],
-            logits=logit.t(),
+            rate,
+            logits=logit.unsqueeze(0),
         )
-        log(INFO, 'rmse=%.f', t.mean(t.sqrt(t.mean(
-            (d.mean - t.as_tensor(data.values).float()) ** 2, 1))))
-
-    xpr = rate * t.exp(logit.t()[..., None, None])
-    xpr_rel = xpr / xpr.sum(1).unsqueeze(1)
+        rmse = t.mean(t.sqrt(t.mean(
+            (d.mean - t.as_tensor(data.values).float()) ** 2, 1)))
+        log(INFO, 'rmse = %.3f', rmse)
 
     for b, prefix in [
             (
@@ -203,8 +193,7 @@ def analyze(
                 'he',
             ),
             (dim_red(z), 'z'),
-            (dim_red(xpr), 'xpr'),
-            (dim_red(xpr_rel), 'xpr-rel'),
+            (dim_red(mix), 'fct'),
             (dim_red(state), 'state'),
     ]:
         imwrite(
@@ -212,15 +201,59 @@ def analyze(
             visualize_batch(b),
         )
 
-    for d, postfix in [
-            (xpr    [0].detach().cpu().numpy()[::-1], 'abs'),
-            (xpr_rel[0].detach().cpu().numpy()[::-1], 'rel'),
-    ]:
-        with PdfPages(os.path.join(
-                output_prefix, f'genes-{postfix}.pdf')) as pdf:
-            for p, g in zip(d, data.columns[::-1]):
-                plt.figure()
-                plt.imshow(clip(p, 0.01))
-                plt.title(g)
-                pdf.savefig()
-                plt.close()
+    with PdfPages(os.path.join(
+            output_prefix, f'factors.pdf')) as pdf:
+        for p in mix[0, order_factors(std)].detach().cpu().numpy():
+            plt.figure()
+            plt.imshow(clip(p, 0.01))
+            pdf.savefig()
+            plt.close()
+
+
+def analyze_genes(
+        histonet: Histonet,
+        std: STD,
+        image: t.Tensor,
+        which: List[str],
+        output_prefix: str = None,
+        device: t.device = None,
+):
+    if output_prefix is None:
+        output_prefix = '.'
+
+    if device is None:
+        device = t.device('cpu')
+
+    histonet = histonet.to(device)
+
+    z, mu, sd, loadings, state = histonet(image[None, ...])
+
+    gt = std.resample().rate_gt
+    total = (
+        (loadings[0].exp() * gt.sum(0)[..., None, None])
+        .sum(0).detach().cpu().numpy()
+    )
+    genes = np.array([g.lower() for g in std.genes])
+    with PdfPages(os.path.join(output_prefix, f'genes.pdf')) as pdf:
+        for g in which:
+            try:
+                idx = np.where(genes == g.lower())[0][0]
+            except IndexError:
+                log(WARNING, 'gene "%s" has not been modelled, skipping', g)
+                continue
+            gene_map = (
+                t.einsum('txy,t->xy', loadings[0].exp(), gt[idx])
+                .detach()
+                .cpu()
+                .numpy()
+            )
+            plt.figure()
+            plt.suptitle(std.genes[idx])
+            plt.subplot(1, 2, 1)
+            plt.title('abs')
+            plt.imshow(clip(gene_map, 0.01))
+            plt.subplot(1, 2, 2)
+            plt.title('rel')
+            plt.imshow(clip(gene_map / total, 0.01))
+            pdf.savefig()
+            plt.close()

@@ -7,33 +7,61 @@ from .logging import DEBUG, log
 
 class Distribution:
     def __init__(self):
-        self._names = [a for a, _ in self.parameters]
-        for n in self._names:
+        def _create_getter(name):
+            @property
+            def _get(self):
+                value = t.as_tensor(self._get_raw_value(name))
+                transformer = self._get_r_transformer(name)
+                return transformer(value)
+            return _get
+
+        for n in self.parameters:
             try:
-                _ = self._get_r_transformer(n)
+                transformer = self._get_default_r_transformer(n)
             except AttributeError:
                 log(DEBUG, '%s parameter "%s" is defined on R',
                     type(self).__name__, n)
-                self._set_r_transformer(n, lambda x: x)
+                transformer = lambda x: x
+                self._set_default_r_transformer(n, transformer)
+            self._set_r_transformer(n, transformer)
+            setattr(self.__class__, n, _create_getter(n))
 
     def _set_r_transformer(self, name, f):
-        setattr(self, f'_set_{name}', f)
+        setattr(self, f'_rtrans_{name}', f)
         return self
 
     def _get_r_transformer(self, name):
+        return getattr(self, f'_rtrans_{name}')
+
+    def _set_default_r_transformer(self, name, value):
+        setattr(self, f'_set_{name}', value)
+        return self
+
+    def _get_default_r_transformer(self, name):
         return getattr(self, f'_set_{name}')
 
+    def _set_raw_value(self, name, value):
+        setattr(self, f'_{name}', value)
+        return self
+
+    def _get_raw_value(self, name):
+        return getattr(self, f'_{name}')
+
     def set_parameter(self, name, value, r_transform=False):
-        if name not in self._names:
+        if name not in self.parameters:
             raise ValueError(
                 f'attempted to set non-existent parameter "{name}" '
                 f'(available: {", ".join(self._names)})'
             )
-        setattr(self, name, (
-            self._get_r_transformer(name)(value)
-            if r_transform
-            else value
-        ))
+        self._set_raw_value(name, value)
+        self._set_r_transformer(
+            name,
+            (
+                self._get_default_r_transformer(name)
+                if r_transform
+                else lambda x: x
+            ),
+        )
         return self
 
     def set(self, r_transform=False, **kwargs):
@@ -77,15 +105,16 @@ class Variable:
 
 class Deterministic(Distribution):
     def __init__(self, value=None):
-        self.x = t.as_tensor(value or 0.)
         super().__init__()
+        if value is None: value = 0.
+        self.set_parameter('x', value)
 
     @property
     def parameters(self):
-        return [('x', self.x)]
+        return ['x']
 
     def log_prob(self, x):
-        return t.prod(x == self.x)
+        return t.prod(x == self.x).float()
 
     def sample(self):
         return self.x
@@ -97,16 +126,13 @@ class Deterministic(Distribution):
 
 class NegativeBinomial(Distribution):
     def __init__(self, rate=None, logit=None):
-        self.rate = rate
-        self.logit = logit
         super().__init__()
+        self.set_parameter('rate', rate)
+        self.set_parameter('logit', logit)
 
     @property
     def parameters(self):
-        return [
-            ('rate', self.rate),
-            ('logit', self.logit),
-        ]
+        return ['rate', 'logit']
 
     def _set_rate(self, x):
         return t.exp(x) + 1e-10
@@ -131,18 +157,15 @@ class NegativeBinomial(Distribution):
 
 class Normal(Distribution):
     def __init__(self, loc=None, scale=None):
+        super().__init__()
         if loc is None: loc = 0.
         if scale is None: scale = 1.
-        self.loc = t.as_tensor(loc)
-        self.scale = t.as_tensor(scale)
-        super().__init__()
+        self.set_parameter('loc', loc)
+        self.set_parameter('scale', scale)
 
     @property
     def parameters(self):
-        return [
-            ('loc', self.loc),
-            ('scale', self.scale),
-        ]
+        return ['loc', 'scale']
 
     def _set_scale(self, x):
         return (

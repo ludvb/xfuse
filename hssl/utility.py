@@ -1,5 +1,7 @@
 import itertools as it
 
+from typing import Dict
+
 import numpy as np
 
 import pandas as pd
@@ -26,12 +28,18 @@ def set_rng_seed(seed: int):
     ]), seed, n_seed, t_seed)
 
 
-def store_state(model, optimizer, epoch, file, **kwargs):
+def store_state(
+        models: Dict[str, t.nn.Module],
+        optimizers: Dict[str, t.optim.Optimizer],
+        epoch: int,
+        file: str,
+        **kwargs,
+):
     t.save(
         dict(
-            model=model.state_dict(),
-            model_init_args=model.init_args,
-            optimizer=optimizer.state_dict(),
+            model={k: m.state_dict() for k, m in models.items()},
+            model_init_args={k: m.init_args for k, m in models.items()},
+            optimizer={k: o.state_dict() for k, o in optimizers.items()},
             epoch=epoch,
             **kwargs,
         ),
@@ -73,18 +81,41 @@ def center_crop(input, target_shape):
 def read_data(path, filter_ambiguous=True, genes=None):
     data = pd.read_csv(path).set_index('n')
     if filter_ambiguous:
+        log(INFO, 'filtering ambiguous genes')
         data = data[[
             x for x in data.columns if 'ambiguous' not in x
         ]]
     if genes:
-        data = data[
-            data.sum(0)
-            .sort_values()
-            [-genes:]
-            .index
-        ]
+        if isinstance(genes, int):
+            log(INFO, 'using top %d genes', genes)
+            data = data[
+                data.sum(0)
+                .sort_values()
+                [-genes:]
+                .index
+            ]
+        if isinstance(genes, list):
+            log(INFO, 'extracting %d genes', len(genes))
+            data = data[genes]
     return data
 
 
 def argmax(x: t.Tensor):
     return np.unravel_index(t.argmax(x), x.shape)
+
+
+def spotwise_loadings(loadings: t.Tensor, label: t.Tensor):
+    return (
+        t.einsum(
+            'btxy,bxyi->it',
+            t.exp(loadings),
+            (
+                t.eye(t.max(label) + 1)
+                .to(label)
+                [label.flatten()]
+                .reshape(*label.shape, -1)
+                .float()
+            ),
+        )
+        [1:]
+    )
