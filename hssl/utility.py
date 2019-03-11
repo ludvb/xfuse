@@ -84,3 +84,7 @@ def read_data(path, filter_ambiguous=True, genes=None):
             .index
         ]
     return data
+
+
+def argmax(x: t.Tensor):
+    return np.unravel_index(t.argmax(x), x.shape)
