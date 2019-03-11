@@ -21,6 +21,14 @@
   can we even get the factorization working? :/
   if it is working in std, there is no reason why it wouldn't work here?
 
+** idea
+   two modules:
+   1. histonet
+   2. std
+   histonet computes "r_st" over all pixels, which are summed in each spot.
+   factors are then convolved similar to std.
+   the expression emission would in effect be an amortized std model, where the guide is also informed by histology.
+
 * TODO [#B] data augmentation
 
 * TODO [#B] multiple datasets
