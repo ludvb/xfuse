@@ -40,4 +40,7 @@
 
 * TODO [#C] improve code structure
 
+** code duplication
+   ~train.py~ and ~analyze.py~ both compute spot-wise rates (summing inside spots)
+
 * TODO [#B] log version

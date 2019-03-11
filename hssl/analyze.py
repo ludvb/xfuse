@@ -12,7 +12,8 @@ import torch as t
 from torchvision.utils import make_grid
 
 from .network import Histonet
-from .logging import WARNING, log
+from .logging import INFO, log
+from .utility import center_crop
 
 
 def run_tsne(y, n_components=3, initial_dims=20):
@@ -144,13 +145,6 @@ def analyze(
         output_prefix=None,
         device=None,
 ):
-    if data is not None or label is not None:
-        log(
-            WARNING,
-            'arguments `data` and `label` are currently not supported'
-            ' and will be ignored'
-        )
-
     if output_prefix is None:
         output_prefix = '.'
 
@@ -176,6 +170,25 @@ def analyze(
             dim=1,
         ),
     )
+
+    if data is not None and label is not None:
+        label = (
+            t.eye(int(np.max(label)) + 1, device=device)
+            [label.flatten()]
+            .reshape(*label.shape, -1)
+            .float()
+        )
+        rates = t.einsum(
+            'bgxy,xyi->ig',
+            rate,
+            center_crop(label, [*rate.shape[-2:]]),
+        )
+        d = t.distributions.NegativeBinomial(
+            rates[1:],
+            logits=logit.t(),
+        )
+        log(INFO, 'rmse=%.f', t.mean(t.sqrt(t.mean(
+            (d.mean - t.as_tensor(data.values).float()) ** 2, 1))))
 
     xpr = rate * t.exp(logit.t()[..., None, None])
     xpr_rel = xpr / xpr.sum(1).unsqueeze(1)
