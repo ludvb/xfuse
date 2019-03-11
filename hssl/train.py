@@ -190,7 +190,7 @@ def train(
             epoch,
             os.path.join(
                 chkpt_prefix,
-                f'epoch-{epoch:05d}.pkl',
+                f'epoch-{epoch:06d}.pkl',
             ),
         )
 
