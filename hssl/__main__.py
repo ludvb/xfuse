@@ -114,6 +114,8 @@ def main():
     run_func = opts.pop('f')
 
     def _go():
+        from . import __version__
+        log(INFO, '%s %s', __package__, __version__)
         log(DEBUG, 'invocation: %s', ' '.join(sys.argv))
         log(INFO, '%s', ', '.join([f'{k}={v}' for k, v in opts.items()]))
 
