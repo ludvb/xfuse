@@ -191,19 +191,7 @@ class Histonet(Variational):
         img_mu = self.img_mu(state)
         img_sd = self.img_sd(state)
 
-        self.rate_ = self.rate_bias[None, ..., None, None] + self.rate(state)
-        rate = t.exp(self.rate_)
-
-        def rate_hook(g):
-            self.rate_g = g
-            return g
-
-        def ratehook(g):
-            self.rateg = g
-            return g
-
-        self.rate_.register_hook(rate_hook)
-        rate.register_hook(ratehook)
+        rate = t.exp(self.rate_bias[None, ..., None, None] + self.rate(state))
 
         self.logit.distribution.set(
             loc=self.logit_mu, scale=self.logit_sd, r_transform=True)

@@ -131,9 +131,6 @@ def train(
 
         optimizer.zero_grad()
         loss.backward()
-        for p in histonet.parameters():
-            if p.grad is not None and t.any(t.isnan(p.grad)):
-                import ipdb; ipdb.set_trace()
         optimizer.step()
 
         return collect_items({
