@@ -24,7 +24,11 @@ from .logging import (
     log,
     set_level,
 )
-from .analyze import analyze, analyze_genes
+from .analyze import (
+    analyze,
+    analyze_gene_profiles,
+    analyze_genes,
+)
 from .network import Histonet, STD
 from .train import train
 from .utility import (
@@ -83,6 +87,8 @@ def _analyze(
         analyze(histonet, std, image, data, label, **kwargs)
     elif analysis_type == 'genes':
         analyze_genes(histonet, std, image, **kwargs)
+    elif analysis_type == 'gene_profiles':
+        analyze_gene_profiles(std, **kwargs)
     else:
         raise ValueError(f'invalid analysis type "{analysis_type}"')
 
@@ -125,6 +131,9 @@ def main():
 
     analyze_default = analyze_subparsers.add_parser('default')
     analyze_default.set_defaults(analysis_type='default')
+
+    analyze_profiles = analyze_subparsers.add_parser('gene-profiles')
+    analyze_profiles.set_defaults(analysis_type='gene_profiles')
 
     analyze_gene = analyze_subparsers.add_parser('genes')
     analyze_gene.set_defaults(analysis_type='genes')

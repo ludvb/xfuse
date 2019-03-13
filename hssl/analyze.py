@@ -2,7 +2,11 @@ import os
 
 from typing import List
 
+from dfply import X, mutate
+
 from imageio import imwrite
+
+import plotnine as pn
 
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
@@ -10,6 +14,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 import pandas as pd
+from pandas.api.types import CategoricalDtype
 
 import torch as t
 
@@ -206,6 +211,58 @@ def analyze(
         for p in mix[0, order_factors(std)].detach().cpu().numpy():
             plt.figure()
             plt.imshow(clip(p, 0.01))
+            pdf.savefig()
+            plt.close()
+
+
+def analyze_gene_profiles(
+        std: STD,
+        output_prefix: str = None,
+):
+    def _to_df(x, name):
+        return (
+            pd.DataFrame(x.detach().cpu().numpy(), index=std.genes)
+            .rename_axis('gene')
+            .reset_index()
+            .melt('gene', var_name='factor', value_name=name)
+        )
+
+    data = pd.merge(
+        _to_df(std.rgt_q.loc, 'mu'),
+        _to_df(std.rgt_q.scale, 'sd'),
+        on=['gene', 'factor'],
+    )
+    data.to_csv(
+        os.path.join(output_prefix, 'profiles.csv'),
+        index=False,
+    )
+
+    def _generate_barplot(x):
+        return (
+            pn.ggplot(
+                x
+                >> mutate(
+                    mu_min=X.mu - 2 * X.sd,
+                    mu_max=X.mu + 2 * X.sd,
+                )
+            )
+            + pn.aes('gene', 'mu', ymax='mu_max', ymin='mu_min')
+            + pn.geom_point()
+            + pn.geom_errorbar()
+            + pn.theme(
+                axis_text_x=pn.element_text(rotation=90),
+                dpi=100,
+                figure_size=(14, 7),
+            )
+        )
+
+    with PdfPages(os.path.join(output_prefix, f'profiles.pdf')) as pdf:
+        for f in order_factors(std):
+            x = data[data.factor == f].sort_values('mu', ascending=False)
+            x = pd.concat([x.iloc[:50], x.iloc[-50:]])
+            x.gene = x.gene.astype(CategoricalDtype(x.gene, ordered=True))
+
+            _generate_barplot(x).draw(False)
             pdf.savefig()
             plt.close()
 
