@@ -1,6 +1,8 @@
+from functools import wraps
+
 import itertools as it
 
-from typing import Dict
+import signal
 
 import numpy as np
 
@@ -8,7 +10,8 @@ import pandas as pd
 
 import torch as t
 
-from .logging import INFO, log
+from ..dataset import Dataset
+from ..logging import INFO, log
 
 
 def set_rng_seed(seed: int):
@@ -26,25 +29,6 @@ def set_rng_seed(seed: int):
         'numpy rng seeded with %d',
         'torch rng seeded with %d',
     ]), seed, n_seed, t_seed)
-
-
-def store_state(
-        models: Dict[str, t.nn.Module],
-        optimizers: Dict[str, t.optim.Optimizer],
-        epoch: int,
-        file: str,
-        **kwargs,
-):
-    t.save(
-        dict(
-            model={k: m.state_dict() for k, m in models.items()},
-            model_init_args={k: m.init_args for k, m in models.items()},
-            optimizer={k: o.state_dict() for k, o in optimizers.items()},
-            epoch=epoch,
-            **kwargs,
-        ),
-        file,
-    )
 
 
 def zip_dicts(ds):
@@ -78,16 +62,32 @@ def center_crop(input, target_shape):
     ])]
 
 
-def read_data(path, filter_ambiguous=True, genes=None):
-    data = pd.read_csv(path).set_index('n')
+def read_data(paths, filter_ambiguous=True, genes=None):
+    def _load_file(p):
+        log(INFO, 'loading data file %s', p)
+        return pd.read_csv(p, index_col=0)
+
+    ks, vs = zip(*[(p, _load_file(p)) for p in paths])
+    data = (
+        pd.concat(
+            vs,
+            keys=ks,
+            join='outer',
+            axis=0,
+            sort=False,
+        )
+        .fillna(0)
+    )
+
+    data = data.iloc[:, (data.sum(0) > 0).values]
+
     if filter_ambiguous:
-        log(INFO, 'filtering ambiguous genes')
         data = data[[
             x for x in data.columns if 'ambiguous' not in x
         ]]
+
     if genes:
         if isinstance(genes, int):
-            log(INFO, 'using top %d genes', genes)
             data = data[
                 data.sum(0)
                 .sort_values()
@@ -95,16 +95,38 @@ def read_data(path, filter_ambiguous=True, genes=None):
                 .index
             ]
         if isinstance(genes, list):
-            log(INFO, 'extracting %d genes', len(genes))
             data = data[genes]
+
     return data
+
+
+def design_matrix_from(design: pd.DataFrame) -> pd.DataFrame:
+    if len(design.columns) == 0:
+        return pd.DataFrame(np.zeros((0, len(design))))
+
+    design = design.astype(str).astype('category')
+
+    def _encode(factor):
+        log(INFO, 'encoding design factor "%s" with %d categories: %s',
+            factor.name, len(factor.cat.categories),
+            ', '.join(factor.cat.categories))
+        return pd.DataFrame(
+            (
+                np.eye(len(factor.cat.categories), dtype=int)
+                [:, factor.cat.codes]
+            ),
+            index=factor.cat.categories,
+        )
+
+    ks, vs = zip(*[(k, _encode(v)) for k, v in design.iteritems()])
+    return pd.concat(vs, keys=ks)
 
 
 def argmax(x: t.Tensor):
     return np.unravel_index(t.argmax(x), x.shape)
 
 
-def spotwise_loadings(loadings: t.Tensor, label: t.Tensor):
+def integrate_loadings(loadings: t.Tensor, label: t.Tensor):
     return (
         t.einsum(
             'btxy,bxyi->it',
@@ -117,5 +139,35 @@ def spotwise_loadings(loadings: t.Tensor, label: t.Tensor):
                 .float()
             ),
         )
-        [1:]
     )
+
+
+def spot_size(dataset: Dataset):
+    return np.mean(np.concatenate([
+        np.bincount(d['label'].flatten())[1:]
+        for d in dataset
+    ]))
+
+
+def with_interrupt_handler(handler):
+    def _decorator(func):
+        @wraps(func)
+        def _wrapper(*args, **kwargs):
+            previous_handler = signal.getsignal(signal.SIGINT)
+            signal.signal(signal.SIGINT, handler)
+            func(*args, **kwargs)
+            signal.signal(signal.SIGINT, previous_handler)
+        return _wrapper
+    return _decorator
+
+
+def lazify(computation):
+    def _g():
+        result = computation()
+        while True:
+            yield result
+    g = _g()
+
+    def _wrapped():
+        return next(g)
+    return _wrapped

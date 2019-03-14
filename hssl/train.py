@@ -4,74 +4,57 @@ import itertools as it
 
 import os
 
-from imageio import imwrite
+from typing import Optional
 
-import pandas as pd
+from imageio import imwrite
 
 import numpy as np
 
 import torch as t
 
 from .analyze import dim_red, visualize_batch
-from .dataset import Dataset
+from .dataset import Dataset, collate
 from .logging import INFO, log
-from .network import Histonet, STD
 from .utility import (
     collect_items,
-    spotwise_loadings,
-    store_state as _store_state,
+    integrate_loadings,
+    with_interrupt_handler,
     zip_dicts,
 )
+from .utility.state import State, save_state
+
+
+class Interrupted(Exception):
+    pass
 
 
 def train(
-        histonet: Histonet,
-        std: STD,
-        optimizer: t.optim.Optimizer,
-        image: np.ndarray,
-        label: np.ndarray,
-        data: pd.DataFrame,
+        state: State,
+        dataset: Dataset,
         output_prefix: str,
-        patch_size: int = 700,
         batch_size: int = 5,
-        image_interval: int = 50,
-        chkpt_interval: int = 10000,
+        image_interval: Optional[int] = 50,
+        chkpt_interval: Optional[int] = 10000,
+        epochs: Optional[int] = None,
         workers: int = None,
         device: t.device = None,
-        start_epoch: int = 1,
-        store_state=None,
-):
+) -> State:
     if workers is None:
         workers = len(os.sched_getaffinity(0))
 
     if device is None:
         device = t.device('cuda' if t.cuda.is_available() else 'cpu')
 
-    if store_state is None:
-        store_state = _store_state
-
-    epoch = start_epoch
+    histonet = state.histonet
+    std = state.std
+    optimizer = state.optimizer
+    epoch = state.epoch + 1
 
     img_prefix = os.path.join(output_prefix, 'images')
     chkpt_prefix = os.path.join(output_prefix, 'checkpoints')
 
     os.makedirs(img_prefix, exist_ok=True)
     os.makedirs(chkpt_prefix, exist_ok=True)
-
-    dataset = Dataset(image, label, data, patch_size=patch_size)
-
-    def _collate(xs):
-        data = [x.pop('data') for x in xs]
-        nlabels = [len(d) - 1 for d in data]
-        labels = [
-            (l + n) * (l != 0).long() for l, n in
-            zip((x.pop('label') for x in xs), it.accumulate((0, *nlabels)))
-        ]
-        return dict(
-            data=t.cat([data[0], *(d[1:] for d in data[1:])]),
-            label=t.stack(labels),
-            **{k: t.stack([x[k] for x in xs]) for k in xs[0].keys()},
-        )
 
     def _worker_init(n):
         np.random.seed(np.random.get_state()[1][0] + epoch)
@@ -80,10 +63,11 @@ def train(
 
     dataloader = t.utils.data.DataLoader(
         dataset,
-        collate_fn=_collate,
+        collate_fn=collate,
         batch_size=batch_size,
         num_workers=workers,
         worker_init_fn=_worker_init,
+        shuffle=True,
     )
 
     fixed_data = next(iter(dataloader))
@@ -98,13 +82,11 @@ def train(
             .log_prob(x['image'])
         )
 
-        rate, logit = std(spotwise_loadings(loadings, x['label']))
-        d = t.distributions.NegativeBinomial(
-            rate,
-            logits=logit.unsqueeze(0),
-        )
+        integrated_loadings = integrate_loadings(loadings, x['label'])
+        rate, logit = std(integrated_loadings[1:], x['effects'])
+        d = t.distributions.NegativeBinomial(rate, logits=logit)
 
-        data = x['data'][1:, 1:]
+        data = x['data']
         lpobs = d.log_prob(data)
 
         hdkl = histonet.complexity_cost(len(x) / len(dataset))
@@ -138,12 +120,15 @@ def train(
         log(
             INFO,
             ' '.join([
-                f'epoch {epoch:5d}',
+                'epoch {epoch:6d} of {epochs:s}'.format(
+                    epoch=epoch,
+                    epochs=str(epochs) if epochs is not None else '∞',
+                ),
                 ' '
                 f'(%0{len(str(len(dataloader)))}d/{len(dataloader)})'
                 % iteration[-1],
                 ' :: ',
-                '  //  '.join([
+                '  |  '.join([
                     '{} = {:>9s}'.format(k, f'{np.mean(v):.2e}')
                     for k, v in output.items()
                 ]),
@@ -166,30 +151,22 @@ def train(
                         + '\n'
                     ).encode())
 
-    def _save_chkpt(epoch):
-        store_state(
-            {'histonet': histonet, 'std': std},
-            {'default': optimizer},
-            epoch,
-            os.path.join(
-                chkpt_prefix,
-                f'epoch-{epoch:06d}.pkl',
-            ),
-        )
-
     def _save_image(epoch):
         t.no_grad()
         histonet.eval()
 
-        z, mu, sd, loadings, state = histonet(
-            fixed_data['image'].to(device))
+        z, mu, sd, loadings, state = histonet(fixed_data['image'].to(device))
 
         for data, prefix in [
                 (
                     (
-                        t.distributions.Normal(mu, sd)
-                        .sample()
-                        .clamp(0, 1)
+                        (
+                            t.distributions.Normal(mu, sd)
+                            .sample()
+                            .clamp(-1, 1)
+                            + 1
+                        )
+                        / 2
                     ),
                     'he',
                 ),
@@ -206,23 +183,57 @@ def train(
         t.enable_grad()
         histonet.train()
 
-    for epoch in it.count(epoch):
-        for output in map(
-                lambda x: zip_dicts(
-                    map(
-                        lambda y: {'iteration': y[0], **y[1]},
-                        filter(lambda y: y is not None, x),
-                    ),
-                ),
-                it.zip_longest(
-                    *[(
-                        (i, _step(x)) for i, x in enumerate(dataloader, 1)
-                    )] * 10
-                ),
-        ):
-            _report(epoch, output)
+    def _interrupt_handler(*_):
+        log(INFO, 'interrupted')
+        raise Interrupted()
 
-        if epoch % image_interval == 0:
-            _save_image(epoch)
-        if epoch % chkpt_interval == 0:
-            _save_chkpt(epoch)
+    @with_interrupt_handler(_interrupt_handler)
+    def _run_training():
+        nonlocal epoch
+
+        for epoch in it.takewhile(
+                lambda x: epochs is None or x <= epochs,
+                it.count(epoch),
+        ):
+            for output in map(
+                    lambda x: zip_dicts(
+                        map(
+                            lambda y: {'iteration': y[0], **y[1]},
+                            filter(lambda y: y is not None, x),
+                        ),
+                    ),
+                    it.zip_longest(
+                        *[(
+                            (i, _step(x)) for i, x in enumerate(dataloader, 1)
+                        )] * 10
+                    ),
+            ):
+                _report(epoch, output)
+
+            if image_interval is not None and epoch % image_interval == 0:
+                _save_image(epoch)
+            if chkpt_interval is not None and epoch % chkpt_interval == 0:
+                save_state(
+                    State(
+                        histonet=histonet,
+                        std=std,
+                        optimizer=optimizer,
+                        epoch=epoch,
+                    ),
+                    os.path.join(
+                        chkpt_prefix,
+                        f'epoch-{epoch:06d}.pkl',
+                    ),
+                )
+
+    try:
+        _run_training()
+    except Interrupted:
+        pass
+
+    return State(
+        histonet=histonet,
+        std=std,
+        optimizer=optimizer,
+        epoch=epoch,
+    )

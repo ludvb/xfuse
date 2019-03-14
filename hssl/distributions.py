@@ -2,8 +2,6 @@ from abc import abstractmethod
 
 import torch as t
 
-from .logging import DEBUG, log
-
 
 class Distribution:
     def __init__(self):
@@ -19,8 +17,6 @@ class Distribution:
             try:
                 transformer = self._get_default_r_transformer(n)
             except AttributeError:
-                log(DEBUG, '%s parameter "%s" is defined on R',
-                    type(self).__name__, n)
                 transformer = lambda x: x
                 self._set_default_r_transformer(n, transformer)
             self._set_r_transformer(n, transformer)

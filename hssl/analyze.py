@@ -8,6 +8,8 @@ from imageio import imwrite
 
 import plotnine as pn
 
+from pyvips import Image
+
 from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
 
@@ -20,9 +22,10 @@ import torch as t
 
 from torchvision.utils import make_grid
 
-from .logging import INFO, WARNING, log
+from .image import to_array
+from .logging import DEBUG, INFO, WARNING, log
 from .network import Histonet, STD
-from .utility import center_crop, spotwise_loadings
+from .utility import center_crop, integrate_loadings
 
 
 def run_tsne(y, n_components=3, initial_dims=20):
@@ -153,9 +156,7 @@ def order_factors(std: STD):
 def analyze(
         histonet: Histonet,
         std: STD,
-        image: t.Tensor,
-        data: pd.DataFrame = None,
-        label: np.ndarray = None,
+        image: Image,
         output_prefix: str = None,
         device: t.device = None,
 ):
@@ -165,40 +166,29 @@ def analyze(
     if device is None:
         device = t.device('cpu')
 
-    histonet = histonet.to(device)
-
-    z, mu, sd, loadings, state = histonet(image[None, ...])
-
-    mix = t.exp(loadings) / t.exp(loadings).sum(1).unsqueeze(1)
-
-    if label is not None and data is not None:
-        label = (
-            center_crop(
-                t.tensor(label, device=device),
-                loadings.shape[-2:],
-            )
-            [None]
-        )
-        rate, logit = std(spotwise_loadings(loadings, label))
-        d = t.distributions.NegativeBinomial(
-            rate,
-            logits=logit.unsqueeze(0),
-        )
-        rmse = t.mean(t.sqrt(t.mean(
-            (d.mean - t.as_tensor(data.values).float()) ** 2, 1)))
-        log(INFO, 'rmse = %.3f', rmse)
+    z, mu, sd, loadings, state = histonet(
+        t.as_tensor(to_array(image))
+        .to(device)
+        .permute(2, 0, 1)
+        .float()
+        [None, ...]
+        / 255 * 2 - 1
+    )
 
     for b, prefix in [
             (
                 (
-                    t.distributions.Normal(mu, sd)
-                    .sample()
-                    .clamp(0, 1)
+                    (
+                        t.distributions.Normal(mu, sd)
+                        .sample()
+                        .clamp(-1, 1)
+                        + 1
+                    ) / 2
                 ),
                 'he',
             ),
             (dim_red(z), 'z'),
-            (dim_red(mix), 'fct'),
+            (dim_red(loadings), 'fct'),
             (dim_red(state), 'state'),
     ]:
         imwrite(
@@ -208,9 +198,13 @@ def analyze(
 
     with PdfPages(os.path.join(
             output_prefix, f'factors.pdf')) as pdf:
-        for p in mix[0, order_factors(std)].detach().cpu().numpy():
+        for p, f in (
+                (loadings.exp()[0, f].detach().cpu().numpy(), f)
+                for f in order_factors(std)
+        ):
             plt.figure()
             plt.imshow(clip(p, 0.01))
+            plt.title(f'factor {f}')
             pdf.savefig()
             plt.close()
 
@@ -237,7 +231,7 @@ def analyze_gene_profiles(
         index=False,
     )
 
-    def _generate_barplot(x):
+    def _generate_barplot(x, name):
         return (
             pn.ggplot(
                 x
@@ -249,20 +243,25 @@ def analyze_gene_profiles(
             + pn.aes('gene', 'mu', ymax='mu_max', ymin='mu_min')
             + pn.geom_point()
             + pn.geom_errorbar()
+            + pn.ylab('log fold effect')
+            + pn.coord_flip()
+            + pn.ggtitle(name)
             + pn.theme(
                 axis_text_x=pn.element_text(rotation=90),
                 dpi=100,
-                figure_size=(14, 7),
+                figure_size=(7, 14),
             )
         )
 
     with PdfPages(os.path.join(output_prefix, f'profiles.pdf')) as pdf:
         for f in order_factors(std):
+            log(DEBUG, 'producing profile for factor %d', f)
+
             x = data[data.factor == f].sort_values('mu', ascending=False)
             x = pd.concat([x.iloc[:50], x.iloc[-50:]])
             x.gene = x.gene.astype(CategoricalDtype(x.gene, ordered=True))
 
-            _generate_barplot(x).draw(False)
+            _generate_barplot(x, f'factor {f}').draw(False)
             pdf.savefig()
             plt.close()
 
@@ -270,7 +269,7 @@ def analyze_gene_profiles(
 def analyze_genes(
         histonet: Histonet,
         std: STD,
-        image: t.Tensor,
+        image: Image,
         which: List[str],
         output_prefix: str = None,
         device: t.device = None,
@@ -281,9 +280,14 @@ def analyze_genes(
     if device is None:
         device = t.device('cpu')
 
-    histonet = histonet.to(device)
-
-    z, mu, sd, loadings, state = histonet(image[None, ...])
+    z, mu, sd, loadings, state = histonet(
+        t.as_tensor(to_array(image))
+        .to(device)
+        .permute(2, 0, 1)
+        .float()
+        [None, ...]
+        / 255 * 2 - 1
+    )
 
     gt = std.resample().rate_gt
     total = (
@@ -298,6 +302,7 @@ def analyze_genes(
             except IndexError:
                 log(WARNING, 'gene "%s" has not been modelled, skipping', g)
                 continue
+            log(DEBUG, 'creating gene map for %s', std.genes[idx])
             gene_map = (
                 t.einsum('txy,t->xy', loadings[0].exp(), gt[idx])
                 .detach()

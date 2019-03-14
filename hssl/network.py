@@ -1,9 +1,12 @@
+from typing import List, Optional
+
 import numpy as np
 
 import torch as t
 
 from .distributions import Distribution, Normal, Variable
 from .logging import DEBUG, log
+from .utility.init_args import store_init_args
 
 
 class Variational(t.nn.Module):
@@ -59,6 +62,7 @@ class Unpool(t.nn.Module):
         return x
 
 
+@store_init_args
 class Histonet(Variational):
     def __init__(
             self,
@@ -67,10 +71,6 @@ class Histonet(Variational):
             latent_size=16,
             nf=32,
     ):
-        self._init_args = locals()
-        self._init_args.pop('__class__')
-        self._init_args.pop('self')
-
         super().__init__()
 
         self.encoder = t.nn.Sequential(
@@ -196,21 +196,15 @@ class Histonet(Variational):
         return (z, *ys)
 
 
+@store_init_args
 class STD(Variational):
-    @property
-    def init_args(self):
-        return self._init_args
-
     def __init__(
             self,
-            genes,
-            num_factors=50,
-            gene_baseline=None,
+            genes: List[str],
+            num_factors: int = 50,
+            gene_baseline: Optional[np.ndarray] = None,
+            fixed_effects: Optional[int] = None,
     ):
-        self._init_args = locals()
-        self._init_args.pop('__class__')
-        self._init_args.pop('self')
-
         super().__init__()
 
         self.genes = list(genes)
@@ -241,6 +235,17 @@ class STD(Variational):
 
         _make_covariate('l', (1, ), True)
         _make_covariate('lg', (len(genes), ), True)
+
+        if fixed_effects is not None and fixed_effects > 0:
+            _make_covariate('reff', (fixed_effects, ), False)
+            _make_covariate('leff', (fixed_effects, ), False)
+            self._rate_effect = lambda x: (
+                t.einsum('in,n->i', x, self.reff.value))
+            self._logit_effect = lambda x: (
+                t.einsum('in,n->i', x, self.leff.value))
+        else:
+            self._rate_effect = self._logit_effect = (
+                lambda x: t.tensor([0.]).to(x))
 
         if gene_baseline is not None:
             if len(gene_baseline) != len(genes):
@@ -273,8 +278,12 @@ class STD(Variational):
             v.sample()
         return self
 
-    def forward(self, x):
+    def forward(self, x, effects=None):
         self.resample()
         rate = t.einsum('it,gt->ig', x, self.rate_gt)
-        logit = self.logit
+        logit = self.logit[None]
+        if effects is not None:
+            effects = effects.float()
+            rate = rate * t.exp(self._rate_effect(effects)[:, None])
+            logit = logit + self._logit_effect(effects)[:, None]
         return rate, logit

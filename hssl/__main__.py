@@ -2,54 +2,122 @@
 
 from datetime import datetime as dt
 
-import itertools as it
-
-from functools import partial
+from functools import wraps
 
 import os
 
 import sys
 
-from imageio import imread
+import click
 
 import numpy as np
 
+import pandas as pd
+
+from pyvips import Image
+
 import torch as t
 
+from . import __version__
+from .analyze import (
+    analyze as default_analysis,
+    analyze_gene_profiles,
+    analyze_genes,
+)
+from .dataset import Dataset, Slide
 from .logging import (
     DEBUG,
     ERROR,
     INFO,
     WARNING,
+    LoggedExecution,
     log,
     set_level,
 )
-from .analyze import (
-    analyze,
-    analyze_gene_profiles,
-    analyze_genes,
-)
 from .network import Histonet, STD
-from .train import train
+from .optimizer import create_optimizer
+from .train import train as _train
 from .utility import (
+    design_matrix_from,
+    lazify,
     read_data,
     set_rng_seed,
-    store_state,
+    spot_size,
+)
+from .utility.state import (
+    State,
+    load_state,
+    save_state,
+    to_device,
 )
 
 
 DEVICE = t.device('cuda' if t.cuda.is_available() else 'cpu')
 
 
-def _train(
-        histonet,
-        std,
-        optimizer,
-        image,
-        data,
-        label,
-        workers=None,
-        seed=None,
+def _logged_command(get_output_dir):
+    def _decorator(f):
+        @wraps(f)
+        def _wrapper(*args, **kwargs):
+            output_dir = get_output_dir(*args, **kwargs)
+
+            if os.path.exists(output_dir):
+                log(ERROR, 'output directory %s already exists', output_dir)
+                sys.exit(1)
+
+            os.makedirs(output_dir)
+
+            with LoggedExecution(os.path.join(output_dir, 'log')):
+                log(INFO, 'this is %s %s', __package__, __version__)
+                log(DEBUG, 'invoked by %s', ' '.join(sys.argv))
+                log(INFO, 'device: %s', str(DEVICE))
+
+                f(*args, **kwargs)
+        return _wrapper
+    return _decorator
+
+
+@click.group()
+@click.option('-v', '--verbose', is_flag=True)
+@click.version_option()
+def cli(verbose):
+    if verbose:
+        set_level(DEBUG)
+    else:
+        set_level(INFO)
+
+
+@click.command()
+@click.argument('design-file', type=click.File('rb'))
+@click.option('--factors', type=int, default=50)
+@click.option('--patch-size', type=int, default=512)
+@click.option('--lr', type=float, default=1e-3)
+@click.option('--batch-size', type=int, default=8)
+@click.option('--workers', type=int)
+@click.option('--seed', type=int)
+@click.option(
+    '--restore',
+    'state_file',
+    type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+)
+@click.option(
+    '-o', '--output',
+    type=click.Path(resolve_path=True),
+    default=f'{__package__}-{dt.now().isoformat()}',
+)
+@click.option('--checkpoint', 'chkpt_interval', type=int)
+@click.option('--image', 'image_interval', type=int, default=1000)
+@click.option('--epochs', type=int)
+@_logged_command(lambda *_, **args: args['output'])
+def train(
+        design_file,
+        factors,
+        patch_size,
+        lr,
+        output,
+        state_file,
+        workers,
+        seed,
         **kwargs,
 ):
     if seed is not None:
@@ -61,230 +129,177 @@ def _train(
                 '(set --workers explicitly to override)')
             workers = 0
 
-    train(
-        histonet,
-        std,
-        optimizer,
-        image,
-        label,
-        data,
-        workers=workers,
-        device=DEVICE,
-        **kwargs,
-    )
+    design = pd.read_csv(design_file)
+    design_dir = os.path.dirname(design_file.name)
 
-
-def _analyze(
-        histonet,
-        std,
-        image,
-        analysis_type,
-        data=None,
-        label=None,
-        **kwargs,
-):
-    if analysis_type == 'default':
-        analyze(histonet, std, image, data, label, **kwargs)
-    elif analysis_type == 'genes':
-        analyze_genes(histonet, std, image, **kwargs)
-    elif analysis_type == 'gene_profiles':
-        analyze_gene_profiles(std, **kwargs)
-    else:
-        raise ValueError(f'invalid analysis type "{analysis_type}"')
-
-
-
-def main():
-    import argparse as ap
-
-    parser = ap.ArgumentParser()
-
-    parser.add_argument('data-dir', type=str)
-    parser.add_argument(
-        '--output-prefix',
-        type=str,
-        default=f'./hssl-{dt.now().isoformat()}',
-    )
-    parser.add_argument('--state', type=str)
-
-    subparsers = parser.add_subparsers()
-
-    train_parser = subparsers.add_parser('train')
-    train_parser.set_defaults(f=_train)
-
-    train_parser.add_argument('--latent-size', type=int, default=16)
-    train_parser.add_argument('--zoom', type=float, default=1.)
-    train_parser.add_argument('--genes', type=int)
-    train_parser.add_argument('--patch-size', type=int, default=700)
-    train_parser.add_argument('--batch-size', type=int, default=5)
-
-    train_parser.add_argument('--image-interval', type=int, default=100)
-    train_parser.add_argument('--chkpt-interval', type=int, default=100)
-    train_parser.add_argument('--workers', type=int)
-    train_parser.add_argument('--seed', type=int)
-    train_parser.add_argument('--learning-rate', type=float, default=1e-5)
-
-    analyze_parser = subparsers.add_parser('analyze')
-    analyze_parser.set_defaults(f=_analyze)
-
-    analyze_subparsers = analyze_parser.add_subparsers()
-
-    analyze_default = analyze_subparsers.add_parser('default')
-    analyze_default.set_defaults(analysis_type='default')
-
-    analyze_profiles = analyze_subparsers.add_parser('gene-profiles')
-    analyze_profiles.set_defaults(analysis_type='gene_profiles')
-
-    analyze_gene = analyze_subparsers.add_parser('genes')
-    analyze_gene.set_defaults(analysis_type='genes')
-    analyze_gene.add_argument('which', nargs='+', type=str)
-
-    opts = vars(parser.parse_args())
-
-    run_func = opts.pop('f')
-
-    def _go():
-        from . import __version__
-        log(INFO, '%s %s', __package__, __version__)
-        log(DEBUG, 'invocation: %s', ' '.join(sys.argv))
-        log(INFO, '%s', ', '.join([f'{k}={v}' for k, v in opts.items()]))
-
-        log(DEBUG, 'using device: %s', str(DEVICE))
-
-        state = opts.pop('state')
-        if state is None and run_func is not _train:
-            raise RuntimeError('--state must be provided if not training')
-        if state is not None:
-            state = t.load(state, map_location='cpu')
-
-        data_dir = opts.pop('data-dir')
-
-        image = imread(os.path.join(data_dir, 'image.tif'))
-
-        label_path = os.path.join(data_dir, 'label.tif')
-        data_path = os.path.join(data_dir, 'data.csv.gz')
-        if all(map(os.path.exists, (label_path, data_path))):
-            label = imread(label_path)
-            if run_func is _train:
-                genes = opts.pop('genes')
-            if state is not None:
-                genes = state['genes']
-            data = read_data(data_path, genes=genes)
-        else:
-            label = data = None
-
-        if run_func is _train:
-            zoom_level = opts.pop('zoom')
-        else:
-            zoom_level = None
-        if state is not None:
-            zoom_level = state['zoom_level']
-        if zoom_level < 1:
-            from scipy.ndimage.interpolation import zoom
-            if label is not None:
-                label = zoom(label, (zoom_level, zoom_level), order=0)
-            if image is not None:
-                image = zoom(image, (zoom_level, zoom_level, 1))
-
-        if state is not None:
-            histonet = (
-                Histonet(**state['model_init_args']['histonet'])
-                .to(DEVICE)
-            )
-            std = (
-                STD(**state['model_init_args']['std'])
-                .to(DEVICE)
-            )
-            histonet.load_state_dict(state['model']['histonet'])
-            std.load_state_dict(state['model']['std'])
-            if run_func is _train:
-                opts.pop('latent_size')
-        elif run_func is _train:
-            histonet = (
-                Histonet(latent_size=opts.pop('latent_size'))
-                .to(DEVICE)
-            )
-            std = (
-                STD(
-                    genes=data.columns,
-                    gene_baseline=data.values.mean(0),
-                )
-                .to(DEVICE)
-            )
-            t.nn.init.normal_(
-                histonet.mixture_loadings[-1].weight,
-                std=1e-5,
-            )
-            t.nn.init.normal_(
-                histonet.mixture_loadings[-1].bias,
-                mean=-np.log(np.mean(np.bincount(label.flatten())[1:]) * 50),
-                std=1e-5,
-            )
-        else:
-            raise RuntimeError()
-
-        image = t.tensor(image).permute(2, 0, 1).float() / 255 * 2 - 1
-
-        if run_func is _train:
-            optimizer = t.optim.Adam(
-                it.chain(
-                    histonet.parameters(),
-                    std.parameters(),
-                ),
-                lr=opts.pop('learning_rate'),
-            )
-            if state is not None:
-                optimizer.load_state_dict(state['optimizer']['default'])
-
-            extra_kwargs = {
-                'start_epoch': 1 if state is None else state['epoch'] + 1,
-                'store_state': partial(
-                    store_state,
-                    zoom_level=zoom_level,
-                    genes=list(data.columns),
-                ),
-                'optimizer': optimizer,
-            }
-        else:
-            extra_kwargs = {}
-
-        run_func(
-            histonet=histonet,
-            std=std,
-            image=image,
-            data=data,
-            label=label,
-            **opts,
-            **extra_kwargs,
+    def _path(p):
+        return (
+            p
+            if os.path.isabs(p) else
+            os.path.join(design_dir, p)
         )
 
-    os.makedirs(opts['output_prefix'], exist_ok=True)
+    count_data = read_data(map(_path, design.data))
 
-    with open(os.path.join(opts['output_prefix'], 'log'), 'a') as log_file:
-        from logging import StreamHandler
-        from .logging import Formatter, LOGGER
-        log_handler = StreamHandler(log_file)
-        log_handler.setFormatter(Formatter(fancy_formatting=False))
-        LOGGER.addHandler(log_handler)
-        set_level(DEBUG)
-
-        try:
-            _go()
-        except Exception as err:
-            from traceback import format_exc
-            from .logging import LOGGER
-            trace = err.__traceback__
-            while trace.tb_next is not None:
-                trace = trace.tb_next
-            frame = trace.tb_frame
-            LOGGER.findCaller = (
-                lambda self, stack_info=None, f=frame:
-                (f.f_code.co_filename, f.f_lineno, f.f_code.co_name, None)
+    dataset = Dataset(
+        [
+            Slide(
+                image=Image.new_from_file(_path(image)),
+                label=Image.new_from_file(_path(labels)),
+                data=counts,
+                patch_size=patch_size,
             )
-            log(ERROR, str(err))
-            log(DEBUG, format_exc().strip())
-            sys.exit(1)
+            for image, labels, counts in zip(
+                design.image,
+                design.labels,
+                (count_data.loc[x] for x in count_data.index.levels[0])
+            )
+        ],
+        design_matrix_from(
+            design.iloc[:, [
+                x not in ['image', 'labels', 'data']
+                for x in design.columns
+            ]],
+        ),
+    )
+
+    state: State
+    if state_file is not None:
+        state = load_state(state_file)
+    else:
+        histonet = Histonet(
+            num_factors=factors,
+        )
+        t.nn.init.normal_(
+            histonet.mixture_loadings[-1].weight,
+            std=1e-5,
+        )
+        t.nn.init.normal_(
+            histonet.mixture_loadings[-1].bias,
+            mean=-np.log(spot_size(dataset) * factors),
+            std=1e-5,
+        )
+
+        std = STD(
+            genes=count_data.columns,
+            num_factors=factors,
+            fixed_effects=len(dataset.design),
+            gene_baseline=count_data.mean(0).values,
+        )
+
+        state = State(
+            histonet=histonet,
+            std=std,
+            optimizer=create_optimizer(
+                histonet,
+                std,
+                learning_rate=lr,
+            ),
+            epoch=0,
+        )
+
+    state = _train(
+        state=to_device(state, DEVICE),
+        dataset=dataset,
+        output_prefix=output,
+        workers=workers,
+        **kwargs,
+    )
+
+    save_state(state, os.path.join(output, 'final-state.pkl'))
+
+
+cli.add_command(train)
+
+
+@click.group(chain=True)
+@click.argument(
+    'state-file',
+    type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+)
+@click.option(
+    '--image',
+    type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+)
+@click.option(
+    '-o', '--output',
+    type=click.Path(resolve_path=True),
+    default=f'{__package__}-{dt.now().isoformat()}',
+)
+def analyze(**_):
+    pass
+
+
+@analyze.resultcallback()
+@_logged_command(lambda *_, **args: args['output'])
+def _run_analysis(analyses, state_file, image, output):
+    state = load_state(state_file)
+    to_device(state, DEVICE)
+
+    @lazify
+    def _image():
+        if image is None:
+            raise ValueError('no image has been provided')
+        return Image.new_from_file(image)
+
+    for name, analysis in analyses:
+        log(INFO, 'performing analysis: %s', name)
+        analysis(
+            state=state,
+            image_provider=_image,
+            output=output,
+        )
+
+
+cli.add_command(analyze)
+
+
+@click.command()
+@click.argument('gene-list', nargs=-1)
+def genes(gene_list):
+    def _analysis(state, image_provider, output):
+        analyze_genes(
+            state.histonet,
+            state.std,
+            image_provider(),
+            gene_list,
+            output_prefix=output,
+            device=DEVICE,
+        )
+    return 'gene list', _analysis
+
+
+analyze.add_command(genes)
+
+
+@click.command()
+def gene_profiles():
+    def _analysis(state, output, **_):
+        analyze_gene_profiles(
+            state.std,
+            output_prefix=output,
+        )
+    return 'gene profiles', _analysis
+
+
+analyze.add_command(gene_profiles)
+
+
+@click.command()
+def default():
+    def _analysis(state, image_provider, output):
+        default_analysis(
+            state.histonet,
+            state.std,
+            image_provider(),
+            output_prefix=output,
+            device=DEVICE,
+        )
+    return 'default', _analysis
+
+
+analyze.add_command(default)
 
 
 if __name__ == '__main__':
-    main()
+    cli()

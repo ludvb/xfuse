@@ -6,11 +6,15 @@ import itertools as it
 
 import os
 
-from imageio import imread, imwrite
+from imageio import imread
 
 import numpy as np
 
 import pandas as pd
+
+from scipy.ndimage.interpolation import zoom
+
+from tifffile import imwrite
 
 from tqdm import tqdm
 
@@ -19,7 +23,7 @@ Spot = namedtuple('Spot', ['x', 'y', 'r'])
 
 
 def run(image, counts, spots):
-    label = np.zeros(image.shape[:2]).astype(np.int64)
+    label = np.zeros(image.shape[:2]).astype(np.int16)
 
     print('filling labels')
     iterator = tqdm(spots, dynamic_ncols=True)
@@ -67,17 +71,28 @@ def main():
     parser.add_argument('--counts')
     parser.add_argument('--spots')
     parser.add_argument('--output-directory')
+    parser.add_argument('--compress', default=0)
+    parser.add_argument('--zoom', type=float)
 
     opts = vars(parser.parse_args())
 
     output_directory = opts.pop('output_directory')
     os.makedirs(output_directory)
 
-    # image = imread(opts.pop('image'))
+    compression = opts.pop('compress')
+
+    image = imread(opts.pop('image'))
+
+    zoom_level = opts.pop('zoom')
+    if zoom_level is not None:
+        image = zoom(image, (zoom_level, zoom_level, 1.), order=0)
+
     counts = pd.read_csv(opts.pop('counts'), sep='\t', index_col=0)
     spots = opts.pop('spots')
     if spots is not None:
         spots = pd.read_csv(spots, sep='\t')
+        if zoom_level is not None:
+            spots[['pixel_x', 'pixel_y']] *= zoom_level
         counts = counts.loc[
             spots[['x', 'y']]
             .apply(lambda x: 'x'.join(map(str, x)), 1)
@@ -107,18 +122,28 @@ def main():
     counts = counts.reset_index().rename({'index': 'n'}, axis='columns')
     counts['n'] = [*range(1, len(counts) + 1)]
 
-    counts_, image_, label = run(image, counts, spots)
+    counts, image, label = run(image, counts, spots)
 
     print('writing counts...')
-    counts_.to_csv(
+    counts.to_csv(
         os.path.join(output_directory, 'data.csv.gz'),
         sep=',',
         index=False,
     )
     print('writing image...')
-    imwrite(os.path.join(output_directory, 'image.tif'), image_)
+    imwrite(
+        os.path.join(output_directory, 'image.tif'),
+        image,
+        tile=(256, 256),
+        compress=compression,
+    )
     print('writing labels...')
-    imwrite(os.path.join(output_directory, 'label.tif'), label)
+    imwrite(
+        os.path.join(output_directory, 'label.tif'),
+        label,
+        tile=(256, 256),
+        compress=compression,
+    )
 
 
 if __name__ == '__main__':
