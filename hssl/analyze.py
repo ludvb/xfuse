@@ -23,9 +23,8 @@ import torch as t
 from torchvision.utils import make_grid
 
 from .image import to_array
-from .logging import DEBUG, INFO, WARNING, log
+from .logging import DEBUG, WARNING, log
 from .network import Histonet, STD
-from .utility import center_crop, integrate_loadings
 
 
 def run_tsne(y, n_components=3, initial_dims=20):

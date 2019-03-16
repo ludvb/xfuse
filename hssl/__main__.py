@@ -24,7 +24,7 @@ from .analyze import (
     analyze_gene_profiles,
     analyze_genes,
 )
-from .dataset import Dataset, Slide
+from .dataset import Dataset, Slide, spot_size
 from .logging import (
     DEBUG,
     ERROR,
@@ -42,7 +42,6 @@ from .utility import (
     lazify,
     read_data,
     set_rng_seed,
-    spot_size,
 )
 from .utility.state import (
     State,

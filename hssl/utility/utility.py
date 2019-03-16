@@ -10,7 +10,6 @@ import pandas as pd
 
 import torch as t
 
-from ..dataset import Dataset
 from ..logging import INFO, log
 
 
@@ -140,13 +139,6 @@ def integrate_loadings(loadings: t.Tensor, label: t.Tensor):
             ),
         )
     )
-
-
-def spot_size(dataset: Dataset):
-    return np.mean(np.concatenate([
-        np.bincount(d['label'].flatten())[1:]
-        for d in dataset
-    ]))
 
 
 def with_interrupt_handler(handler):
