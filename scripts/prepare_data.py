@@ -55,6 +55,7 @@ def run(image, counts, spots):
 
     xmin, xmax, ymin, ymax = [
         int(round(x)) for x in (xmin, xmax, ymin, ymax)]
+    xmin, ymin = [max(a, 0) for a in (xmin, ymin)]
 
     return (
         counts,
