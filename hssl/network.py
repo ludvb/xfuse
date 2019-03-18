@@ -6,6 +6,7 @@ import torch as t
 
 from .distributions import Distribution, Normal, Variable
 from .logging import DEBUG, log
+from .utility import center_crop
 from .utility.init_args import store_init_args
 
 
@@ -109,7 +110,7 @@ class Histonet(Variational):
         self._register_latent(self.z, Normal())
 
         self.decoder = t.nn.Sequential(
-            t.nn.Conv2d(latent_size, 16 * nf, 5, padding=2),
+            t.nn.Conv2d(latent_size, 16 * nf, 5, padding=4),
             # x16
             t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.BatchNorm2d(16 * nf),
@@ -192,7 +193,10 @@ class Histonet(Variational):
 
     def forward(self, x):
         z, z_mu, z_sd = self.encode(x)
-        ys = self.decode(z)
+        ys = [
+            center_crop(y, [None, None, *x.shape[-2:]])
+            for y in self.decode(z)
+        ]
         return (z, *ys)
 
 
