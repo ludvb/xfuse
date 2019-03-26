@@ -14,6 +14,8 @@ from scipy.ndimage.interpolation import zoom
 
 from tifffile import imwrite
 
+import tissue_recognition as tr
+
 from tqdm import tqdm
 
 
@@ -41,20 +43,39 @@ def run(image, counts, spots):
     xmin, ymin = np.min(cs, 0)
     xmax, ymax = np.max(cs, 0)
 
-    xmin -= 0.1 * (xmax - xmin)
-    xmax += 0.1 * (xmax - xmin)
-    ymin -= 0.1 * (ymax - ymin)
-    ymax += 0.1 * (ymax - ymin)
+    xmin -= 0.2 * (xmax - xmin)
+    xmax += 0.2 * (xmax - xmin)
+    ymin -= 0.2 * (ymax - ymin)
+    ymax += 0.2 * (ymax - ymin)
 
     xmin, xmax, ymin, ymax = [
         int(round(x)) for x in (xmin, xmax, ymin, ymax)]
     xmin, ymin = [max(a, 0) for a in (xmin, ymin)]
 
-    return (
-        counts,
-        image[ymin:ymax, xmin:xmax],
-        label[ymin:ymax, xmin:xmax],
+    image = image[ymin:ymax, xmin:xmax]
+    label = label[ymin:ymax, xmin:xmax]
+
+    # add count values for sites outside the tissue
+    mask = np.zeros(image.shape[:2], dtype=np.uint8)
+    print('running tissue recognition...')
+    tr.recognize_tissue(image.copy(), mask)
+    mask = tr.get_binary_mask(mask)
+
+    counts.n += 1
+    label[label != 0] += 1
+
+    counts = pd.concat(
+        [
+            pd.DataFrame(
+                [[1, *np.repeat(0, counts.shape[1] - 1)]],
+                columns=counts.columns,
+            ),
+            counts,
+        ]
     )
+    label[np.invert(mask).astype(bool)] = 1
+
+    return counts, image, label
 
 
 def main():
