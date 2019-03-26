@@ -2,8 +2,6 @@
 
 from collections import namedtuple
 
-import itertools as it
-
 import os
 
 from imageio import imread
@@ -32,14 +30,9 @@ def run(image, counts, spots):
         label[
             tuple(zip(*(
                 (y - dy, x - dx)
-                for dy, dx in
-                filter(
-                    lambda x: np.sum(np.array(x) ** 2) <= s.r ** 2,
-                    it.product(
-                        range(-r, r + 1),
-                        range(-r, r + 1),
-                    )
-                )
+                for dy in range(-r, r + 1)
+                for dx in range(-r, r + 1)
+                if dy ** 2 + dx ** 2 <= s.r ** 2
             )))
         ] = i
 
