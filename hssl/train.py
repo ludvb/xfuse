@@ -172,7 +172,8 @@ def train(
                 ),
                 (dim_red(z), 'z'),
                 (dim_red(loadings), 'fct'),
-                (dim_red(loadings / loadings.sum(1).unsqueeze(1)), 'fct-rel'),
+                (dim_red(loadings.exp() / loadings.exp().sum(1).unsqueeze(1)),
+                 'fct-rel'),
                 (dim_red(state), 'state'),
         ]:
             imwrite(

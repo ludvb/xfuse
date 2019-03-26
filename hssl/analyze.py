@@ -175,6 +175,17 @@ def analyze(
         / 255 * 2 - 1
     )
 
+    std.resample()
+    factors = (
+        loadings.exp()
+        * (
+            (std.rate_gt * std.logit.exp()[..., None])
+            .sum(0)
+            [None, ..., None, None]
+        )
+    )
+    mix = factors / factors.sum(1).unsqueeze(1)
+
     for b, prefix in [
             (
                 (
@@ -188,7 +199,7 @@ def analyze(
                 'he',
             ),
             (dim_red(z), 'z'),
-            (dim_red(loadings), 'fct'),
+            (dim_red(mix), 'fct'),
             (dim_red(state), 'state'),
     ]:
         imwrite(
@@ -199,7 +210,7 @@ def analyze(
     with PdfPages(os.path.join(
             output_prefix, f'factors.pdf')) as pdf:
         for p, f in (
-                (loadings.exp()[0, f].detach().cpu().numpy(), f)
+                (mix[0, f].detach().cpu().numpy(), f)
                 for f in order_factors(std)
         ):
             plt.figure()
