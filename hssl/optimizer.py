@@ -20,5 +20,6 @@ def create_optimizer(
             learning_rate
             if learning_rate is not None else
             signature(t.optim.Adam).parameters['lr'].default
-        )
+        ),
+        amsgrad=True,
     )
