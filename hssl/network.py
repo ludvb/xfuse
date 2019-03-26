@@ -241,12 +241,18 @@ class STD(Variational):
         _make_covariate('lg', (len(genes), ), True)
 
         if fixed_effects is not None and fixed_effects > 0:
-            _make_covariate('reff', (fixed_effects, ), False)
-            _make_covariate('leff', (fixed_effects, ), False)
+            _make_covariate('reff', (fixed_effects,), True)
+            _make_covariate('leff', (fixed_effects,), True)
+            _make_covariate('rgeff', (fixed_effects, len(genes)), False)
+            _make_covariate('lgeff', (fixed_effects, len(genes)), False)
             self._rate_effect = lambda x: (
-                t.einsum('in,n->i', x, self.reff.value))
+                t.einsum('in,n->i', x, self.reff.value)[..., None]
+                + t.einsum('in,ng->ig', x, self.rgeff.value)
+            )
             self._logit_effect = lambda x: (
-                t.einsum('in,n->i', x, self.leff.value))
+                t.einsum('in,n->i', x, self.leff.value)[..., None]
+                + t.einsum('in,ng->ig', x, self.lgeff.value)
+            )
         else:
             self._rate_effect = self._logit_effect = (
                 lambda x: t.tensor([0.]).to(x))
@@ -288,6 +294,6 @@ class STD(Variational):
         logit = self.logit[None]
         if effects is not None:
             effects = effects.float()
-            rate = rate * t.exp(self._rate_effect(effects)[:, None])
-            logit = logit + self._logit_effect(effects)[:, None]
+            rate = rate * t.exp(self._rate_effect(effects))
+            logit = logit + self._logit_effect(effects)
         return rate, logit
