@@ -246,12 +246,14 @@ class STD(Variational):
             _make_covariate('rgeff', (fixed_effects, len(genes)), False)
             _make_covariate('lgeff', (fixed_effects, len(genes)), False)
             self._rate_effect = lambda x: (
-                t.einsum('in,n->i', x, self.reff.value)[..., None]
-                + t.einsum('in,ng->ig', x, self.rgeff.value)
+                x @ (self.reff.value[..., None] + self.rgeff.value)
+                # t.einsum('in,n->i', x, self.reff.value)[..., None]
+                # + t.einsum('in,ng->ig', x, self.rgeff.value)
             )
             self._logit_effect = lambda x: (
-                t.einsum('in,n->i', x, self.leff.value)[..., None]
-                + t.einsum('in,ng->ig', x, self.lgeff.value)
+                x @ (self.leff.value[..., None] + self.lgeff.value)
+                # t.einsum('in,n->i', x, self.leff.value)[..., None]
+                # + t.einsum('in,ng->ig', x, self.lgeff.value)
             )
         else:
             self._rate_effect = self._logit_effect = (
@@ -290,7 +292,7 @@ class STD(Variational):
 
     def forward(self, x, effects=None):
         self.resample()
-        rate = t.einsum('it,gt->ig', x, self.rate_gt)
+        rate = x @ self.rate_gt.t()  # t.einsum('it,gt->ig', x, self.rate_gt)
         logit = self.logit[None]
         if effects is not None:
             effects = effects.float()
