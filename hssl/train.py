@@ -185,8 +185,10 @@ def train(
         histonet.train()
 
     def _interrupt_handler(*_):
-        log(INFO, 'interrupted')
-        raise Interrupted()
+        from multiprocessing import current_process
+        if current_process().name == 'MainProcess':
+            log(INFO, 'interrupted')
+            raise Interrupted()
 
     @with_interrupt_handler(_interrupt_handler)
     def _run_training():
