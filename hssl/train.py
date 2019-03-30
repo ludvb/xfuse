@@ -4,7 +4,7 @@ import itertools as it
 
 import os
 
-from typing import Optional
+from typing import List, Optional
 
 from imageio import imwrite
 
@@ -16,16 +16,62 @@ from .analyze import dim_red, visualize_batch
 from .dataset import Dataset, collate
 from .logging import INFO, log
 from .utility import (
+    chunks_of,
     collect_items,
     integrate_loadings,
     with_interrupt_handler,
     zip_dicts,
 )
-from .utility.state import State, save_state
+from .utility.state import State, save_state, to_device
 
 
 class Interrupted(Exception):
     pass
+
+
+class Step(t.nn.Module):
+    def __init__(self, histonet, std, dataset_size):
+        super().__init__()
+        self.histonet = histonet
+        self.std = std
+        self.m = dataset_size
+
+    def forward(self, x):
+        try:
+            # FIXME: see .dataset:collate
+            effects = x['effects']
+        except KeyError:
+            effects = None
+
+        _z, img_mu, img_sd, loadings, _state = self.histonet(x['image'])
+
+        integrated_loadings = integrate_loadings(loadings, x['label'])
+        rate, logit = self.std(integrated_loadings[1:], effects)
+        lpimg = (
+            t.distributions.Normal(img_mu, img_sd)
+            .log_prob(x['image'])
+        )
+        d = t.distributions.NegativeBinomial(rate, logits=logit)
+
+        lpobs = d.log_prob(x['data'])
+
+        hdkl = self.histonet.complexity_cost(len(x) / self.m)
+        sdkl = self.std.complexity_cost(len(x) / self.m)
+        dkl = hdkl + sdkl
+        img_loss = -t.sum(lpimg)
+        xpr_loss = -t.sum(lpobs)
+
+        loss = img_loss + xpr_loss + dkl
+
+        return {k: v.unsqueeze(0) for k, v in {
+            'L': loss,
+            'Li': img_loss,
+            'Lx': xpr_loss,
+            'dqp': dkl,
+            'p(img|z)': t.mean(t.exp(lpimg)),
+            'p(xpr|z)': t.mean(t.exp(lpobs)),
+            'rmse': t.mean(t.sqrt(t.mean((d.mean - x['data']) ** 2, 1))),
+        }.items()}
 
 
 def train(
@@ -37,18 +83,26 @@ def train(
         chkpt_interval: Optional[int] = 10000,
         epochs: Optional[int] = None,
         workers: int = None,
-        device: t.device = None,
+        devices: Optional[List[t.device]] = None,
 ) -> State:
     if workers is None:
         workers = len(os.sched_getaffinity(0))
 
-    if device is None:
-        device = t.device('cuda' if t.cuda.is_available() else 'cpu')
+    if devices is None:
+        devices = [*map(t.device, (
+            [f'cuda:{i}' for i in range(t.cuda.device_count())]
+            if t.cuda.device_count() > 0 else
+            ['cpu']
+        ))]
+
+    state = to_device(state, devices[0])
 
     histonet = state.histonet
     std = state.std
     optimizer = state.optimizer
     epoch = state.epoch + 1
+
+    stepper = Step(histonet, std, len(dataset))
 
     img_prefix = os.path.join(output_prefix, 'images')
     chkpt_prefix = os.path.join(output_prefix, 'checkpoints')
@@ -72,44 +126,24 @@ def train(
 
     fixed_data = next(iter(dataloader))
 
-    def _step(x):
-        x = {k: v.to(device) for k, v in x.items()}
-
-        z, img_mu, img_sd, loadings, _state = histonet(x['image'])
-
-        lpimg = (
-            t.distributions.Normal(img_mu, img_sd)
-            .log_prob(x['image'])
+    def _step(xs):
+        inputs = [
+            {k: v.to(dev) for k, v in dat.items()}
+            for dev, dat in zip(devices, xs)
+        ]
+        outputs = t.nn.parallel.gather(
+            t.nn.parallel.parallel_apply(
+                t.nn.parallel.replicate(stepper, devices[:len(inputs)]),
+                inputs,
+            ),
+            devices[0],
         )
 
-        integrated_loadings = integrate_loadings(loadings, x['label'])
-        rate, logit = std(integrated_loadings[1:], x['effects'])
-        d = t.distributions.NegativeBinomial(rate, logits=logit)
-
-        data = x['data']
-        lpobs = d.log_prob(data)
-
-        hdkl = histonet.complexity_cost(len(x) / len(dataset))
-        sdkl = std.complexity_cost(len(x) / len(dataset))
-        dkl = hdkl + sdkl
-
-        img_loss = -t.sum(lpimg)
-        xpr_loss = -t.sum(lpobs)
-        loss = img_loss + xpr_loss + dkl
-
         optimizer.zero_grad()
-        loss.backward()
+        t.sum(outputs['L']).backward()
         optimizer.step()
 
-        return collect_items({
-            'L': loss,
-            'Li': img_loss,
-            'Lx': xpr_loss,
-            'dqp': dkl,
-            'p(img|z)': t.mean(t.exp(lpimg)),
-            'p(xpr|z)': t.mean(t.exp(lpobs)),
-            'rmse': t.mean(t.sqrt(t.mean((d.mean - data) ** 2, 1))),
-        })
+        return collect_items({k: t.mean(v) for k, v in outputs.items()})
 
     t.enable_grad()
     histonet.train()
@@ -117,6 +151,7 @@ def train(
     def _report(epoch, output):
         iteration = output.pop('iteration')
 
+        dataset_size = int(np.ceil(len(dataloader) / len(devices)))
         log(
             INFO,
             ' '.join([
@@ -125,7 +160,7 @@ def train(
                     epochs=str(epochs) if epochs is not None else '∞',
                 ),
                 ' '
-                f'(%0{len(str(len(dataloader)))}d/{len(dataloader)})'
+                f'(%0{len(str(dataset_size))}d/{dataset_size})'
                 % iteration[-1],
                 ' :: ',
                 '  |  '.join([
@@ -155,7 +190,8 @@ def train(
         t.no_grad()
         histonet.eval()
 
-        z, mu, sd, loadings, state = histonet(fixed_data['image'].to(device))
+        z, mu, sd, loadings, state = histonet(
+            fixed_data['image'].to(devices[0]))
 
         for data, prefix in [
                 (
@@ -205,11 +241,12 @@ def train(
                             filter(lambda y: y is not None, x),
                         ),
                     ),
-                    it.zip_longest(
-                        *[(
-                            (i, _step(x)) for i, x in enumerate(dataloader, 1)
-                        )] * 10
-                    ),
+                    chunks_of(10, (
+                        (i, _step(xs)) for i, xs in enumerate(
+                            chunks_of(len(devices), dataloader),
+                            1,
+                        )
+                    ))
             ):
                 _report(epoch, output)
 

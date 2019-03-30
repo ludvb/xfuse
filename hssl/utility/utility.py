@@ -1,4 +1,4 @@
-from functools import wraps
+from functools import partial, wraps
 
 import itertools as it
 
@@ -163,3 +163,12 @@ def lazify(computation):
     def _wrapped():
         return next(g)
     return _wrapped
+
+
+def chunks_of(n, xs):
+    class FillMarker:
+        pass
+    return map(
+        lambda xs: [*filter(lambda x: x is not FillMarker, xs)],
+        it.zip_longest(*[iter(xs)]*n, fillvalue=FillMarker),
+    )

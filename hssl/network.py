@@ -5,7 +5,7 @@ import numpy as np
 import torch as t
 
 from .distributions import Distribution, Normal, Variable
-from .logging import DEBUG, log
+from .logging import DEBUG, WARNING, log
 from .utility import center_crop
 from .utility.init_args import store_init_args
 
@@ -13,26 +13,36 @@ from .utility.init_args import store_init_args
 class Variational(t.nn.Module):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._latents = dict()
+        self._latents = []
 
     def _register_latent(
             self,
             variable: Variable,
             prior: Distribution,
+            id: str,
             is_global: bool = False,
     ):
-        varid = id(variable)
-        if varid in self._latents:
+        if id in self._latents:
             raise RuntimeError(f'variable {id} has already been registered')
 
-        log(DEBUG, 'registering latent variable %d', varid)
-        self._latents[varid] = variable, prior, is_global
+        log(DEBUG, 'registering latent variable %s', id)
+        setattr(self, f'{id}', variable)
+        setattr(self, f'{id}_p', prior)
+        setattr(self, f'{id}_is_global', is_global)
+        self._latents.append(id)
+
+    def _get_latent(self, latent_id: int):
+        return (
+            getattr(self, f'{latent_id}'),
+            getattr(self, f'{latent_id}_p'),
+            getattr(self, f'{latent_id}_is_global'),
+        )
 
     def complexity_cost(self, batch_fraction):
         return sum([
             t.sum(x.distribution.log_prob(x.value) - p.log_prob(x.value))
             * (batch_fraction if g else 1.)
-            for x, p, g in self._latents.values()
+            for x, p, g in map(self._get_latent, self._latents)
         ])
 
 
@@ -107,7 +117,7 @@ class Histonet(Variational):
             t.nn.Conv2d(16 * nf, latent_size, 3, 1, 1, bias=True),
         )
         self.z = Variable(Normal())
-        self._register_latent(self.z, Normal())
+        self._register_latent(self.z, Normal(), 'z')
 
         self.decoder = t.nn.Sequential(
             t.nn.Conv2d(latent_size, 16 * nf, 5, padding=4),
@@ -219,18 +229,15 @@ class STD(Variational):
             self.register_parameter(f'{name}_q_mu', mu)
             self.register_parameter(f'{name}_q_sd', sd)
             q = Normal().set(loc=mu, scale=sd, r_transform=True)
-            setattr(self, f'{name}_q', q)
             v = Variable(q)
-            setattr(self, f'{name}', v)
 
             p_mu = t.nn.Parameter(t.tensor(0.), requires_grad=learn_prior)
             p_sd = t.nn.Parameter(t.tensor(0.), requires_grad=learn_prior)
             self.register_parameter(f'{name}_p_mu', p_mu)
             self.register_parameter(f'{name}_p_sd', p_sd)
             p = Normal().set(loc=p_mu, scale=p_sd, r_transform=True)
-            setattr(self, f'{name}_p', p)
 
-            self._register_latent(v, p, True)
+            self._register_latent(v, p, name, True)
 
         _make_covariate('r', (1, ), True)
         _make_covariate('rg', (len(genes), ), True)
@@ -245,19 +252,6 @@ class STD(Variational):
             _make_covariate('leff', (fixed_effects,), True)
             _make_covariate('rgeff', (fixed_effects, len(genes)), False)
             _make_covariate('lgeff', (fixed_effects, len(genes)), False)
-            self._rate_effect = lambda x: (
-                x @ (self.reff.value[..., None] + self.rgeff.value)
-                # t.einsum('in,n->i', x, self.reff.value)[..., None]
-                # + t.einsum('in,ng->ig', x, self.rgeff.value)
-            )
-            self._logit_effect = lambda x: (
-                x @ (self.leff.value[..., None] + self.lgeff.value)
-                # t.einsum('in,n->i', x, self.leff.value)[..., None]
-                # + t.einsum('in,ng->ig', x, self.lgeff.value)
-            )
-        else:
-            self._rate_effect = self._logit_effect = (
-                lambda x: t.tensor([0.]).to(x))
 
         if gene_baseline is not None:
             if len(gene_baseline) != len(genes):
@@ -286,16 +280,18 @@ class STD(Variational):
         return self.l.value + self.lg.value
 
     def resample(self):
-        for v, *_ in self._latents.values():
+        for v, *_ in map(self._get_latent, self._latents):
             v.sample()
         return self
 
     def forward(self, x, effects=None):
         self.resample()
-        rate = x @ self.rate_gt.t()  # t.einsum('it,gt->ig', x, self.rate_gt)
+        rate = x @ self.rate_gt.t()
         logit = self.logit[None]
         if effects is not None:
             effects = effects.float()
-            rate = rate * t.exp(self._rate_effect(effects))
-            logit = logit + self._logit_effect(effects)
+            rate = rate * t.exp(
+                effects @ (self.reff.value[..., None] + self.rgeff.value))
+            logit = logit + (
+                effects @ (self.leff.value[..., None] + self.lgeff.value))
         return rate, logit

@@ -3,8 +3,9 @@ from abc import abstractmethod
 import torch as t
 
 
-class Distribution:
+class Distribution(t.nn.Module):
     def __init__(self):
+        super().__init__()
         def _create_getter(name):
             @property
             def _get(self):
@@ -81,12 +82,10 @@ class Distribution:
     def mean(self):
         pass
 
-    def __dict__(self):
-        return self.parameters
 
-
-class Variable:
+class Variable(t.nn.Module):
     def __init__(self, distribution: Distribution):
+        super().__init__()
         self.distribution = distribution
         self.value = None
 

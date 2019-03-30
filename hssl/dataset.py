@@ -131,7 +131,7 @@ class Dataset(t.utils.data.Dataset):
 
 def collate(xs):
     ns, data = zip(*[(len(d), d) for d in (x.pop('data') for x in xs)])
-    effects = [x.pop('effects').expand(n, -1) for n, x in zip(ns, xs)]
+    effects = t.cat([x.pop('effects').expand(n, -1) for n, x in zip(ns, xs)])
     nlabels = [len(d) for d in data]
     labels = [
         (l + n) * (l != 0).long() for l, n in
@@ -139,7 +139,13 @@ def collate(xs):
     ]
     return dict(
         data=t.cat(data),
-        effects=t.cat(effects),
+        **(
+            # FIXME: hacky work-around due to torch.nn.parallel not being able
+            # to scatter zero-dimensional tensors
+            dict(effects=effects)
+            if np.prod(effects.shape) > 0 else
+            {}
+        ),
         label=t.stack(labels),
         **{k: t.stack([x[k] for x in xs]) for k in xs[0].keys()},
     )

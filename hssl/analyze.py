@@ -149,7 +149,7 @@ def visualize_batch(batch, normalize=False, **kwargs):
 
 
 def order_factors(std: STD):
-    return std.rgt_q.loc.exp().sum(0).argsort(descending=True)
+    return std.rgt.distribution.loc.exp().sum(0).argsort(descending=True)
 
 
 def analyze(
@@ -232,8 +232,8 @@ def analyze_gene_profiles(
         )
 
     data = pd.merge(
-        _to_df(std.rgt_q.loc, 'mu'),
-        _to_df(std.rgt_q.scale, 'sd'),
+        _to_df(std.rgt.distribution.loc, 'mu'),
+        _to_df(std.rgt.distribution.scale, 'sd'),
         on=['gene', 'factor'],
     )
     data.to_csv(

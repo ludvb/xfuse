@@ -198,7 +198,7 @@ def train(
         )
 
     state = _train(
-        state=to_device(state, DEVICE),
+        state=state,
         dataset=dataset,
         output_prefix=output,
         workers=workers,
