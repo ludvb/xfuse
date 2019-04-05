@@ -78,9 +78,8 @@ class Histonet(Variational):
     def __init__(
             self,
             num_factors=50,
-            hidden_size=512,
-            latent_size=16,
-            nf=32,
+            latent_size=96,
+            nf=16,
     ):
         super().__init__()
 
