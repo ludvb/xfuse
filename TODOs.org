@@ -17,7 +17,8 @@
   - we could also interpolate new expression values.
     the problem with that is that the visible part of the patch may have an entirely different expression vector.
 
-* TODO [#A] factorize after summing inside spots
+* DONE [#A] factorize after summing inside spots
+  CLOSED: [2019-04-01 Mon 17:43]
   can we even get the factorization working? :/
   if it is working in std, there is no reason why it wouldn't work here?
 
@@ -31,7 +32,8 @@
 
 * TODO [#B] data augmentation
 
-* TODO [#B] multiple datasets
+* DONE [#B] multiple datasets
+  CLOSED: [2019-04-01 Mon 17:43]
 
 * TODO [#C] try out different image likelihoods
   for example,
@@ -46,9 +48,13 @@
   CLOSED: [2019-03-01 Fri 17:57]
   - timestamps
 
-* TODO [#C] improve code structure
+* DONE [#C] improve code structure
+  CLOSED: [2019-04-01 Mon 17:44]
 
 ** code duplication
    ~train.py~ and ~analyze.py~ both compute spot-wise rates (summing inside spots)
 
-* TODO [#B] log version
+* DONE [#B] log version
+  CLOSED: [2019-04-01 Mon 17:44]
+
+* TODO compute DKL analytically if possible
