@@ -272,10 +272,18 @@ analyze.add_command(genes)
 
 
 @click.command()
-def gene_profiles():
+@click.argument('gene-list', nargs=-1)
+@click.option('--factor', type=int, multiple=True)
+@click.option('--truncate', type=int, default=25)
+@click.option('--regex/--no-regex', default=True)
+def gene_profiles(gene_list, factor, truncate, regex):
     def _analysis(state, output, **_):
         analyze_gene_profiles(
-            state.std,
+            std=state.std,
+            genes=gene_list,
+            factors=factor,
+            truncate=truncate,
+            regex=regex,
             output_prefix=output,
         )
     return 'gene profiles', _analysis

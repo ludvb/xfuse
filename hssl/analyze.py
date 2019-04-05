@@ -1,6 +1,8 @@
 import os
 
-from typing import List
+import re
+
+from typing import List, Optional
 
 from dfply import X, mutate
 
@@ -221,6 +223,10 @@ def analyze(
 
 def analyze_gene_profiles(
         std: STD,
+        genes: List[str],
+        factors: Optional[List[int]] = None,
+        truncate: Optional[int] = None,
+        regex: bool = True,
         output_prefix: str = None,
 ):
     def _to_df(x, name):
@@ -236,6 +242,9 @@ def analyze_gene_profiles(
         _to_df(std.rgt.distribution.scale, 'sd'),
         on=['gene', 'factor'],
     )
+    if factors is not None:
+        data = data.loc[data.factor.isin(factors)]
+
     data.to_csv(
         os.path.join(output_prefix, 'profiles.csv'),
         index=False,
@@ -259,16 +268,23 @@ def analyze_gene_profiles(
             + pn.theme(
                 axis_text_x=pn.element_text(rotation=90),
                 dpi=100,
-                figure_size=(7, 14),
+                figure_size=(7, 7),
             )
         )
 
     with PdfPages(os.path.join(output_prefix, f'profiles.pdf')) as pdf:
-        for f in order_factors(std):
+        for f in factors or order_factors(std):
             log(DEBUG, 'producing profile for factor %d', f)
 
             x = data[data.factor == f].sort_values('mu', ascending=False)
-            x = pd.concat([x.iloc[:50], x.iloc[-50:]])
+            if genes != []:
+                x = x.loc[reduce(
+                    lambda a, x: a | x,
+                    (x.gene.str.contains(g, regex=regex, flags=re.IGNORECASE)
+                     for g in genes),
+                )]
+            if truncate is not None and len(x) > 2 * truncate:
+                x = pd.concat([x.iloc[:truncate], x.iloc[-truncate:]])
             x.gene = x.gene.astype(CategoricalDtype(x.gene, ordered=True))
 
             _generate_barplot(x, f'factor {f}').draw(False)
