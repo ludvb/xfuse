@@ -1,3 +1,7 @@
+from functools import reduce
+
+import itertools as it
+
 import os
 
 import re
@@ -25,7 +29,7 @@ import torch as t
 from torchvision.utils import make_grid
 
 from .image import to_array
-from .logging import DEBUG, WARNING, log
+from .logging import DEBUG, INFO, WARNING, log
 from .network import Histonet, STD
 
 
@@ -104,28 +108,39 @@ def normalize(x):
     return (x - _min) / (_max - _min)
 
 
-def dim_red(x, method='pca', n_components=3, **kwargs):
+def visualize_greyscale(im, mask=None):
+    if mask is None:
+        mask = np.ones_like(im)
+    return (
+        (1 - ((im - im.min()) / (im.max() - im.min()) + 0.1) / 1.1
+            * mask)
+        * 255
+    ).astype(np.uint8)
+
+
+def dim_red(x, mask=None, method='pca', n_components=3, **kwargs):
     if method != 'pca':
         raise NotImplementedError()
+
+    if mask is None:
+        mask = np.ones(x.shape[:-1], dtype=bool)
+    elif isinstance(mask, t.Tensor):
+        mask = mask.detach().cpu().numpy().astype(bool)
 
     from sklearn.decomposition import PCA
 
     if isinstance(x, t.Tensor):
         x = x.detach().cpu().numpy()
 
-    return normalize(clip(
-        (
-            PCA(n_components=n_components, **kwargs)
-            .fit_transform(
-                x
-                .transpose(0, 2, 3, 1)
-                .reshape(-1, x.shape[1])
-            )
-            .reshape(x.shape[0], *x.shape[2:], n_components)
-            .transpose(0, 3, 1, 2)
-        ),
-        0.01,
-    ))
+    values = (
+        PCA(n_components=n_components, **kwargs)
+        .fit_transform(x[mask])
+    )
+
+    dst = np.zeros((*mask.shape, n_components))
+    dst[mask] = (values - values.min(0)) / (values.max(0) - values.min(0))
+
+    return dst
 
 
 def visualize_batch(batch, normalize=False, **kwargs):
@@ -151,13 +166,20 @@ def visualize_batch(batch, normalize=False, **kwargs):
 
 
 def order_factors(std: STD):
-    return std.rgt.distribution.loc.exp().sum(0).argsort(descending=True)
+    return (
+        (
+            t.abs(std.rgt_q.loc) / std.rgt_q.scale
+        )
+        .sum(0)
+        .argsort(descending=True)
+    )
 
 
 def analyze(
         histonet: Histonet,
         std: STD,
         image: Image,
+        label: Optional[Image],
         output_prefix: str = None,
         device: t.device = None,
 ):
@@ -187,7 +209,12 @@ def analyze(
     )
     mix = factors / factors.sum(1).unsqueeze(1)
 
-    for b, prefix in [
+    if label:
+        label_mask = to_array(label)[..., 0] != 1
+    else:
+        label_mask = np.ones((image.height, image.width), dtype=bool)
+
+    for img, prefix in [
             (
                 (
                     (
@@ -196,29 +223,40 @@ def analyze(
                         .clamp(-1, 1)
                         + 1
                     ) / 2
-                ),
-                'he',
+                )[0].permute(1, 2, 0).detach().cpu().numpy(),
+                'he-sample',
             ),
-            (dim_red(z), 'z'),
-            (dim_red(mix), 'fct'),
-            (dim_red(state), 'state'),
+            (
+                (
+                    (mu.clamp(-1, 1) + 1) / 2
+                )[0].permute(1, 2, 0).detach().cpu().numpy(),
+                'he-mean',
+            ),
+            (dim_red(z[0].permute(1, 2, 0)), 'z'),
+            (dim_red(factors[0].permute(1, 2, 0), label_mask), 'fct-abs'),
+            (dim_red(mix[0].permute(1, 2, 0), label_mask), 'fct-rel'),
+            (dim_red(state[0].permute(1, 2, 0), label_mask), 'state'),
     ]:
         imwrite(
             os.path.join(output_prefix, f'{prefix}.png'),
-            visualize_batch(b),
+            (img * 255).astype(np.uint8),
         )
 
-    with PdfPages(os.path.join(
-            output_prefix, f'factors.pdf')) as pdf:
-        for p, f in (
-                (mix[0, f].detach().cpu().numpy(), f)
-                for f in order_factors(std)
+    for name, data in (
+            ('relative', mix),
+            ('absolute', factors),
+    ):
+        os.makedirs(os.path.join(output_prefix, 'factors', name))
+        for i, p in enumerate(
+                (data[0, f].detach().cpu().numpy()
+                 for f in order_factors(std)),
+                1,
         ):
-            plt.figure()
-            plt.imshow(clip(p, 0.01))
-            plt.title(f'factor {f}')
-            pdf.savefig()
-            plt.close()
+            imwrite(
+                os.path.join(
+                    output_prefix, 'factors', name, f'factor-{i:03d}.png'),
+                visualize_greyscale(clip(p, 0.1), label_mask),
+            )
 
 
 def analyze_gene_profiles(
@@ -273,10 +311,14 @@ def analyze_gene_profiles(
         )
 
     with PdfPages(os.path.join(output_prefix, f'profiles.pdf')) as pdf:
-        for f in factors or order_factors(std):
-            log(DEBUG, 'producing profile for factor %d', f)
+        factor_order = order_factors(std)
+        for i, f in enumerate(order_factors(std), 1):
+            log(DEBUG, 'producing profile for factor %d', i)
 
-            x = data[data.factor == f].sort_values('mu', ascending=False)
+            x = (
+                data[data.factor == factor_order[f]]
+                .sort_values('mu', ascending=False)
+            )
             if genes != []:
                 x = x.loc[reduce(
                     lambda a, x: a | x,
@@ -287,7 +329,7 @@ def analyze_gene_profiles(
                 x = pd.concat([x.iloc[:truncate], x.iloc[-truncate:]])
             x.gene = x.gene.astype(CategoricalDtype(x.gene, ordered=True))
 
-            _generate_barplot(x, f'factor {f}').draw(False)
+            _generate_barplot(x, f'factor {i}').draw(False)
             pdf.savefig()
             plt.close()
 
@@ -296,7 +338,8 @@ def analyze_genes(
         histonet: Histonet,
         std: STD,
         image: Image,
-        which: List[str],
+        label: Image,
+        patterns: List[str],
         output_prefix: str = None,
         device: t.device = None,
 ):
@@ -305,6 +348,11 @@ def analyze_genes(
 
     if device is None:
         device = t.device('cpu')
+
+    if label:
+        label_mask = to_array(label)[..., 0] != 1
+    else:
+        label_mask = np.ones((image.height, image.width), dtype=bool)
 
     z, mu, sd, loadings, state = histonet(
         t.as_tensor(to_array(image))
@@ -320,28 +368,34 @@ def analyze_genes(
         (loadings[0].exp() * gt.sum(0)[..., None, None])
         .sum(0).detach().cpu().numpy()
     )
-    genes = np.array([g.lower() for g in std.genes])
-    with PdfPages(os.path.join(output_prefix, f'genes.pdf')) as pdf:
-        for g in which:
-            try:
-                idx = np.where(genes == g.lower())[0][0]
-            except IndexError:
-                log(WARNING, 'gene "%s" has not been modelled, skipping', g)
-                continue
-            log(DEBUG, 'creating gene map for %s', std.genes[idx])
-            gene_map = (
-                t.einsum('txy,t->xy', loadings[0].exp(), gt[idx])
-                .detach()
-                .cpu()
-                .numpy()
-            )
-            plt.figure()
-            plt.suptitle(std.genes[idx])
-            plt.subplot(1, 2, 1)
-            plt.title('abs')
-            plt.imshow(clip(gene_map, 0.01))
-            plt.subplot(1, 2, 2)
-            plt.title('rel')
-            plt.imshow(clip(gene_map / total, 0.01))
-            pdf.savefig()
-            plt.close()
+
+    idxs, ns = zip(*[
+        (xs, len(xs)) for xs in [
+            [idx for idx, g in enumerate(std.genes)
+             if re.match(p.lower(), g.lower())]
+            for p in patterns
+        ]
+    ])
+    for p in (p for p, n in zip(patterns, ns) if n == 0):
+        log(WARNING, 'pattern %p did not match any gene', p)
+
+    relp = os.path.join(output_prefix, 'gene-maps', 'relative')
+    absp = os.path.join(output_prefix, 'gene-maps', 'absolute')
+    os.makedirs(relp)
+    os.makedirs(absp)
+    for idx in set(it.chain(*idxs)):
+        log(INFO, 'creating gene map for %s', std.genes[idx])
+        gene_map = (
+            t.einsum('txy,t->xy', loadings[0].exp(), gt[idx])
+            .detach()
+            .cpu()
+            .numpy()
+        )
+        imwrite(
+            os.path.join(absp, f'{std.genes[idx]}.png'),
+            visualize_greyscale(clip(gene_map, 0.01), label_mask),
+        )
+        imwrite(
+            os.path.join(relp, f'{std.genes[idx]}.png'),
+            visualize_greyscale(clip(gene_map / total, 0.01), label_mask),
+        )

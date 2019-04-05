@@ -221,6 +221,10 @@ cli.add_command(train)
     type=click.Path(exists=True, dir_okay=False, resolve_path=True),
 )
 @click.option(
+    '--label',
+    type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+)
+@click.option(
     '-o', '--output',
     type=click.Path(resolve_path=True),
     default=f'{__package__}-{dt.now().isoformat()}',
@@ -231,7 +235,7 @@ def analyze(**_):
 
 @analyze.resultcallback()
 @_logged_command(lambda *_, **args: args['output'])
-def _run_analysis(analyses, state_file, image, output):
+def _run_analysis(analyses, state_file, image, label, output):
     state = load_state(state_file)
     to_device(state, DEVICE)
 
@@ -241,11 +245,18 @@ def _run_analysis(analyses, state_file, image, output):
             raise ValueError('no image has been provided')
         return Image.new_from_file(image)
 
+    @lazify
+    def _label():
+        if label is None:
+            raise ValueError('no labels have been provided')
+        return Image.new_from_file(label)
+
     for name, analysis in analyses:
         log(INFO, 'performing analysis: %s', name)
         analysis(
             state=state,
             image_provider=_image,
+            label_provider=_label,
             output=output,
         )
 
@@ -256,11 +267,16 @@ cli.add_command(analyze)
 @click.command()
 @click.argument('gene-list', nargs=-1)
 def genes(gene_list):
-    def _analysis(state, image_provider, output):
+    def _analysis(state, image_provider, label_provider, output, **_):
+        try:
+            labels = label_provider()
+        except ValueError:
+            labels = None
         analyze_genes(
             state.histonet,
             state.std,
             image_provider(),
+            labels,
             gene_list,
             output_prefix=output,
             device=DEVICE,
@@ -294,11 +310,16 @@ analyze.add_command(gene_profiles)
 
 @click.command()
 def default():
-    def _analysis(state, image_provider, output):
+    def _analysis(state, image_provider, label_provider, output):
+        try:
+            labels = label_provider()
+        except ValueError:
+            labels = None
         default_analysis(
             state.histonet,
             state.std,
             image_provider(),
+            labels,
             output_prefix=output,
             device=DEVICE,
         )

@@ -206,11 +206,23 @@ def train(
                     ),
                     'he',
                 ),
-                (dim_red(z), 'z'),
-                (dim_red(loadings), 'fct'),
-                (dim_red(loadings.exp() / loadings.exp().sum(1).unsqueeze(1)),
-                 'fct-rel'),
-                (dim_red(state), 'state'),
+                (dim_red(z.permute(0, 2, 3, 1)).transpose(0, 3, 1, 2), 'z'),
+                (dim_red(loadings.permute(0, 2, 3, 1)).transpose(0, 3, 1, 2),
+                 'fct'),
+                (
+                    dim_red(
+                        (
+                            (
+                                loadings.exp()
+                                / loadings.exp().sum(1).unsqueeze(1)
+                            )
+                            .permute(0, 2, 3, 1)
+                        ),
+                    ).transpose(0, 3, 1, 2),
+                    'fct-rel',
+                ),
+                (dim_red(state.permute(0, 2, 3, 1)).transpose(0, 3, 1, 2),
+                 'state'),
         ]:
             imwrite(
                 os.path.join(img_prefix, f'{prefix}-epoch-{epoch:06d}.png'),
