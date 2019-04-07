@@ -194,6 +194,7 @@ def train(
             fixed_data['image'].to(devices[0]))
 
         for data, prefix in [
+                ((fixed_data['image'] + 1) / 2, 'he'),
                 (
                     (
                         (
@@ -204,8 +205,9 @@ def train(
                         )
                         / 2
                     ),
-                    'he',
+                    'he-sample',
                 ),
+                ((mu.clamp(-1, 1) + 1) / 2, 'he-mean'),
                 (dim_red(z.permute(0, 2, 3, 1)).transpose(0, 3, 1, 2), 'z'),
                 (dim_red(loadings.permute(0, 2, 3, 1)).transpose(0, 3, 1, 2),
                  'fct'),
