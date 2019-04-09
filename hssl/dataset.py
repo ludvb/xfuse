@@ -174,7 +174,7 @@ def collate(xs):
 
 
 def spot_size(dataset: Dataset):
-    return np.mean(np.concatenate([
-        np.bincount(d['label'].flatten())[1:]
+    return np.median(np.concatenate([
+        np.bincount(d['label'].flatten())
         for d in dataset
     ]))
