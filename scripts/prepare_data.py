@@ -93,11 +93,19 @@ def main():
         type=float,
         help='proportion of spots to hold out for validation',
     )
+    parser.add_argument(
+        '--min-counts',
+        type=int,
+        default=100,
+        help='filter spots with a low total number of reads',
+    )
 
     opts = vars(parser.parse_args())
 
     validation_prop = opts.pop('validation')
     assert(validation_prop is None or 0 < validation_prop < 1)
+
+    min_counts = opts.pop('min_counts')
 
     output_directory = opts.pop('output_directory')
     os.makedirs(output_directory)
@@ -111,6 +119,7 @@ def main():
         image = zoom(image, (zoom_level, zoom_level, 1.), order=0)
 
     counts = pd.read_csv(opts.pop('counts'), sep='\t', index_col=0)
+    counts = counts[counts.sum(1) >= min_counts]
     spots = opts.pop('spots')
     if spots is not None:
         spots = pd.read_csv(spots, sep='\t')
