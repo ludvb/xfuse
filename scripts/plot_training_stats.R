@@ -58,7 +58,18 @@ message(sprintf('input file=%s, output file=%s', inputFile, outputFile))
 repeat {
     message('reading data...')
     df = (
-        read.csv(inputFile, col.names=c('epoch', 'iteration', 'type', 'value'))
+        read.csv(inputFile, header=F)
+        %>% as.data.frame()
+        %>% do({
+            if (ncol(.) == 4) {
+                colnames(.) <- c('epoch', 'iteration', 'type', 'value')
+                .['validation'] <- 0
+            } else {
+              colnames(.) <- c('epoch', 'iteration', 'validation', 'type', 'value')
+            }
+            .
+        })
+        %>% mutate(validation = as.factor(validation))
         %>% as_tibble()
         %>% filter(!is.nan(value))
     )
@@ -70,17 +81,20 @@ repeat {
             data <- (
                 df
                 %>% filter(type == t, epoch > 0.1 * dplyr::last(epoch))
-                %>% group_by(epoch)
+                %>% group_by(epoch, validation)
                 %>% summarize(
                         v=mean(value)
                       , min=quantile(value, 0.25)
                       , max=quantile(value, 0.75)
                     )
+                %>% ungroup()
             )
             annotations <- (
                 data
-                %>% summarize(min=min(v) , max=max(v))
-                %>% gather(key, v)
+                %>% group_by(validation)
+                %>% summarize(min = min(v), max = max(v))
+                %>% ungroup()
+                %>% gather(k, v, -validation)
             )
             plot <- (
                 ggplot(data)
@@ -89,12 +103,15 @@ repeat {
                     , v
                     , ymin=min
                     , ymax=max
+                    , fill=validation
+                    , color=validation
+                    , group=validation
                   )
                 + geom_point(size=0.5)
                 + geom_ribbon(alpha=0.15, linetype='blank')
                 + geom_smooth(linetype='solid', size=0.3, se=F)
                 + geom_hline(
-                      aes(yintercept=v)
+                      aes(yintercept=v, color=validation)
                     , annotations
                     , linetype='dashed'
                     , size=0.15
@@ -103,6 +120,7 @@ repeat {
                       aes(
                         , y=v
                         , label=format(v, digits=3)
+                        , color=validation
                       )
                     , annotations
                     , x=min(data$epoch)
@@ -134,7 +152,7 @@ repeat {
             do.call(gtable_rbind, c(top, tail(xs, 1)) %>% map(ggplotGrob))
         })
         %>% invoke(arrangeGrob, ., nrow = 1)
-        # %>% arrangeGrob(first(legends), widths=c(0.9, 0.1))
+        %>% arrangeGrob(first(legends), widths=c(0.9, 0.1))
     )
     dev.off()
 

@@ -1,3 +1,5 @@
+from collections import namedtuple
+
 import gzip
 
 import itertools as it
@@ -68,19 +70,22 @@ class Step(t.nn.Module):
             'Li': img_loss,
             'Lx': xpr_loss,
             'dqp': dkl,
-            'p(img|z)': t.mean(t.exp(lpimg)),
-            'p(xpr|z)': t.mean(t.exp(lpobs)),
-            'rmse': t.mean(t.sqrt(t.mean((d.mean - x['data']) ** 2, 1))),
+            'rmse': t.mean(
+                t.sqrt(t.mean((d.mean - x['data']) ** 2, 1))
+                .masked_select(x['data'].sum(1) != 0)
+            ),
         }.items()}
 
 
 def train(
         state: State,
-        dataset: Dataset,
         output_prefix: str,
+        dataset: Dataset,
+        dataset_validation: Optional[Dataset] = None,
         batch_size: int = 5,
         image_interval: Optional[int] = 50,
         chkpt_interval: Optional[int] = 10000,
+        valid_interval: Optional[int] = 10,
         epochs: Optional[int] = None,
         workers: int = None,
         devices: Optional[List[t.device]] = None,
@@ -115,7 +120,7 @@ def train(
         np.random.seed(np.random.randint(
             np.iinfo(np.int32).max) + n)
 
-    dataloader = t.utils.data.DataLoader(
+    training_data = t.utils.data.DataLoader(
         dataset,
         collate_fn=collate,
         batch_size=batch_size,
@@ -123,8 +128,23 @@ def train(
         worker_init_fn=_worker_init,
         shuffle=True,
     )
+    validation_data = (
+        t.utils.data.DataLoader(
+            dataset_validation,
+            collate_fn=collate,
+            batch_size=batch_size,
+            num_workers=workers,
+            worker_init_fn=_worker_init,
+            shuffle=False,
+        )
+        if
+        dataset_validation is not None
+        and valid_interval is not None
+        else
+        None
+    )
 
-    fixed_data = next(iter(dataloader))
+    fixed_data = next(iter(training_data))
 
     def _step(xs):
         inputs = [
@@ -139,19 +159,19 @@ def train(
             devices[0],
         )
 
-        optimizer.zero_grad()
-        t.sum(outputs['L']).backward()
-        optimizer.step()
+        if stepper.training:
+            optimizer.zero_grad()
+            t.sum(outputs['L']).backward()
+            optimizer.step()
 
         return collect_items({k: t.mean(v) for k, v in outputs.items()})
 
     t.enable_grad()
     histonet.train()
 
-    def _report(epoch, output):
+    def _report(epoch, output, dataset_size, validation):
         iteration = output.pop('iteration')
 
-        dataset_size = int(np.ceil(len(dataloader) / len(devices)))
         log(
             INFO,
             ' '.join([
@@ -180,6 +200,7 @@ def train(
                         ','.join([
                             str(epoch),
                             str(i),
+                            str(int(validation)),
                             str(k),
                             str(v),
                         ])
@@ -187,9 +208,6 @@ def train(
                     ).encode())
 
     def _save_image(epoch):
-        t.no_grad()
-        histonet.eval()
-
         z, mu, sd, loadings, state = histonet(
             fixed_data['image'].to(devices[0]))
 
@@ -248,22 +266,38 @@ def train(
                 lambda x: epochs is None or x <= epochs,
                 it.count(epoch),
         ):
-            for output in map(
-                    lambda x: zip_dicts(
-                        map(
-                            lambda y: {'iteration': y[0], **y[1]},
-                            filter(lambda y: y is not None, x),
+            def _step_with(data: t.utils.data.DataLoader):
+                for output in map(
+                        lambda x: zip_dicts(
+                            map(
+                                lambda y: {'iteration': y[0], **y[1]},
+                                filter(lambda y: y is not None, x),
+                            ),
                         ),
-                    ),
-                    chunks_of(10, (
-                        (i, _step(xs)) for i, xs in enumerate(
-                            chunks_of(len(devices), dataloader),
-                            1,
-                        )
-                    ))
-            ):
-                _report(epoch, output)
+                        chunks_of(10, (
+                            (i, _step(xs)) for i, xs in enumerate(
+                                chunks_of(len(devices), data),
+                                1,
+                            )
+                        ))
+                ):
+                    _report(
+                        epoch,
+                        output,
+                        int(np.ceil(len(data) / len(devices))),
+                        not stepper.training,
+                    )
 
+            stepper.train()
+            t.enable_grad()
+
+            _step_with(training_data)
+
+            stepper.eval()
+            t.no_grad()
+
+            if validation_data is not None and epoch % valid_interval == 0:
+                _step_with(validation_data)
             if image_interval is not None and epoch % image_interval == 0:
                 _save_image(epoch)
             if chkpt_interval is not None and epoch % chkpt_interval == 0:

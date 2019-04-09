@@ -88,8 +88,16 @@ def main():
     parser.add_argument('--output-directory')
     parser.add_argument('--compress', default=0)
     parser.add_argument('--zoom', type=float)
+    parser.add_argument(
+        '--validation',
+        type=float,
+        help='proportion of spots to hold out for validation',
+    )
 
     opts = vars(parser.parse_args())
+
+    validation_prop = opts.pop('validation')
+    assert(validation_prop is None or 0 < validation_prop < 1)
 
     output_directory = opts.pop('output_directory')
     os.makedirs(output_directory)
@@ -145,6 +153,7 @@ def main():
         sep=',',
         index=False,
     )
+
     print('writing image...')
     imwrite(
         os.path.join(output_directory, 'image.tif'),
@@ -152,6 +161,25 @@ def main():
         tile=(256, 256),
         compress=compression,
     )
+
+    if validation_prop:
+        validation_spots = np.random.choice(
+            [*filter(lambda x: x > 1, counts.n)],
+            int(validation_prop * (len(counts.n) - 2)),
+            replace=False,
+        )
+        validation = label.copy()
+        validation[np.invert(np.isin(label, [0, 1, *validation_spots]))] = 0
+        label[np.isin(label, validation_spots)] = 0
+
+        print('writing validation labels...')
+        imwrite(
+            os.path.join(output_directory, 'validation.tif'),
+            validation,
+            tile=(256, 256),
+            compress=compression,
+        )
+
     print('writing labels...')
     imwrite(
         os.path.join(output_directory, 'label.tif'),

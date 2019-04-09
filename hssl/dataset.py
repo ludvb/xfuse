@@ -1,3 +1,5 @@
+from abc import abstractmethod
+
 import itertools as it
 
 from typing import List
@@ -23,10 +25,9 @@ from .utility import center_crop
 class Slide(t.utils.data.Dataset):
     def __init__(
             self,
+            data: pd.DataFrame,
             image: Image,
             label: Image,
-            data: pd.DataFrame,
-            patch_size: int = 512,
     ):
         self.image = image
         self.label = label
@@ -36,13 +37,39 @@ class Slide(t.utils.data.Dataset):
 
         assert(self.h == self.label.height and self.w == self.label.width)
 
-        self.patch = patch_size
-        if any(d < self._xpatch for d in (self.w, self.h)):
-            raise ValueError(
-                'image is too small for patch size '
-                f'(needs to be at least {self._xpatch} px in each dimension)'
-            )
+    @abstractmethod
+    def _get_patch(self, idx: int):
+        pass
 
+    @abstractmethod
+    def __len__(self):
+        pass
+
+    def __getitem__(self, idx):
+        image, label = self._get_patch(idx)
+
+        # remove partially visible labels
+        label[np.invert(binary_fill_holes(label == 0))] = 0
+
+        labels = [*sorted(np.unique(label))]
+        data = self.data[[x - 1 for x in labels if x > 0], :]
+        label = np.searchsorted(labels, label)
+
+        return dict(
+            image=t.tensor(image / 255 * 2 - 1).permute(2, 0, 1).float(),
+            label=t.tensor(label).long(),
+            data=data,
+        )
+
+
+class RandomSlide(Slide):
+    def __init__(
+            self,
+            *args,
+            patch_size: int = 512,
+            **kwargs,
+    ):
+        super().__init__(*args, **kwargs)
         self.image_augmentation = transforms.Compose([
             transforms.ColorJitter(
                 brightness=0.05,
@@ -51,6 +78,12 @@ class Slide(t.utils.data.Dataset):
                 hue=0.05,
             ),
         ])
+        self.patch = patch_size
+        if any(d < self._xpatch for d in (self.w, self.h)):
+            raise ValueError(
+                'image is too small for patch size '
+                f'(needs to be at least {self._xpatch} px in each dimension)'
+            )
 
     @property
     def _xpatch(self):
@@ -63,7 +96,7 @@ class Slide(t.utils.data.Dataset):
         return int(np.ceil(
             self.w * self.h / (self.patch ** 2)))
 
-    def __getitem__(self, idx):
+    def _get_patch(self, idx):
         y, x = [
             np.random.randint(s - self._xpatch + 1) for s in (self.h, self.w)]
         image = to_pil_image(to_array(self.image.extract_area(
@@ -89,18 +122,7 @@ class Slide(t.utils.data.Dataset):
             image = image[::-1]
             label = label[::-1]
 
-        # remove partially visible labels
-        label[np.invert(binary_fill_holes(label == 0))] = 0
-
-        labels = [*sorted(np.unique(label))]
-        data = self.data[[x - 1 for x in labels if x > 0], :]
-        label = np.searchsorted(labels, label)
-
-        return dict(
-            image=t.tensor(image / 255 * 2 - 1).permute(2, 0, 1).float(),
-            label=t.tensor(label).long(),
-            data=data,
-        )
+        return image, label
 
 
 class Dataset(t.utils.data.Dataset):

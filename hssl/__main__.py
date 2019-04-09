@@ -24,7 +24,7 @@ from .analyze import (
     analyze_gene_profiles,
     analyze_genes,
 )
-from .dataset import Dataset, Slide, spot_size
+from .dataset import Dataset, RandomSlide, spot_size
 from .logging import (
     DEBUG,
     ERROR,
@@ -140,27 +140,47 @@ def train(
 
     count_data = read_data(map(_path, design.data))
 
+    design_matrix = design_matrix_from(
+        design.iloc[:, [
+            x not in ['image', 'labels', 'validation', 'data']
+            for x in design.columns
+        ]],
+    )
     dataset = Dataset(
         [
-            Slide(
+            RandomSlide(
+                data=counts,
                 image=Image.new_from_file(_path(image)),
                 label=Image.new_from_file(_path(labels)),
-                data=counts,
                 patch_size=patch_size,
             )
             for image, labels, counts in zip(
                 design.image,
                 design.labels,
-                (count_data.loc[x] for x in count_data.index.levels[0])
+                (count_data.loc[x] for x in count_data.index.levels[0]),
             )
         ],
-        design_matrix_from(
-            design.iloc[:, [
-                x not in ['image', 'labels', 'data']
-                for x in design.columns
-            ]],
-        ),
+        design_matrix,
     )
+    try:
+        dataset_validation = Dataset(
+            [
+                RandomSlide(
+                    data=counts,
+                    image=Image.new_from_file(_path(image)),
+                    label=Image.new_from_file(_path(labels)),
+                    patch_size=patch_size,
+                )
+                for image, labels, counts in zip(
+                    design.image,
+                    design.validation,
+                    (count_data.loc[x] for x in count_data.index.levels[0]),
+                )
+            ],
+            design_matrix,
+        )
+    except AttributeError:
+        dataset_validation = None
 
     state: State
     if state_file is not None:
@@ -199,8 +219,9 @@ def train(
 
     state = _train(
         state=state,
-        dataset=dataset,
         output_prefix=output,
+        dataset=dataset,
+        dataset_validation=dataset_validation,
         workers=workers,
         **kwargs,
     )
