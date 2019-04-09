@@ -274,7 +274,7 @@ def train(
                                 filter(lambda y: y is not None, x),
                             ),
                         ),
-                        chunks_of(10, (
+                        chunks_of(100, (
                             (i, _step(xs)) for i, xs in enumerate(
                                 chunks_of(len(devices), data),
                                 1,
