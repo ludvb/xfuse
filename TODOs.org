@@ -58,3 +58,5 @@
   CLOSED: [2019-04-01 Mon 17:44]
 
 * TODO compute DKL analytically if possible
+
+* TODO add support for drawing multiple monte carlo samples
