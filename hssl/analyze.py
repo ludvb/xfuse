@@ -169,7 +169,7 @@ def visualize_batch(batch, normalize=False, **kwargs):
 def order_factors(std: STD):
     return (
         (
-            t.abs(std.rgt_q.loc) / std.rgt_q.scale
+            t.abs(std.rgt.distribution.loc) / std.rgt.distribution.scale
         )
         .sum(0)
         .argsort(descending=True)
