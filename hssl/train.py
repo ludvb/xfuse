@@ -45,15 +45,12 @@ class Step(t.nn.Module):
         except KeyError:
             effects = None
 
-        _z, img_mu, img_sd, loadings, _state = self.histonet(x['image'])
+        _z, img_distr, loadings, _state = self.histonet(x['image'])
+
+        lpimg = img_distr.log_prob(x['image'])
 
         integrated_loadings = integrate_loadings(loadings, x['label'])
-        rate, logit = self.std(integrated_loadings[1:], effects)
-        lpimg = (
-            t.distributions.Normal(img_mu, img_sd)
-            .log_prob(x['image'])
-        )
-        d = t.distributions.NegativeBinomial(rate, logits=logit)
+        d = self.std(integrated_loadings[1:], effects)
 
         lpobs = d.log_prob(x['data'])
 
@@ -208,7 +205,7 @@ def train(
                     ).encode())
 
     def _save_image(epoch):
-        z, mu, sd, loadings, state = histonet(
+        z, img_distr, loadings, state = histonet(
             fixed_data['image'].to(devices[0]))
 
         for data, prefix in [
@@ -216,7 +213,7 @@ def train(
                 (
                     (
                         (
-                            t.distributions.Normal(mu, sd)
+                            img_distr
                             .sample()
                             .clamp(-1, 1)
                             + 1
@@ -225,7 +222,7 @@ def train(
                     ),
                     'he-sample',
                 ),
-                ((mu.clamp(-1, 1) + 1) / 2, 'he-mean'),
+                ((img_distr.mean.clamp(-1, 1) + 1) / 2, 'he-mean'),
                 (dim_red(z.permute(0, 2, 3, 1)).transpose(0, 3, 1, 2), 'z'),
                 (dim_red(loadings.permute(0, 2, 3, 1)).transpose(0, 3, 1, 2),
                  'fct'),

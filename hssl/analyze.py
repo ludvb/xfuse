@@ -31,6 +31,7 @@ from torchvision.utils import make_grid
 from .image import to_array
 from .logging import DEBUG, INFO, WARNING, log
 from .network import Histonet, STD
+from .utility import integrate_loadings
 
 
 def run_tsne(y, n_components=3, initial_dims=20):
@@ -189,7 +190,7 @@ def analyze(
     if device is None:
         device = t.device('cpu')
 
-    z, mu, sd, loadings, state = histonet(
+    z, img_distr, loadings, state = histonet(
         t.as_tensor(to_array(image))
         .to(device)
         .permute(2, 0, 1)
@@ -218,7 +219,7 @@ def analyze(
             (
                 (
                     (
-                        t.distributions.Normal(mu, sd)
+                        img_distr
                         .sample()
                         .clamp(-1, 1)
                         + 1
@@ -228,7 +229,7 @@ def analyze(
             ),
             (
                 (
-                    (mu.clamp(-1, 1) + 1) / 2
+                    (img_distr.mean.clamp(-1, 1) + 1) / 2
                 )[0].permute(1, 2, 0).detach().cpu().numpy(),
                 'he-mean',
             ),
@@ -354,7 +355,7 @@ def analyze_genes(
     else:
         label_mask = np.ones((image.height, image.width), dtype=bool)
 
-    z, mu, sd, loadings, state = histonet(
+    z, _img_distr, loadings, _state = histonet(
         t.as_tensor(to_array(image))
         .to(device)
         .permute(2, 0, 1)
@@ -399,3 +400,41 @@ def analyze_genes(
             os.path.join(relp, f'{std.genes[idx]}.png'),
             visualize_greyscale(clip(gene_map / total, 0.01), label_mask),
         )
+
+
+def impute_counts(
+        histonet: Histonet,
+        std: STD,
+        image: Image,
+        label: Image,
+        effects: Optional[t.tensor] = None,
+        device: Optional[t.device] = None,
+):
+    if device is None:
+        device = t.device('cpu')
+
+    z, _img_distr, loadings, state = histonet(
+        t.as_tensor(to_array(image))
+        .to(device)
+        .permute(2, 0, 1)
+        .float()
+        [None, ...]
+        / 255 * 2 - 1
+    )
+
+    label = to_array(label)[..., 0]
+    labels = [*sorted(np.unique(label))]
+    label = np.searchsorted(labels, label)
+
+    integrated_loadings = integrate_loadings(
+        loadings,
+        (
+            t.as_tensor(label)
+            .to(device)
+            .long()
+            .unsqueeze(0)
+        ),
+    )
+    d = std(integrated_loadings[2:], effects)
+
+    return d, labels[2:]

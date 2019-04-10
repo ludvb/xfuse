@@ -4,6 +4,8 @@ from datetime import datetime as dt
 
 from functools import wraps
 
+import itertools as it
+
 import os
 
 import sys
@@ -23,6 +25,7 @@ from .analyze import (
     analyze as default_analysis,
     analyze_gene_profiles,
     analyze_genes,
+    impute_counts,
 )
 from .dataset import Dataset, RandomSlide, spot_size
 from .logging import (
@@ -140,12 +143,11 @@ def train(
 
     count_data = read_data(map(_path, design.data))
 
-    design_matrix = design_matrix_from(
-        design.iloc[:, [
-            x not in ['image', 'labels', 'validation', 'data']
-            for x in design.columns
-        ]],
-    )
+    design_matrix = design_matrix_from(design[[
+        x for x in design.columns
+        if x not in ['image', 'labels', 'validation', 'data']
+    ]])
+
     dataset = Dataset(
         [
             RandomSlide(
@@ -202,7 +204,16 @@ def train(
         std = STD(
             genes=count_data.columns,
             num_factors=factors,
-            fixed_effects=len(dataset.design),
+            covariates=[
+                (
+                    design_matrix.index.levels[0][k],
+                    [v for _, v in vs],
+                )
+                for k, vs in it.groupby(
+                    enumerate(design_matrix.index.levels[1]),
+                    lambda x: design_matrix.index.codes[0][x[0]],
+                )
+            ],
             gene_baseline=count_data.mean(0).values,
         )
 
@@ -348,6 +359,52 @@ def default():
 
 
 analyze.add_command(default)
+
+
+@click.command()
+@click.argument('data-file', type=click.File('rb'))
+def impute(data_file):
+    data = pd.read_csv(data_file)
+    data_dir = os.path.dirname(data_file.name)
+
+    def _analysis(state, output, **_):
+        output_dir = os.path.join(output, 'imputed-counts')
+        os.makedirs(output_dir)
+
+        design_matrix = design_matrix_from(
+            data[[
+                x for x in data.columns
+                if x not in ['name', 'image', 'labels']
+            ]],
+            covariates=state.std._covariates,
+        )
+
+        for name, image, label, effects in zip(
+                data.name,
+                data.image,
+                data.labels,
+                t.tensor(np.transpose(design_matrix.values)),
+        ):
+            log(INFO, 'imputing counts for %s', name)
+            d, labels = impute_counts(
+                state.histonet,
+                state.std,
+                Image.new_from_file(os.path.join(data_dir, image)),
+                Image.new_from_file(os.path.join(data_dir, label)),
+                effects,
+                device=DEVICE,
+            )
+            result = pd.DataFrame(
+                d.mean.detach().cpu().numpy(),
+                index=pd.Index(labels, name='n'),
+                columns=state.std.genes,
+            )
+            result.to_csv(os.path.join(output_dir, f'{name}.csv.gz'))
+
+    return 'imputation', _analysis
+
+
+analyze.add_command(impute)
 
 
 if __name__ == '__main__':

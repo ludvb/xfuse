@@ -1,11 +1,15 @@
-from typing import List, Optional
+from functools import reduce
+
+import operator as op
+
+from typing import List, Optional, Tuple
 
 import numpy as np
 
 import torch as t
 
 from .distributions import Distribution, Normal, Variable
-from .logging import DEBUG, WARNING, log
+from .logging import DEBUG, log
 from .utility import center_crop
 from .utility.init_args import store_init_args
 
@@ -194,19 +198,26 @@ class Histonet(Variational):
         mixture_loadings = self.mixture_loadings(state)
 
         return (
-            img_mu,
-            img_sd,
+            t.distributions.Normal(img_mu, img_sd),
             mixture_loadings,
             state,
         )
 
     def forward(self, x):
         z, z_mu, z_sd = self.encode(x)
-        ys = [
-            center_crop(y, [None, None, *x.shape[-2:]])
-            for y in self.decode(z)
-        ]
-        return (z, *ys)
+
+        def _crop(y):
+            if isinstance(y, t.Tensor):
+                return center_crop(y, [None, None, *x.shape[-2:]])
+            elif isinstance(y, t.distributions.Distribution):
+                return type(y)(**{
+                    k: center_crop(v, [None, None, *x.shape[-2:]])
+                    for k, v in y.__dict__.items() if k[0] != '_'
+
+                })
+            return y
+
+        return (z, *map(_crop, self.decode(z)))
 
 
 @store_init_args
@@ -216,7 +227,7 @@ class STD(Variational):
             genes: List[str],
             num_factors: int = 50,
             gene_baseline: Optional[np.ndarray] = None,
-            fixed_effects: Optional[int] = None,
+            covariates: Optional[List[Tuple[str, List[str]]]] = None,
     ):
         super().__init__()
 
@@ -246,11 +257,15 @@ class STD(Variational):
         _make_covariate('l', (1, ), True)
         _make_covariate('lg', (len(genes), ), True)
 
-        if fixed_effects is not None and fixed_effects > 0:
-            _make_covariate('reff', (fixed_effects,), True)
-            _make_covariate('leff', (fixed_effects,), True)
-            _make_covariate('rgeff', (fixed_effects, len(genes)), False)
-            _make_covariate('lgeff', (fixed_effects, len(genes)), False)
+        if covariates is not None and len(covariates) > 0:
+            self._covariates = covariates
+            n_fe = reduce(op.add, map(lambda x: len(x[1]), covariates))
+            _make_covariate('reff', (n_fe,), True)
+            _make_covariate('leff', (n_fe,), True)
+            _make_covariate('rgeff', (n_fe, len(genes)), False)
+            _make_covariate('lgeff', (n_fe, len(genes)), False)
+        else:
+            self._covariates = []
 
         if gene_baseline is not None:
             if len(gene_baseline) != len(genes):
@@ -293,4 +308,4 @@ class STD(Variational):
                 effects @ (self.reff.value[..., None] + self.rgeff.value))
             logit = logit + (
                 effects @ (self.leff.value[..., None] + self.lgeff.value))
-        return rate, logit
+        return t.distributions.NegativeBinomial(rate, logits=logit)

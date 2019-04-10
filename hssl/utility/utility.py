@@ -1,8 +1,10 @@
-from functools import partial, wraps
+from functools import wraps
 
 import itertools as it
 
 import signal
+
+from typing import List, Optional, Tuple
 
 import numpy as np
 
@@ -99,22 +101,43 @@ def read_data(paths, filter_ambiguous=True, genes=None):
     return data
 
 
-def design_matrix_from(design: pd.DataFrame) -> pd.DataFrame:
+def design_matrix_from(
+        design: pd.DataFrame,
+        covariates: Optional[List[Tuple[str, List[str]]]] = None,
+) -> pd.DataFrame:
     if len(design.columns) == 0:
         return pd.DataFrame(np.zeros((0, len(design))))
 
-    design = design.astype(str).astype('category')
+    design = (
+        design
+        [[x for x in sorted(design.columns)]]
+        .astype(str)
+        .astype('category')
+    )
 
-    def _encode(factor):
-        log(INFO, 'encoding design factor "%s" with %d categories: %s',
-            factor.name, len(factor.cat.categories),
-            ', '.join(factor.cat.categories))
+    if covariates is not None:
+        missing_covariates = [
+            x for x, _ in covariates if x not in design.columns]
+        if missing_covariates != []:
+            raise ValueError(
+                'the following covariates are missing from the design: '
+                + ', '.join(missing_covariates)
+            )
+
+        for covariate, values in covariates:
+            design[covariate].cat.set_categories(values)
+        design = design[[x for x, _ in covariates]]
+
+    def _encode(covariate):
+        log(INFO, 'encoding design covariate "%s" with %d categories: %s',
+            covariate.name, len(covariate.cat.categories),
+            ', '.join(covariate.cat.categories))
         return pd.DataFrame(
             (
-                np.eye(len(factor.cat.categories), dtype=int)
-                [:, factor.cat.codes]
+                np.eye(len(covariate.cat.categories), dtype=int)
+                [:, covariate.cat.codes]
             ),
-            index=factor.cat.categories,
+            index=covariate.cat.categories,
         )
 
     ks, vs = zip(*[(k, _encode(v)) for k, v in design.iteritems()])
