@@ -151,8 +151,7 @@ def main():
             for x in counts.index
         ]
 
-    counts = counts.reset_index().rename({'index': 'n'}, axis='columns')
-    counts['n'] = [*range(1, len(counts) + 1)]
+    counts.insert(0, 'n', [*range(1, len(counts) + 1)])
 
     counts, image, label = run(image, counts, spots)
 
@@ -171,6 +170,15 @@ def main():
         compress=compression,
     )
 
+    spot_labels = (
+        counts
+        .reset_index()
+        .rename(index=str, columns={'index': 'spot'})
+        [['spot', 'n']]
+        .set_index('n')
+        .iloc[1:]
+    )
+
     if validation_prop:
         validation_spots = np.random.choice(
             [*filter(lambda x: x > 1, counts.n)],
@@ -180,6 +188,9 @@ def main():
         validation = label.copy()
         validation[np.invert(np.isin(label, [0, 1, *validation_spots]))] = 0
         label[np.isin(label, validation_spots)] = 0
+
+        spot_labels['validation'] = 0
+        spot_labels.loc[validation_spots, 'validation'] = 1
 
         print('writing validation labels...')
         imwrite(
@@ -195,6 +206,9 @@ def main():
         label,
         tile=(256, 256),
         compress=compression,
+    )
+    spot_labels.to_csv(
+        os.path.join(output_directory, 'spot_labels.csv.gz'),
     )
 
 
