@@ -81,13 +81,16 @@ class Unpool(t.nn.Module):
 class Histonet(Variational):
     def __init__(
             self,
+            genes,
             num_factors=50,
             latent_size=96,
             nf=16,
     ):
         super().__init__()
 
-        self.encoder = t.nn.Sequential(
+        self.genes = genes
+
+        self.img_encoder = t.nn.Sequential(
             # x1
             t.nn.Conv2d(3, 2 * nf, 4, 2, 1, bias=True),
             t.nn.LeakyReLU(0.2, inplace=True),
@@ -106,15 +109,26 @@ class Histonet(Variational):
             t.nn.BatchNorm2d(16 * nf),
             # x16
         )
+        self.xpr_encoder = t.nn.Sequential(
+            t.nn.Conv2d(len(self.genes) + 1, 16 * nf, 3, 1, 1, bias=True),
+            t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(16 * nf),
+            t.nn.Conv2d(16 * nf, 16 * nf, 3, 1, 1, bias=True),
+            t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(16 * nf),
+            t.nn.Conv2d(16 * nf, 16 * nf, 3, 1, 1, bias=True),
+            t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(16 * nf),
+        )
 
         self.z_mu = t.nn.Sequential(
-            t.nn.Conv2d(16 * nf, 16 * nf, 3, 1, 1, bias=True),
+            t.nn.Conv2d(32 * nf, 16 * nf, 3, 1, 1, bias=True),
             t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.BatchNorm2d(16 * nf),
             t.nn.Conv2d(16 * nf, latent_size, 3, 1, 1, bias=True),
         )
         self.z_sd = t.nn.Sequential(
-            t.nn.Conv2d(16 * nf, 16 * nf, 3, 1, 1, bias=True),
+            t.nn.Conv2d(32 * nf, 16 * nf, 3, 1, 1, bias=True),
             t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.BatchNorm2d(16 * nf),
             t.nn.Conv2d(16 * nf, latent_size, 3, 1, 1, bias=True),
@@ -171,8 +185,57 @@ class Histonet(Variational):
     def init_args(self):
         return self._init_args
 
-    def encode(self, x):
-        x = self.encoder(x)
+    def encode(self, img, lbl=None, xpr=None):
+        enc_img = self.img_encoder(img)
+
+        if lbl is not None and xpr is not None:
+            lbl_16 = (
+                t.nn.functional.interpolate(
+                    lbl.float().unsqueeze(1),
+                    enc_img.shape[-2:],
+                )
+                .squeeze(1)
+                .long()
+            )
+
+            if self.training:
+                lbl_16[
+                    t.distributions.Bernoulli(
+                        0.5 * t.ones_like(lbl_16).float())
+                    .sample()
+                    .byte()
+                ] = 0
+
+            data_with_missing = t.nn.functional.pad(
+                xpr, (1, 0, 1, 0))
+            data_with_missing[0, 0] = 1
+
+            xpr = t.einsum(
+                'byxi,ig->bgyx',
+                (
+                    t.eye(t.max(lbl) + 1)
+                    .to(lbl_16)
+                    [lbl_16.flatten()]
+                    .reshape(*lbl_16.shape, -1)
+                    .float()
+                ),
+                data_with_missing,
+            )
+        else:
+            xpr = t.zeros((
+                enc_img.shape[0],
+                self.enc_xpr[0].in_channels,
+                *enc_img.shape[2:],
+            )).to(img)
+            xpr[:, 0] = 1
+
+        enc_xpr = self.xpr_encoder(xpr)
+
+        enc_img = center_crop(enc_img, enc_xpr.shape)
+        enc_xpr = center_crop(enc_xpr, enc_img.shape)
+
+        x = t.cat([enc_img, enc_xpr], 1)
+
         z_mu = self.z_mu(x)
         z_sd = self.z_sd(x)
 
@@ -203,15 +266,15 @@ class Histonet(Variational):
             state,
         )
 
-    def forward(self, x):
-        z, z_mu, z_sd = self.encode(x)
+    def forward(self, img, lbl, xpr):
+        z, z_mu, z_sd = self.encode(img, lbl, xpr)
 
         def _crop(y):
             if isinstance(y, t.Tensor):
-                return center_crop(y, [None, None, *x.shape[-2:]])
+                return center_crop(y, [None, None, *img.shape[-2:]])
             elif isinstance(y, t.distributions.Distribution):
                 return type(y)(**{
-                    k: center_crop(v, [None, None, *x.shape[-2:]])
+                    k: center_crop(v, [None, None, *img.shape[-2:]])
                     for k, v in y.__dict__.items() if k[0] != '_'
 
                 })

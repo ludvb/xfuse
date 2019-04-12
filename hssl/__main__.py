@@ -4,6 +4,8 @@ from datetime import datetime as dt
 
 from functools import wraps
 
+from inspect import getargs
+
 import itertools as it
 
 import os
@@ -22,6 +24,7 @@ import torch as t
 
 from . import __version__
 from .analyze import (
+    Sample,
     analyze as default_analysis,
     analyze_gene_profiles,
     analyze_genes,
@@ -41,8 +44,8 @@ from .network import Histonet, STD
 from .optimizer import create_optimizer
 from .train import train as _train
 from .utility import (
+    compose,
     design_matrix_from,
-    lazify,
     read_data,
     set_rng_seed,
 )
@@ -189,6 +192,7 @@ def train(
         state = load_state(state_file)
     else:
         histonet = Histonet(
+            genes=count_data.columns,
             num_factors=factors,
         )
         t.nn.init.normal_(
@@ -244,17 +248,17 @@ cli.add_command(train)
 
 
 @click.group(chain=True)
-@click.argument(
-    'state-file',
-    type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+@click.option(
+    '--state-file',
+    '--state',
+    '--restore',
+    type=click.File('rb'),
+    required=True,
 )
 @click.option(
-    '--image',
-    type=click.Path(exists=True, dir_okay=False, resolve_path=True),
-)
-@click.option(
-    '--label',
-    type=click.Path(exists=True, dir_okay=False, resolve_path=True),
+    '--design-file',
+    '--design',
+    type=click.File('rb'),
 )
 @click.option(
     '-o', '--output',
@@ -267,30 +271,67 @@ def analyze(**_):
 
 @analyze.resultcallback()
 @_logged_command(lambda *_, **args: args['output'])
-def _run_analysis(analyses, state_file, image, label, output):
-    state = load_state(state_file)
+def _run_analysis(analyses, design_file, state_file, output):
+    state = load_state(state_file.name)
     to_device(state, DEVICE)
 
-    @lazify
-    def _image():
-        if image is None:
-            raise ValueError('no image has been provided')
-        return Image.new_from_file(image)
+    design = pd.read_csv(design_file)
+    design_dir = os.path.dirname(design_file.name)
 
-    @lazify
-    def _label():
-        if label is None:
-            raise ValueError('no labels have been provided')
-        return Image.new_from_file(label)
+    def _path(p):
+        return (
+            p
+            if os.path.isabs(p) else
+            os.path.join(design_dir, p)
+        )
+
+    data = read_data(map(_path, design.data))
+    design_matrix = design_matrix_from(design, state.std._covariates)
+    samples = [
+        Sample(
+            name=name,
+            image=image,
+            label=label,
+            data=data,
+            effects=effects,
+        )
+        for name, image, label, data, effects in it.zip_longest(
+                (
+                    design.name
+                    if 'name' in design.columns else
+                    [f'sample_{i + 1}' for i in range(design.shape[0])]
+                ),
+                map(compose(Image.new_from_file, _path), design.image),
+                (
+                    map(
+                        compose(Image.new_from_file, _path),
+                        design.labels,
+                    )
+                    if 'labels' in design.columns else
+                    []
+                ),
+                [data.xs(a, level=0) for a in data.index.levels[0]],
+                design_matrix.values.transpose(),
+        )
+    ]
 
     for name, analysis in analyses:
         log(INFO, 'performing analysis: %s', name)
-        analysis(
-            state=state,
-            image_provider=_image,
-            label_provider=_label,
-            output=output,
-        )
+        if getargs(analysis.__code__).args == ['state', 'samples', 'output']:
+            analysis(state=state, samples=samples, output=output)
+        elif getargs(analysis.__code__).args == ['state', 'sample', 'output']:
+            for sample in samples:
+                log(INFO, 'processing %s', sample.name)
+                output_prefix = os.path.join(output, sample.name)
+                os.makedirs(output_prefix, exist_ok=True)
+                analysis(
+                    state=state,
+                    sample=sample,
+                    output=output_prefix,
+                )
+        else:
+            raise RuntimeError(
+                f'the signature of analysis "{name}" is not supported')
 
 
 cli.add_command(analyze)
@@ -299,16 +340,11 @@ cli.add_command(analyze)
 @click.command()
 @click.argument('gene-list', nargs=-1)
 def genes(gene_list):
-    def _analysis(state, image_provider, label_provider, output, **_):
-        try:
-            labels = label_provider()
-        except ValueError:
-            labels = None
+    def _analysis(state, sample, output):
         analyze_genes(
             state.histonet,
             state.std,
-            image_provider(),
-            labels,
+            sample,
             gene_list,
             output_prefix=output,
             device=DEVICE,
@@ -325,7 +361,7 @@ analyze.add_command(genes)
 @click.option('--truncate', type=int, default=25)
 @click.option('--regex/--no-regex', default=True)
 def gene_profiles(gene_list, factor, truncate, regex):
-    def _analysis(state, output, **_):
+    def _analysis(state, samples, output):
         analyze_gene_profiles(
             std=state.std,
             genes=gene_list,
@@ -342,16 +378,11 @@ analyze.add_command(gene_profiles)
 
 @click.command()
 def default():
-    def _analysis(state, image_provider, label_provider, output):
-        try:
-            labels = label_provider()
-        except ValueError:
-            labels = None
+    def _analysis(state, sample, output):
         default_analysis(
             state.histonet,
             state.std,
-            image_provider(),
-            labels,
+            sample,
             output_prefix=output,
             device=DEVICE,
         )
@@ -362,45 +393,20 @@ analyze.add_command(default)
 
 
 @click.command()
-@click.argument('data-file', type=click.File('rb'))
-def impute(data_file):
-    data = pd.read_csv(data_file)
-    data_dir = os.path.dirname(data_file.name)
-
-    def _analysis(state, output, **_):
-        output_dir = os.path.join(output, 'imputed-counts')
-        os.makedirs(output_dir)
-
-        design_matrix = design_matrix_from(
-            data[[
-                x for x in data.columns
-                if x not in ['name', 'image', 'labels']
-            ]],
-            covariates=state.std._covariates,
+def impute():
+    def _analysis(state, sample, output, **_):
+        d, labels = impute_counts(
+            state.histonet,
+            state.std,
+            sample,
+            device=DEVICE,
         )
-
-        for name, image, label, effects in zip(
-                data.name,
-                data.image,
-                data.labels,
-                t.tensor(np.transpose(design_matrix.values)),
-        ):
-            log(INFO, 'imputing counts for %s', name)
-            d, labels = impute_counts(
-                state.histonet,
-                state.std,
-                Image.new_from_file(os.path.join(data_dir, image)),
-                Image.new_from_file(os.path.join(data_dir, label)),
-                effects,
-                device=DEVICE,
-            )
-            result = pd.DataFrame(
-                d.mean.detach().cpu().numpy(),
-                index=pd.Index(labels, name='n'),
-                columns=state.std.genes,
-            )
-            result.to_csv(os.path.join(output_dir, f'{name}.csv.gz'))
-
+        result = pd.DataFrame(
+            d.mean.detach().cpu().numpy(),
+            index=pd.Index(labels, name='n'),
+            columns=state.std.genes,
+        )
+        result.to_csv(os.path.join(output, 'imputed.csv.gz'))
     return 'imputation', _analysis
 
 

@@ -45,7 +45,10 @@ class Step(t.nn.Module):
         except KeyError:
             effects = None
 
-        _z, img_distr, loadings, _state = self.histonet(x['image'])
+        img = x['image']
+
+        _z, img_distr, loadings, _state = self.histonet(
+            img, x['label'], x['data'])
 
         lpimg = img_distr.log_prob(x['image'])
 
@@ -206,7 +209,10 @@ def train(
 
     def _save_image(epoch):
         z, img_distr, loadings, state = histonet(
-            fixed_data['image'].to(devices[0]))
+            fixed_data['image'].to(devices[0]),
+            fixed_data['label'].to(devices[0]),
+            fixed_data['data'].to(devices[0]),
+        )
 
         for data, prefix in [
                 ((fixed_data['image'] + 1) / 2, 'he'),

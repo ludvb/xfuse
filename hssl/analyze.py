@@ -6,7 +6,7 @@ import os
 
 import re
 
-from typing import List, Optional
+from typing import List, NamedTuple, Optional
 
 from dfply import X, mutate
 
@@ -32,6 +32,14 @@ from .image import to_array
 from .logging import DEBUG, INFO, WARNING, log
 from .network import Histonet, STD
 from .utility import integrate_loadings
+
+
+class Sample(NamedTuple):
+    name: str
+    image: Image
+    label: Image
+    data: pd.DataFrame
+    effects: np.ndarray
 
 
 def run_tsne(y, n_components=3, initial_dims=20):
@@ -179,8 +187,7 @@ def order_factors(std: STD):
 def analyze(
         histonet: Histonet,
         std: STD,
-        image: Image,
-        label: Optional[Image],
+        sample: Sample,
         output_prefix: str = None,
         device: t.device = None,
 ):
@@ -190,13 +197,37 @@ def analyze(
     if device is None:
         device = t.device('cpu')
 
+    if sample.label is not None:
+        label = (
+            t.as_tensor(to_array(sample.label))
+            .to(device)
+            .permute(2, 0, 1)
+            .long()
+        )
+        label_mask = label[0] != 1
+    else:
+        label = None
+        label_mask = t.ones((sample.image.height, sample.image.width)).byte()
+
+    if sample.data is not None:
+        data = (
+            t.as_tensor(sample.data.values)
+            .to(device)
+            .float()
+        )
+    else:
+        data = None
+
     z, img_distr, loadings, state = histonet(
-        t.as_tensor(to_array(image))
-        .to(device)
-        .permute(2, 0, 1)
-        .float()
-        [None, ...]
-        / 255 * 2 - 1
+        (
+            t.as_tensor(to_array(sample.image))
+            .to(device)
+            .permute(2, 0, 1)
+            .float()
+            [None, ...]
+            / 255 * 2 - 1
+        ),
+        label, data,
     )
 
     std.resample()
@@ -210,10 +241,10 @@ def analyze(
     )
     mix = factors / factors.sum(1).unsqueeze(1)
 
-    if label:
-        label_mask = to_array(label)[..., 0] != 1
+    if sample.label is not None:
+        label_mask = label[0] != 1
     else:
-        label_mask = np.ones((image.height, image.width), dtype=bool)
+        label_mask = t.ones((sample.image.height, sample.image.width)).byte()
 
     for img, prefix in [
             (
@@ -256,7 +287,7 @@ def analyze(
             imwrite(
                 os.path.join(
                     output_prefix, 'factors', name, f'factor-{i:03d}.png'),
-                visualize_greyscale(clip(p, 0.1), label_mask),
+                visualize_greyscale(clip(p, 0.1), label_mask.cpu().numpy()),
             )
 
 
@@ -338,8 +369,7 @@ def analyze_gene_profiles(
 def analyze_genes(
         histonet: Histonet,
         std: STD,
-        image: Image,
-        label: Image,
+        sample: Sample,
         patterns: List[str],
         output_prefix: str = None,
         device: t.device = None,
@@ -350,18 +380,37 @@ def analyze_genes(
     if device is None:
         device = t.device('cpu')
 
-    if label:
-        label_mask = to_array(label)[..., 0] != 1
+    if sample.label is not None:
+        label = (
+            t.as_tensor(to_array(sample.label))
+            .to(device)
+            .permute(2, 0, 1)
+            .long()
+        )
+        label_mask = label[0] != 1
     else:
-        label_mask = np.ones((image.height, image.width), dtype=bool)
+        label = None
+        label_mask = t.ones((sample.image.height, sample.image.width)).byte()
 
-    z, _img_distr, loadings, _state = histonet(
-        t.as_tensor(to_array(image))
-        .to(device)
-        .permute(2, 0, 1)
-        .float()
-        [None, ...]
-        / 255 * 2 - 1
+    if sample.data is not None:
+        data = (
+            t.as_tensor(sample.data.values)
+            .to(device)
+            .float()
+        )
+    else:
+        data = None
+
+    z, img_distr, loadings, state = histonet(
+        (
+            t.as_tensor(to_array(sample.image))
+            .to(device)
+            .permute(2, 0, 1)
+            .float()
+            [None, ...]
+            / 255 * 2 - 1
+        ),
+        label, data,
     )
 
     gt = std.resample().rate_gt
@@ -405,24 +454,42 @@ def analyze_genes(
 def impute_counts(
         histonet: Histonet,
         std: STD,
-        image: Image,
-        label: Image,
-        effects: Optional[t.tensor] = None,
+        sample: Sample,
         device: Optional[t.device] = None,
 ):
     if device is None:
         device = t.device('cpu')
 
-    z, _img_distr, loadings, state = histonet(
-        t.as_tensor(to_array(image))
+    if sample.data is not None:
+        data = (
+            t.as_tensor(sample.data.values)
+            .to(device)
+            .float()
+        )
+    else:
+        data = None
+
+    label = (
+        t.as_tensor(to_array(sample.label))
         .to(device)
         .permute(2, 0, 1)
-        .float()
-        [None, ...]
-        / 255 * 2 - 1
+        .long()
     )
 
-    label = to_array(label)[..., 0]
+    z, img_distr, loadings, state = histonet(
+        (
+            t.as_tensor(to_array(sample.image))
+            .to(device)
+            .permute(2, 0, 1)
+            .float()
+            [None, ...]
+            / 255 * 2 - 1
+        ),
+        label,
+        data,
+    )
+
+    label = label.cpu().numpy()[0]
     labels = [*sorted(np.unique(label))]
     label = np.searchsorted(labels, label)
 
@@ -435,6 +502,9 @@ def impute_counts(
             .unsqueeze(0)
         ),
     )
-    d = std(integrated_loadings[2:], effects)
+    d = std(
+        integrated_loadings[2:],
+        t.as_tensor(sample.effects).to(device),
+    )
 
     return d, labels[2:]

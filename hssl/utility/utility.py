@@ -32,6 +32,14 @@ def set_rng_seed(seed: int):
     ]), seed, n_seed, t_seed)
 
 
+def compose(f, *gs):
+    return (
+        (lambda *args, **kwargs: f(compose(*gs)(*args, **kwargs)))
+        if gs != ()
+        else f
+    )
+
+
 def zip_dicts(ds):
     d0 = next(ds)
     d = {k: [] for k in d0.keys()}
@@ -63,7 +71,12 @@ def center_crop(input, target_shape):
     ])]
 
 
-def read_data(paths, filter_ambiguous=True, genes=None):
+def read_data(
+        paths: List[str],
+        filter_ambiguous: bool = True,
+        num_genes: int = None,
+        genes: List[str] = None,
+) -> pd.DataFrame:
     def _load_file(p):
         log(INFO, 'loading data file %s', p)
         return pd.read_csv(p, index_col=0)
@@ -82,21 +95,23 @@ def read_data(paths, filter_ambiguous=True, genes=None):
 
     data = data.iloc[:, (data.sum(0) > 0).values]
 
-    if filter_ambiguous:
+    if genes is not None:
+        data = data[genes]
+    elif filter_ambiguous:
         data = data[[
             x for x in data.columns if 'ambiguous' not in x
         ]]
 
-    if genes:
-        if isinstance(genes, int):
+    if num_genes:
+        if isinstance(num_genes, int):
             data = data[
                 data.sum(0)
                 .sort_values()
-                [-genes:]
+                [-num_genes:]
                 .index
             ]
-        if isinstance(genes, list):
-            data = data[genes]
+        if isinstance(num_genes, list):
+            data = data[num_genes]
 
     return data
 
@@ -174,18 +189,6 @@ def with_interrupt_handler(handler):
             signal.signal(signal.SIGINT, previous_handler)
         return _wrapper
     return _decorator
-
-
-def lazify(computation):
-    def _g():
-        result = computation()
-        while True:
-            yield result
-    g = _g()
-
-    def _wrapped():
-        return next(g)
-    return _wrapped
 
 
 def chunks_of(n, xs):

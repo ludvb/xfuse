@@ -1,5 +1,7 @@
 from typing import Any, Dict, NamedTuple, Union, Tuple
 
+from _io import BufferedReader
+
 import torch as t
 
 from ..logging import INFO, log
@@ -63,8 +65,9 @@ def save_state(state: State, file) -> None:
     )
 
 
-def load_state(file: str) -> State:
-    log(INFO, 'loading state from %s', file)
+def load_state(file: Union[str, BufferedReader]) -> State:
+    log(INFO, 'loading state from %s',
+        file.name if isinstance(file, BufferedReader) else file)
 
     state: SavedState = t.load(file, map_location=t.device('cpu'))
     if not isinstance(state, SavedState):
