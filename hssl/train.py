@@ -14,7 +14,7 @@ import torch as t
 
 from .analyze import dim_red, visualize_batch
 from .dataset import Dataset, collate
-from .logging import INFO, log
+from .logging import INFO, WARNING, log
 from .utility import (
     chunks_of,
     collect_items,
@@ -145,24 +145,35 @@ def train(
     fixed_data = next(iter(training_data))
 
     def _step(xs):
-        inputs = [
-            {k: v.to(dev) for k, v in dat.items()}
-            for dev, dat in zip(devices, xs)
-        ]
-        outputs = t.nn.parallel.gather(
-            t.nn.parallel.parallel_apply(
-                t.nn.parallel.replicate(stepper, devices[:len(inputs)]),
-                inputs,
-            ),
-            devices[0],
-        )
+        try:
+            inputs = [
+                {k: v.to(dev) for k, v in dat.items()}
+                for dev, dat in zip(devices, xs)
+            ]
+            outputs = t.nn.parallel.gather(
+                t.nn.parallel.parallel_apply(
+                    t.nn.parallel.replicate(stepper, devices[:len(inputs)]),
+                    inputs,
+                ),
+                devices[0],
+            )
 
-        if stepper.training:
-            optimizer.zero_grad()
-            t.sum(outputs['L']).backward()
-            optimizer.step()
+            if stepper.training:
+                optimizer.zero_grad()
+                t.sum(outputs['L']).backward()
+                optimizer.step()
 
-        return collect_items({k: t.mean(v) for k, v in outputs.items()})
+            return collect_items({k: t.mean(v) for k, v in outputs.items()})
+        except RuntimeError as e:
+            if 'CUDA out of memory' in str(e):
+                log(
+                    WARNING,
+                    'CUDA ran out of memory! '
+                    'consider decreasing the batch size.'
+                )
+            else:
+                raise e
+        return None
 
     t.enable_grad()
     histonet.train()
@@ -272,15 +283,16 @@ def train(
                         lambda x: zip_dicts(
                             map(
                                 lambda y: {'iteration': y[0], **y[1]},
-                                filter(lambda y: y is not None, x),
+                                enumerate(
+                                    filter(lambda y: y is not None, x),
+                                    1,
+                                ),
                             ),
                         ),
-                        chunks_of(100, (
-                            (i, _step(xs)) for i, xs in enumerate(
-                                chunks_of(len(devices), data),
-                                1,
-                            )
-                        ))
+                        chunks_of(
+                            100,
+                            map(_step, chunks_of(len(devices), data)),
+                        ),
                 ):
                     _report(
                         epoch,
