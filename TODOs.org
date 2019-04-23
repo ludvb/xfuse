@@ -57,6 +57,8 @@
 * DONE [#B] log version
   CLOSED: [2019-04-01 Mon 17:44]
 
-* TODO compute DKL analytically if possible
+* TODO [#B] compute DKL analytically if possible
 
-* TODO add support for drawing multiple monte carlo samples
+* TODO [#A] add support for drawing multiple monte carlo samples
+
+* TODO [#A] make priors N(0,*1*)
