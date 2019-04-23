@@ -2,11 +2,15 @@ from functools import reduce
 
 import itertools as it
 
+import operator as op
+
 import os
 
 import re
 
 from typing import List, NamedTuple, Optional
+
+import warnings
 
 from dfply import X, mutate
 
@@ -27,6 +31,8 @@ from pandas.api.types import CategoricalDtype
 import torch as t
 
 from torchvision.utils import make_grid
+
+from tqdm import tqdm
 
 from .image import to_array
 from .logging import DEBUG, INFO, WARNING, log
@@ -516,3 +522,222 @@ def impute_counts(
     )
 
     return d, labels[2:]
+
+
+def dge(
+        histonet: Histonet,
+        std: STD,
+        samples: List[Sample],
+        regions: List[Image],
+        output: str,
+        normalize: bool = True,
+        trials: int = 100,
+        device: Optional[t.device] = None,
+) -> None:
+    if device is None:
+        device = t.device('cpu')
+
+    def _replace_regions(region, label):
+        region[
+            (label == 1)
+            | ((region != 0) & (region != 255))
+        ] = 1
+        region[region == 255] = 2
+
+    def _filter_extra_channels(image):
+        if len(image.shape) == 3:
+            if image.shape[-1] != 1:
+                warnings.warn(
+                    'label and region images should be single channel. '
+                    'only the first channel will be used.'
+                )
+            image = image[..., 0]
+        elif len(image.shape) != 2:
+            raise ValueError('invalid image dimensions')
+        return image[..., None]
+
+    def _sample_one(sample, region):
+        if sample.data is not None:
+            data = (
+                t.as_tensor(sample.data.values)
+                .to(device)
+                .float()
+            )
+        else:
+            data = None
+
+        region, image, label = map(
+            to_array, (region, sample.image, sample.label))
+
+        region, label = map(_filter_extra_channels, (region, label))
+        _replace_regions(region, label)
+
+        region, label = [
+            t.as_tensor(x)
+            .to(device)
+            .permute(2, 0, 1)
+            .long()
+            for x in (region, label)
+        ]
+        image = (
+            t.as_tensor(image)
+            .to(device)
+            .permute(2, 0, 1)
+            .float()
+            [None, ...]
+            / 255 * 2 - 1
+        )
+
+        _z, _img_distr, loadings, _state = histonet(image, label, data)
+
+        region = region.cpu().numpy()[0]
+
+        integrated_loadings = (
+            integrate_loadings(
+                loadings,
+                (
+                    t.as_tensor(region)
+                    .to(device)
+                    .long()
+                    .unsqueeze(0)
+                ),
+                2,
+            )
+            [[0, 2]]
+        )
+
+        return (
+            std(
+                integrated_loadings,
+                (
+                    t.tensor(sample.effects)
+                    .to(integrated_loadings)
+                    .expand(2, -1)
+                ),
+            )
+            .mean
+        )
+
+    def _sample_all():
+        std.resample()
+        a, b = (
+            x / x.sum() for x in
+            t.stack([*it.starmap(_sample_one, zip(samples, regions))])
+            .sum(0)
+        )
+        return (t.log(a) - t.log(b)).cpu().detach()
+
+    lfcs = t.stack([_sample_all() for _ in tqdm(
+        range(trials),
+        dynamic_ncols=True,
+    )])
+
+    low, high = t.stack(
+        [
+            xs.sort()[0][[
+                int(len(xs) * .01),
+                len(xs) - 1 - int(len(xs) * .01)
+            ]]
+            for xs in lfcs.transpose(0, 1)
+        ],
+        -1,
+    )
+
+    df = pd.DataFrame(dict(
+        gene=std.genes,
+        lfc_mean=lfcs.mean(0).numpy(),
+        lfc_low=low.numpy(),
+        lfc_high=high.numpy(),
+        pnorm=(
+            t.distributions.Normal(
+                lfcs.mean(0).abs(),
+                lfcs.std(0),
+            )
+            .cdf(0)
+        ),
+    ))
+    (
+        df
+        .sort_values('lfc_mean')
+        .to_csv(
+            os.path.join(output, 'dge.csv.gz'),
+            index=False,
+        )
+    )
+
+    df['neg_log_cv'] = (
+        (t.log(lfcs.mean(0).abs()) - t.log(lfcs.std(0)))
+        .numpy()
+    )
+    plot = (
+        pn.ggplot(df)
+        + pn.aes(
+            'lfc_mean',
+            'neg_log_cv',
+            xmin='lfc_low',
+            xmax='lfc_high',
+        )
+        + pn.geom_point(alpha=0.3)
+        + pn.xlab('log-fold change')
+        + pn.ylab('-log CV')
+        + pn.geom_text(
+            pn.aes('lfc_mean', 'neg_log_cv', label='gene'),
+            (
+                pd.concat([
+                    (
+                        df[df.lfc_mean < -1]
+                        .sort_values('lfc_mean')
+                        .iloc[:10]
+                    ),
+                    (
+                        df[df.lfc_mean > 1]
+                        .sort_values('lfc_mean', ascending=False)
+                        .iloc[:10]
+                    ),
+                ])
+            ),
+            color='black',
+            nudge_y=0.3,
+        )
+        + pn.geom_errorbarh(height=None, alpha=0.05)
+        + pn.theme_bw()
+        + pn.theme(legend_position='none')
+    )
+    plot.save(os.path.join(output, 'volcano.pdf'), width=20, height=20)
+
+    data = df.sort_values('lfc_mean')
+    data = pd.concat([data.iloc[:50], data.iloc[-50:]])
+    data.gene = data.gene.astype(CategoricalDtype(data.gene, ordered=True))
+    plot = (
+        pn.ggplot(data)
+        + pn.aes('gene', 'lfc_mean', ymax='lfc_low', ymin='lfc_high')
+        + pn.geom_point()
+        + pn.geom_errorbar()
+        + pn.ylab('log-fold change')
+        + pn.coord_flip()
+        + pn.theme(
+            axis_text_x=pn.element_text(rotation=90),
+        )
+    )
+    plot.save(os.path.join(output, 'top-dg.pdf'), width=10, height=20)
+
+    for sample, region in zip(samples, regions):
+        region, image, label = map(
+            to_array, (region, sample.image, sample.label))
+        region, label = map(_filter_extra_channels, (region, label))
+        _replace_regions(region, label)
+        annotation = (
+            image / 255 / 2
+            + 1 / 2 * np.concatenate([
+                (region == 0),
+                np.zeros((*region.shape[:2], 2)),
+            ], 2)
+            + 1 / 2 * np.concatenate([
+                np.zeros((*region.shape[:2], 2)),
+                (region == 2),
+            ], 2)
+        )
+        imwrite(
+            os.path.join(output, f'{sample.name}_annotation.png'),
+            annotation,
+        )

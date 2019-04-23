@@ -28,6 +28,7 @@ from .analyze import (
     analyze as default_analysis,
     analyze_gene_profiles,
     analyze_genes,
+    dge as dge_analysis,
     impute_counts,
 )
 from .dataset import Dataset, RandomSlide, spot_size
@@ -148,7 +149,13 @@ def train(
 
     design_matrix = design_matrix_from(design[[
         x for x in design.columns
-        if x not in ['image', 'labels', 'validation', 'data']
+        if x not in [
+                'name',
+                'image',
+                'labels',
+                'validation',
+                'data',
+        ]
     ]])
 
     dataset = Dataset(
@@ -415,6 +422,70 @@ def impute():
 
 
 analyze.add_command(impute)
+
+
+@click.command()
+@click.argument(
+    'regions-file',
+    metavar='regions',
+    type=click.File('rb'),
+)
+@click.option('--normalize/--no-normalize', default=True)
+@click.option('--trials', type=int, default=100)
+def dge(regions_file, normalize, trials):
+    regions = pd.read_csv(regions_file)
+
+    regions_dir = os.path.dirname(regions_file.name)
+
+    def _path(p):
+        return (
+            p
+            if os.path.isabs(p) else
+            os.path.join(regions_dir, p)
+        )
+
+    if 'regions' not in regions.columns:
+        raise ValueError('regions file must contain a "regions" column')
+
+    def _analysis(state, samples, output, **_):
+        nonlocal regions
+
+        if 'name' in regions.columns:
+            samples_dict = {s.name: s for s in samples}
+
+            def _sample(n):
+                if n not in samples_dict:
+                    raise ValueError(f'name "{n}" is not in the design file')
+                return samples_dict[n]
+
+            samples = [*map(_sample, regions.name)]
+        else:
+            if len(regions) != len(samples):
+                raise ValueError(
+                    'if the regions file does not contain a "name" column, '
+                    'it must have the same length as the design file.'
+                )
+
+        regions = [
+            Image.new_from_file(os.path.join(regions_dir, r))
+            for r in regions.regions
+        ]
+
+        dge_analysis(
+            state.histonet,
+            state.std,
+            samples=samples,
+            regions=regions,
+            output=output,
+            normalize=normalize,
+            trials=trials,
+            device=DEVICE,
+        )
+
+    return 'differential gene expression', _analysis
+
+
+analyze.add_command(dge)
 
 
 if __name__ == '__main__':

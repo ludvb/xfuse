@@ -163,13 +163,19 @@ def argmax(x: t.Tensor):
     return np.unravel_index(t.argmax(x), x.shape)
 
 
-def integrate_loadings(loadings: t.Tensor, label: t.Tensor):
+def integrate_loadings(
+        loadings: t.Tensor,
+        label: t.Tensor,
+        max_label: int = None,
+):
+    if max_label is None:
+        max_label = t.max(label)
     return (
         t.einsum(
             'btxy,bxyi->it',
-            t.exp(loadings),
+            loadings.exp(),
             (
-                t.eye(t.max(label) + 1)
+                t.eye(max_label + 1)
                 .to(label)
                 [label.flatten()]
                 .reshape(*label.shape, -1)
