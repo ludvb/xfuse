@@ -175,9 +175,6 @@ def train(
                 raise e
         return None
 
-    t.enable_grad()
-    histonet.train()
-
     def _report(epoch, output, dataset_size, validation):
         iteration = output.pop('iteration')
 
@@ -260,9 +257,6 @@ def train(
                 os.path.join(img_prefix, f'{prefix}-epoch-{epoch:06d}.png'),
                 visualize_batch(data),
             )
-
-        t.enable_grad()
-        histonet.train()
 
     def _interrupt_handler(*_):
         from multiprocessing import current_process
