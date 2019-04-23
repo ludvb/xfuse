@@ -296,7 +296,7 @@ def _run_analysis(analyses, design_file, state_file, output):
             os.path.join(design_dir, p)
         )
 
-    data = read_data(map(_path, design.data))
+    data = read_data(map(_path, design.data), genes=state.std.genes)
     design_matrix = design_matrix_from(design, state.std._covariates)
     samples = [
         Sample(
