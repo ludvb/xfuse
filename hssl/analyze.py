@@ -457,11 +457,17 @@ def analyze_genes(
         )
         imwrite(
             os.path.join(absp, f'{std.genes[idx]}.png'),
-            visualize_greyscale(clip(gene_map, 0.01), label_mask),
+            visualize_greyscale(
+                clip(gene_map, 0.01),
+                label_mask.cpu().numpy(),
+            ),
         )
         imwrite(
             os.path.join(relp, f'{std.genes[idx]}.png'),
-            visualize_greyscale(clip(gene_map / total, 0.01), label_mask),
+            visualize_greyscale(
+                clip(gene_map / total, 0.01),
+                label_mask.cpu().numpy(),
+            ),
         )
 
 
