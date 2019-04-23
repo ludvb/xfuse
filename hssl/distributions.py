@@ -1,5 +1,7 @@
 from abc import abstractmethod
 
+from warnings import warn
+
 import torch as t
 
 
@@ -184,3 +186,31 @@ class Normal(Distribution):
     @property
     def mean(self):
         return self.loc
+
+
+def _as_torch_distribution(x: Distribution):
+    try:
+        return (
+            {
+                Normal: lambda x: t.distributions.Normal(x.loc, x.scale)
+            }
+            [type(x)](x)
+        )
+    except KeyError:
+        raise NotImplementedError(
+            f'can\'t cast distribution of type {type(x).__name__}')
+
+
+def kl_divergence(x: Variable, q: Distribution) -> t.Tensor:
+    try:
+        return t.sum(t.distributions.kl_divergence(
+            _as_torch_distribution(x.distribution),
+            _as_torch_distribution(q),
+        ))
+    except NotImplementedError:
+        pass
+    warn(
+        'sampling KL divergence '
+        f'(p~{type(x.distribution).__name__}, q~{type(q).__name__}))'
+    )
+    return x.distribution.log_prob(x.value) - q.log_prob(x.value)

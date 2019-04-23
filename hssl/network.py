@@ -8,7 +8,7 @@ import numpy as np
 
 import torch as t
 
-from .distributions import Distribution, Normal, Variable
+from .distributions import Distribution, Normal, Variable, kl_divergence
 from .logging import DEBUG, log
 from .utility import center_crop
 from .utility.init_args import store_init_args
@@ -44,8 +44,7 @@ class Variational(t.nn.Module):
 
     def complexity_cost(self, batch_fraction):
         return sum([
-            t.sum(x.distribution.log_prob(x.value) - p.log_prob(x.value))
-            * (batch_fraction if g else 1.)
+            kl_divergence(x, p) * (batch_fraction if g else 1.)
             for x, p, g in map(self._get_latent, self._latents)
         ])
 
