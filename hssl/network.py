@@ -82,8 +82,8 @@ class Histonet(Variational):
             self,
             genes,
             num_factors=50,
-            latent_size=96,
-            nf=16,
+            latent_size=192,
+            nf=32,
     ):
         super().__init__()
 
