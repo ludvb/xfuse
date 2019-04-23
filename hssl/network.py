@@ -312,19 +312,13 @@ class STD(Variational):
 
             self._register_latent(v, p, name, True)
 
-        _make_covariate('r', (1, ), True)
-        _make_covariate('rg', (len(genes), ), True)
-        _make_covariate('rt', (num_factors, ), False)
+        _make_covariate('lg', (len(genes), ), False)
+        _make_covariate('rg', (len(genes), ), False)
         _make_covariate('rgt', (len(genes), num_factors), False)
-
-        _make_covariate('l', (1, ), True)
-        _make_covariate('lg', (len(genes), ), True)
 
         if covariates is not None and len(covariates) > 0:
             self._covariates = covariates
             n_fe = reduce(op.add, map(lambda x: len(x[1]), covariates))
-            _make_covariate('reff', (n_fe,), True)
-            _make_covariate('leff', (n_fe,), True)
             _make_covariate('rgeff', (n_fe, len(genes)), False)
             _make_covariate('lgeff', (n_fe, len(genes)), False)
         else:
@@ -337,24 +331,8 @@ class STD(Variational):
                     f' ({gene_baseline.shape[1]} vs. {len(genes)})'
                 )
             lgb = t.tensor(np.log(gene_baseline)).float()
-            lgb_mean = lgb.mean()[None]
-            self.r_q_mu.data = lgb_mean
-            self.r_p_mu.data = lgb_mean
-            self.rg_q_mu.data = lgb - lgb_mean
-            self.rg_p_mu.data = lgb - lgb_mean
-
-    @property
-    def rate_gt(self):
-        return t.exp(
-            self.r.value
-            + self.rg.value[..., None]
-            + self.rt.value[None, ...]
-            + self.rgt.value
-        )
-
-    @property
-    def logit(self):
-        return self.l.value + self.lg.value
+            self.rg_q_mu.data = lgb.clone()
+            self.rg_p_mu.data = lgb.clone()
 
     def resample(self):
         for v, *_ in map(self._get_latent, self._latents):
@@ -362,13 +340,10 @@ class STD(Variational):
         return self
 
     def forward(self, x, effects=None):
-        self.resample()
-        rate = x @ self.rate_gt.t()
-        logit = self.logit[None]
+        rate = x @ ((self.rg.value.unsqueeze(1) + self.rgt.value).exp().t())
+        logit = self.lg.value.unsqueeze(0)
         if effects is not None:
             effects = effects.float()
-            rate = rate * t.exp(
-                effects @ (self.reff.value[..., None] + self.rgeff.value))
-            logit = logit + (
-                effects @ (self.leff.value[..., None] + self.lgeff.value))
-        return t.distributions.NegativeBinomial(rate, logits=logit)
+            rate = rate * (effects @ self.rgeff.value.exp())
+            logit = logit + effects @ self.lgeff.value
+        return t.distributions.NegativeBinomial(total_count=rate, logits=logit)

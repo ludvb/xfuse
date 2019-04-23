@@ -234,7 +234,14 @@ def analyze(
     factors = (
         loadings.exp()
         * (
-            (std.rate_gt * std.logit.exp()[..., None])
+            (
+                (
+                    std.rgt.distribution.mean
+                    + std.rg.distribution.mean[..., None]
+                    + std.lg.distribution.mean[..., None]
+                )
+                .exp()
+            )
             .sum(0)
             [None, ..., None, None]
         )
@@ -413,7 +420,8 @@ def analyze_genes(
         label, data,
     )
 
-    gt = std.resample().rate_gt
+    std.resample()
+    gt = (std.rgt.value + std.rg.value[..., None]).exp()
     total = (
         (loadings[0].exp() * gt.sum(0)[..., None, None])
         .sum(0).detach().cpu().numpy()
@@ -502,7 +510,7 @@ def impute_counts(
             .unsqueeze(0)
         ),
     )
-    d = std(
+    d = std.resample()(
         integrated_loadings[2:],
         t.as_tensor(sample.effects).to(device),
     )

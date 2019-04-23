@@ -1,5 +1,3 @@
-from collections import namedtuple
-
 import gzip
 
 import itertools as it
@@ -53,7 +51,7 @@ class Step(t.nn.Module):
         lpimg = img_distr.log_prob(x['image'])
 
         integrated_loadings = integrate_loadings(loadings, x['label'])
-        d = self.std(integrated_loadings[1:], effects)
+        d = self.std.resample()(integrated_loadings[1:], effects)
 
         lpobs = d.log_prob(x['data'])
 
