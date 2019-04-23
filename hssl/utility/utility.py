@@ -96,7 +96,14 @@ def read_data(
     data = data.iloc[:, (data.sum(0) > 0).values]
 
     if genes is not None:
-        data = data[genes]
+        data_ = pd.DataFrame(
+            np.zeros((len(data), len(genes))),
+            columns=genes,
+            index=data.index,
+        )
+        shared_genes = np.intersect1d(genes, data.columns)
+        data_[shared_genes] = data[shared_genes]
+        data = data_
     elif filter_ambiguous:
         data = data[[
             x for x in data.columns if 'ambiguous' not in x
@@ -140,7 +147,7 @@ def design_matrix_from(
             )
 
         for covariate, values in covariates:
-            design[covariate].cat.set_categories(values)
+            design[covariate].cat.set_categories(values, inplace=True)
         design = design[[x for x, _ in covariates]]
 
     def _encode(covariate):
