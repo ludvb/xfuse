@@ -275,6 +275,10 @@ def _run_analysis(analyses, design_file, state_file, output):
     state = load_state(state_file.name)
     to_device(state, DEVICE)
 
+    t.no_grad()
+    state.histonet.eval()
+    state.std.eval()
+
     design = pd.read_csv(design_file)
     design_dir = os.path.dirname(design_file.name)
 
