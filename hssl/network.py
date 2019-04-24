@@ -212,7 +212,7 @@ class Histonet(Variational):
             xpr = t.einsum(
                 'byxi,ig->bgyx',
                 (
-                    t.eye(t.max(lbl) + 1)
+                    t.eye(len(data_with_missing))
                     .to(lbl_16)
                     [lbl_16.flatten()]
                     .reshape(*lbl_16.shape, -1)
