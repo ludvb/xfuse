@@ -79,7 +79,7 @@ def read_data(
 ) -> pd.DataFrame:
     def _load_file(p):
         log(INFO, 'loading data file %s', p)
-        return pd.read_csv(p, index_col=0)
+        return pd.read_csv(p, index_col=0, dtype=float)
 
     ks, vs = zip(*[(p, _load_file(p)) for p in paths])
     data = (
@@ -100,6 +100,7 @@ def read_data(
             np.zeros((len(data), len(genes))),
             columns=genes,
             index=data.index,
+            dtype=float,
         )
         shared_genes = np.intersect1d(genes, data.columns)
         data_[shared_genes] = data[shared_genes]
