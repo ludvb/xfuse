@@ -216,13 +216,10 @@ def train(
             genes=count_data.columns,
             num_factors=factors,
             covariates=[
-                (
-                    design_matrix.index.levels[0][k],
-                    [v for _, v in vs],
-                )
-                for k, vs in it.groupby(
-                    enumerate(design_matrix.index.levels[1]),
-                    lambda x: design_matrix.index.codes[0][x[0]],
+                (k, set(v for k, v in items))
+                for k, items in it.groupby(
+                        design_matrix.index.to_flat_index().to_list(),
+                        lambda x: x[0],
                 )
             ],
             gene_baseline=count_data.mean(0).values,

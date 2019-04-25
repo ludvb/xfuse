@@ -4,7 +4,7 @@ import itertools as it
 
 import signal
 
-from typing import List, Optional, Tuple
+from typing import List, Optional, Set, Tuple
 
 import numpy as np
 
@@ -126,7 +126,7 @@ def read_data(
 
 def design_matrix_from(
         design: pd.DataFrame,
-        covariates: Optional[List[Tuple[str, List[str]]]] = None,
+        covariates: Optional[List[Tuple[str, Set[str]]]] = None,
 ) -> pd.DataFrame:
     if len(design.columns) == 0:
         return pd.DataFrame(np.zeros((0, len(design))))
@@ -148,8 +148,12 @@ def design_matrix_from(
             )
 
         for covariate, values in covariates:
-            design[covariate].cat.set_categories(values, inplace=True)
+            design[covariate].cat.set_categories(sorted(values), inplace=True)
         design = design[[x for x, _ in covariates]]
+    else:
+        for covariate in design.columns:
+            design[covariate].cat.set_categories(
+                sorted(design[covariate].cat.categories), inplace=True)
 
     def _encode(covariate):
         log(INFO, 'encoding design covariate "%s" with %d categories: %s',
