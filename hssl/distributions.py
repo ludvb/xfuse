@@ -8,6 +8,7 @@ import torch as t
 class Distribution(t.nn.Module):
     def __init__(self):
         super().__init__()
+
         def _create_getter(name):
             @property
             def _get(self):
