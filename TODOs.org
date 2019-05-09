@@ -66,3 +66,5 @@
 
 * DONE [#A] deal with cuda oom more gracefully
   CLOSED: [2019-04-23 Tue 17:29]
+
+* TODO plot spatial rmse fit
