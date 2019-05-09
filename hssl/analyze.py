@@ -325,6 +325,9 @@ def analyze_gene_profiles(
         _to_df(std.rgt.distribution.scale, 'sd'),
         on=['gene', 'factor'],
     )
+    order = order_factors(std)
+    inv_order = np.arange(len(order))[np.argsort(order)]
+    data.factor = inv_order[data.factor.values.astype(int)]
     if factors is not None:
         data = data.loc[data.factor.isin(factors)]
 
@@ -355,28 +358,26 @@ def analyze_gene_profiles(
             )
         )
 
-    with PdfPages(os.path.join(output_prefix, f'profiles.pdf')) as pdf:
-        factor_order = order_factors(std)
-        for i, f in enumerate(order_factors(std), 1):
-            log(DEBUG, 'producing profile for factor %d', i)
+    for i, f in enumerate(order_factors(std), 1):
+        log(DEBUG, 'producing profile for factor %d', i)
 
-            x = (
-                data[data.factor == factor_order[f]]
-                .sort_values('mu', ascending=False)
-            )
-            if genes != []:
-                x = x.loc[reduce(
-                    lambda a, x: a | x,
-                    (x.gene.str.contains(g, regex=regex, flags=re.IGNORECASE)
-                     for g in genes),
-                )]
-            if truncate is not None and len(x) > 2 * truncate:
-                x = pd.concat([x.iloc[:truncate], x.iloc[-truncate:]])
-            x.gene = x.gene.astype(CategoricalDtype(x.gene, ordered=True))
+        x = (
+            data[data.factor == f]
+            .sort_values('mu', ascending=False)
+        )
+        if genes != []:
+            x = x.loc[reduce(
+                lambda a, x: a | x,
+                (x.gene.str.contains(g, regex=regex, flags=re.IGNORECASE)
+                    for g in genes),
+            )]
+        if truncate is not None and len(x) > 2 * truncate:
+            x = pd.concat([x.iloc[:truncate], x.iloc[-truncate:]])
+        x.gene = x.gene.astype(CategoricalDtype(x.gene, ordered=True))
 
-            _generate_barplot(x, f'factor {i}').draw(False)
-            pdf.savefig()
-            plt.close()
+        _generate_barplot(x, f'factor {i}').draw(False)
+        plt.savefig(os.path.join(output_prefix, f'factor_{i}.png'))
+        plt.close()
 
 
 def analyze_genes(
