@@ -401,20 +401,65 @@ analyze.add_command(default)
 
 
 @click.command()
-def impute():
-    def _analysis(state, sample, output, **_):
-        d, labels = impute_counts(
-            state.histonet,
-            state.std,
-            sample,
-            device=DEVICE,
+@click.argument(
+    'regions-file',
+    metavar='regions',
+    type=click.File('rb'),
+)
+def impute(regions_file):
+    regions = pd.read_csv(regions_file)
+
+    regions_dir = os.path.dirname(regions_file.name)
+
+    def _path(p):
+        return (
+            p
+            if os.path.isabs(p) else
+            os.path.join(regions_dir, p)
         )
-        result = pd.DataFrame(
-            d.mean.detach().cpu().numpy(),
-            index=pd.Index(labels, name='n'),
-            columns=state.std.genes,
-        )
-        result.to_csv(os.path.join(output, 'imputed.csv.gz'))
+
+    if 'regions' not in regions.columns:
+        raise ValueError('regions file must contain a "regions" column')
+
+    def _analysis(state, samples, output, **_):
+        nonlocal regions
+
+        if 'name' in regions.columns:
+            samples_dict = {s.name: s for s in samples}
+
+            def _sample(n):
+                if n not in samples_dict:
+                    raise ValueError(f'name "{n}" is not in the design file')
+                return samples_dict[n]
+
+            samples = [*map(_sample, regions.name)]
+        else:
+            if len(regions) != len(samples):
+                raise ValueError(
+                    'if the regions file does not contain a "name" column, '
+                    'it must have the same length as the design file.'
+                )
+
+        regions = [
+            Image.new_from_file(os.path.join(regions_dir, r))
+            for r in regions.regions
+        ]
+
+        for sample, region in zip(samples, regions):
+            d, index = impute_counts(
+                state.histonet,
+                state.std,
+                sample,
+                region,
+                device=DEVICE,
+            )
+            result = pd.DataFrame(
+                d.mean.detach().cpu().numpy(),
+                index=pd.Index(index, name='n'),
+                columns=state.std.genes,
+            )
+            os.makedirs(os.path.join(output, sample.name))
+            result.to_csv(os.path.join(output, sample.name, 'imputed.csv.gz'))
     return 'imputation', _analysis
 
 

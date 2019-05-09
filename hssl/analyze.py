@@ -475,6 +475,7 @@ def impute_counts(
         histonet: Histonet,
         std: STD,
         sample: Sample,
+        region: Image,
         device: Optional[t.device] = None,
 ):
     if device is None:
@@ -489,11 +490,12 @@ def impute_counts(
     else:
         data = None
 
-    label = (
-        t.as_tensor(to_array(sample.label))
+    label, region = (
+        t.as_tensor(to_array(x))
         .to(device)
         .permute(2, 0, 1)
         .long()
+        for x in (sample.label, region)
     )
 
     z, img_distr, loadings, state = histonet(
@@ -509,14 +511,14 @@ def impute_counts(
         data,
     )
 
-    label = label.cpu().numpy()[0]
-    labels = [*sorted(np.unique(label))]
-    label = np.searchsorted(labels, label)
+    region = region.cpu().numpy()[0]
+    regions = [*sorted(np.unique(region))]
+    region = np.searchsorted(regions, region)
 
     integrated_loadings = integrate_loadings(
         loadings,
         (
-            t.as_tensor(label)
+            t.as_tensor(region)
             .to(device)
             .long()
             .unsqueeze(0)
@@ -527,7 +529,7 @@ def impute_counts(
         t.as_tensor(sample.effects).to(device),
     )
 
-    return d, labels[2:]
+    return d, regions[2:]
 
 
 def dge(
