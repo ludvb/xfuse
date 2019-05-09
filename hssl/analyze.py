@@ -428,7 +428,13 @@ def analyze_genes(
     )
 
     std.resample()
-    gt = (std.rgt.value + std.rg.value[..., None]).exp()
+    effects = t.as_tensor(sample.effects).to(device).float()
+    gt = (
+        std.rgt.value
+        + std.rg.value[..., None]
+        + (effects @ std.rgeff.value)[..., None]
+        + (effects @ std.lgeff.value)[..., None]
+    ).exp()
     total = (
         (loadings[0].exp() * gt.sum(0)[..., None, None])
         .sum(0).detach().cpu().numpy()
