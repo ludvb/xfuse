@@ -372,8 +372,8 @@ def gene_profiles(gene_list, factor, truncate, regex):
     def _analysis(state, samples, output):
         analyze_gene_profiles(
             std=state.std,
-            genes=gene_list,
-            factors=factor,
+            genes=list(gene_list),
+            factors=factor if len(factor) > 0 else None,
             truncate=truncate,
             regex=regex,
             output_prefix=output,
