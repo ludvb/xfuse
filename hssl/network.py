@@ -197,17 +197,18 @@ class Histonet(Variational):
                 .long()
             )
 
-            if self.training:
-                lbl_16[
-                    t.distributions.Bernoulli(
-                        0.5 * t.ones_like(lbl_16).float())
-                    .sample()
-                    .byte()
-                ] = 0
+            missing = t.tensor([1., *[0.] * xpr.shape[1]], device=xpr.device)
 
             data_with_missing = t.nn.functional.pad(
                 xpr, (1, 0, 1, 0))
-            data_with_missing[0, 0] = 1
+            data_with_missing[0] = missing
+
+            if self.training:
+                data_with_missing[
+                    t.distributions.Bernoulli(0.5)
+                    .sample((len(data_with_missing), ))
+                    .byte()
+                ] = missing
 
             xpr = t.einsum(
                 'byxi,ig->bgyx',
