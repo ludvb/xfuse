@@ -34,7 +34,7 @@ from tqdm import tqdm
 from .image import to_array
 from .logging import DEBUG, INFO, WARNING, log
 from .network import Histonet, STD
-from .utility import integrate_loadings
+from .utility import center_crop, integrate_loadings
 
 
 class Sample(NamedTuple):
@@ -477,6 +477,7 @@ def impute_counts(
         std: STD,
         sample: Sample,
         region: Image,
+        samples: int = 100,
         device: Optional[t.device] = None,
 ):
     if device is None:
@@ -493,13 +494,25 @@ def impute_counts(
 
     label, region = (
         t.as_tensor(to_array(x))
-        .to(device)
         .permute(2, 0, 1)
         .long()
         for x in (sample.label, region)
     )
 
-    z, img_distr, loadings, state = histonet(
+    label = label.to(device)
+    region = region.numpy()[0]
+
+    regions = [*sorted(np.unique(region))]
+    region = (
+        t.tensor(
+            np.searchsorted(regions, region),
+            device=device,
+            dtype=t.long,
+        )
+        .unsqueeze(0)
+    )
+
+    histonet.encode(
         (
             t.as_tensor(to_array(sample.image))
             .to(device)
@@ -512,25 +525,29 @@ def impute_counts(
         data,
     )
 
-    region = region.cpu().numpy()[0]
-    regions = [*sorted(np.unique(region))]
-    region = np.searchsorted(regions, region)
+    def _sample():
+        _img_distr, loadings, _state = histonet.decode(
+            histonet.z.sample().value)
 
-    integrated_loadings = integrate_loadings(
-        loadings,
-        (
-            t.as_tensor(region)
-            .to(device)
-            .long()
-            .unsqueeze(0)
-        ),
-    )
-    d = std.resample()(
-        integrated_loadings[2:],
-        t.as_tensor(sample.effects).to(device),
+        loadings = center_crop(
+            loadings, [region.shape[0], None, *region.shape[1:]])
+        integrated_loadings = integrate_loadings(loadings, region)
+        d = std.resample()(
+            integrated_loadings[2:],
+            t.as_tensor(sample.effects).to(device),
+        )
+
+        return (
+            d.mean.detach().cpu(),
+            d.sample().detach().cpu(),
+        )
+
+    means, samples = (
+        t.stack(xs)
+        for xs in zip(*(_sample() for _ in tqdm(range(samples))))
     )
 
-    return d, regions[2:]
+    return means, samples, regions[2:]
 
 
 def dge(

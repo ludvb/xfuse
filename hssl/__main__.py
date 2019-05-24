@@ -446,20 +446,37 @@ def impute(regions_file):
         ]
 
         for sample, region in zip(samples, regions):
-            d, index = impute_counts(
+            means, samples, index = impute_counts(
                 state.histonet,
                 state.std,
                 sample,
                 region,
                 device=DEVICE,
             )
-            result = pd.DataFrame(
-                d.mean.detach().cpu().numpy(),
-                index=pd.Index(index, name='n'),
-                columns=state.std.genes,
-            )
             os.makedirs(os.path.join(output, sample.name))
-            result.to_csv(os.path.join(output, sample.name, 'imputed.csv.gz'))
+            (
+                pd.DataFrame(
+                    means.mean(0).numpy(),
+                    index=pd.Index(index, name='n'),
+                    columns=state.std.genes,
+                )
+                .to_csv(os.path.join(output, sample.name, 'imputed.csv.gz'))
+            )
+            (
+                pd.concat(
+                    [
+                        pd.DataFrame(
+                            s.numpy().astype(int),
+                            index=pd.Index(index, name='n'),
+                            columns=state.std.genes,
+                        )
+                        for s in samples
+                    ],
+                    keys=list(range(len(samples))),
+                    names=['sample'],
+                )
+                .to_csv(os.path.join(output, sample.name, 'samples.csv.gz'))
+            )
     return 'imputation', _analysis
 
 
