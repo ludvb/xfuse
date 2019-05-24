@@ -2,8 +2,6 @@ from functools import reduce
 
 import itertools as it
 
-import operator as op
-
 import os
 
 import re
@@ -20,7 +18,6 @@ import plotnine as pn
 
 from pyvips import Image
 
-from matplotlib.backends.backend_pdf import PdfPages
 import matplotlib.pyplot as plt
 
 import numpy as np
@@ -183,7 +180,7 @@ def visualize_batch(batch, normalize=False, **kwargs):
 def order_factors(std: STD):
     return (
         (
-            t.abs(std.rgt.distribution.loc) / std.rgt.distribution.scale
+            t.abs(std.rgt.distribution.mean) / std.rgt.distribution.scale
         )
         .sum(0)
         .argsort(descending=True)
@@ -321,13 +318,13 @@ def analyze_gene_profiles(
         )
 
     data = pd.merge(
-        _to_df(std.rgt.distribution.loc, 'mu'),
-        _to_df(std.rgt.distribution.scale, 'sd'),
+        _to_df(std.rgt.distribution.mean, 'mean'),
+        _to_df(std.rgt.distribution.scale, 'scale'),
         on=['gene', 'factor'],
     )
     order = order_factors(std)
-    inv_order = np.arange(len(order))[np.argsort(order)]
-    data.factor = inv_order[data.factor.values.astype(int)]
+    inv_order = np.arange(len(order))[np.argsort(order.cpu().detach())]
+    data.factor = inv_order[data.factor.values.astype(int)] + 1
     if factors is not None:
         data = data.loc[data.factor.isin(factors)]
 
@@ -341,11 +338,11 @@ def analyze_gene_profiles(
             pn.ggplot(
                 x
                 >> mutate(
-                    mu_min=X.mu - 2 * X.sd,
-                    mu_max=X.mu + 2 * X.sd,
+                    mean_min=X['mean'] - 2 * X['scale'],
+                    mean_max=X['mean'] + 2 * X['scale'],
                 )
             )
-            + pn.aes('gene', 'mu', ymax='mu_max', ymin='mu_min')
+            + pn.aes('gene', 'mean', ymax='mean_max', ymin='mean_min')
             + pn.geom_point()
             + pn.geom_errorbar()
             + pn.ylab('log fold effect')
@@ -358,13 +355,10 @@ def analyze_gene_profiles(
             )
         )
 
-    for i, f in enumerate(order_factors(std), 1):
-        log(DEBUG, 'producing profile for factor %d', i)
+    for f in sorted(np.unique(data.factor)):
+        log(DEBUG, 'producing profile for factor %d', f)
 
-        x = (
-            data[data.factor == f]
-            .sort_values('mu', ascending=False)
-        )
+        x = data[data.factor == f].sort_values('mean')
         if genes != []:
             x = x.loc[reduce(
                 lambda a, x: a | x,
@@ -375,8 +369,8 @@ def analyze_gene_profiles(
             x = pd.concat([x.iloc[:truncate], x.iloc[-truncate:]])
         x.gene = x.gene.astype(CategoricalDtype(x.gene, ordered=True))
 
-        _generate_barplot(x, f'factor {i}').draw(False)
-        plt.savefig(os.path.join(output_prefix, f'factor_{i}.png'))
+        _generate_barplot(x, f'factor {f}').draw(False)
+        plt.savefig(os.path.join(output_prefix, f'factor-{f:03d}.png'))
         plt.close()
 
 
