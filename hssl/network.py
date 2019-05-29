@@ -108,8 +108,9 @@ class Histonet(Variational):
             t.nn.BatchNorm2d(16 * nf),
             # x16
         )
-        self.xpr_encoder = t.nn.Sequential(
-            t.nn.Conv2d(len(self.genes) + 1, 16 * nf, 3, 1, 1, bias=True),
+        self.xpr_encoder1 = t.nn.Linear(1 + len(self.genes), num_factors)
+        self.xpr_encoder2 = t.nn.Sequential(
+            t.nn.Conv2d(num_factors, 16 * nf, 3, 1, 1, bias=True),
             t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.BatchNorm2d(16 * nf),
             t.nn.Conv2d(16 * nf, 16 * nf, 3, 1, 1, bias=True),
@@ -210,26 +211,27 @@ class Histonet(Variational):
                     .byte()
                 ] = missing
 
+            convolved_data = self.xpr_encoder1(data_with_missing)
             xpr = t.einsum(
-                'byxi,ig->bgyx',
+                'byxi,ic->bcyx',
                 (
-                    t.eye(len(data_with_missing))
+                    t.eye(len(convolved_data))
                     .to(lbl_16)
                     [lbl_16.flatten()]
                     .reshape(*lbl_16.shape, -1)
                     .float()
                 ),
-                data_with_missing,
+                convolved_data,
             )
         else:
             xpr = t.zeros((
                 enc_img.shape[0],
-                self.enc_xpr[0].in_channels,
+                self.xpr_encoder1.out_features,
                 *enc_img.shape[2:],
             )).to(img)
             xpr[:, 0] = 1
 
-        enc_xpr = self.xpr_encoder(xpr)
+        enc_xpr = self.xpr_encoder2(xpr)
 
         enc_img = center_crop(enc_img, enc_xpr.shape)
         enc_xpr = center_crop(enc_xpr, enc_img.shape)
