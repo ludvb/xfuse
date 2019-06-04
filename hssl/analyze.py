@@ -477,7 +477,7 @@ def impute_counts(
         std: STD,
         sample: Sample,
         region: Image,
-        samples: int = 100,
+        samples: int = 10,
         device: Optional[t.device] = None,
 ):
     if device is None:

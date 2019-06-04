@@ -1,5 +1,7 @@
 # pylint: disable=missing-docstring, invalid-name, too-many-instance-attributes
 
+from functools import partial
+
 from datetime import datetime as dt
 
 from functools import wraps
@@ -41,7 +43,13 @@ from .logging import (
     log,
     set_level,
 )
-from .network import Histonet, STD
+from .network import (
+    XFuse,
+    STEncoder,
+    STDecoder,
+    HEEncoder,
+    HEDecoder,
+)
 from .optimizer import create_optimizer
 from .train import train as _train
 from .utility import (
@@ -198,23 +206,13 @@ def train(
     if state_file is not None:
         state = load_state(state_file)
     else:
-        histonet = Histonet(
+        st_encoder = partial(
+            STEncoder,
             genes=count_data.columns,
-            num_factors=factors,
         )
-        t.nn.init.normal_(
-            histonet.mixture_loadings[-1].weight,
-            std=1e-5,
-        )
-        t.nn.init.normal_(
-            histonet.mixture_loadings[-1].bias,
-            mean=-np.log(spot_size(dataset) * factors),
-            std=1e-5,
-        )
-
-        std = STD(
+        st_decoder = partial(
+            STDecoder,
             genes=count_data.columns,
-            num_factors=factors,
             covariates=[
                 (k, set(v for k, v in items))
                 for k, items in it.groupby(
@@ -225,16 +223,17 @@ def train(
             gene_baseline=count_data.mean(0).values,
         )
 
-        state = State(
-            histonet=histonet,
-            std=std,
-            optimizer=create_optimizer(
-                histonet,
-                std,
-                learning_rate=lr,
-            ),
-            epoch=0,
+        he_encoder = HEEncoder
+        he_decoder = HEDecoder
+
+        model = XFuse(
+            [st_encoder, he_encoder],
+            [st_decoder, he_decoder],
+            dataset_size=len(dataset),
         )
+
+        optimizer = create_optimizer(model, learning_rate=lr)
+        state = State(model, optimizer, 0)
 
     state = _train(
         state=state,

@@ -68,3 +68,5 @@
   CLOSED: [2019-04-23 Tue 17:29]
 
 * TODO plot spatial rmse fit
+
+* TODO [#B] refactoring: separate decoder for each modality

@@ -100,12 +100,7 @@ def train(
 
     state = to_device(state, devices[0])
 
-    histonet = state.histonet
-    std = state.std
-    optimizer = state.optimizer
     epoch = state.epoch + 1
-
-    stepper = Step(histonet, std, len(dataset))
 
     img_prefix = os.path.join(output_prefix, 'images')
     chkpt_prefix = os.path.join(output_prefix, 'checkpoints')
@@ -152,18 +147,26 @@ def train(
             ]
             outputs = t.nn.parallel.gather(
                 t.nn.parallel.parallel_apply(
-                    t.nn.parallel.replicate(stepper, devices[:len(inputs)]),
+                    t.nn.parallel.replicate(
+                        state.model.resample_globals(),
+                        devices[:len(inputs)],
+                    ),
                     inputs,
                 ),
                 devices[0],
             )
 
-            if stepper.training:
-                optimizer.zero_grad()
-                t.sum(outputs['L']).backward()
-                optimizer.step()
+            if state.model.training:
+                state.optimizer.zero_grad()
+                t.sum(outputs['loss']).backward()
+                state.optimizer.step()
 
-            return collect_items({k: t.mean(v) for k, v in outputs.items()})
+            return collect_items({
+                'loss': outputs['loss'].mean(),
+                **{
+                    k: t.mean(v) for k, v in outputs['stats'].items()
+                },
+            })
         except RuntimeError as e:
             if 'CUDA out of memory' in str(e):
                 log(
@@ -214,7 +217,8 @@ def train(
                     ).encode())
 
     def _save_image(epoch):
-        z, img_distr, loadings, state = histonet(
+        raise NotImplementedError()
+        z, img_distr, loadings, state_ = state.histonet(
             fixed_data['image'].to(devices[0]),
             fixed_data['label'].to(devices[0]),
             fixed_data['data'].to(devices[0]),
@@ -250,7 +254,7 @@ def train(
                     ).transpose(0, 3, 1, 2),
                     'fct-rel',
                 ),
-                (dim_red(state.permute(0, 2, 3, 1)).transpose(0, 3, 1, 2),
+                (dim_red(state_.permute(0, 2, 3, 1)).transpose(0, 3, 1, 2),
                  'state'),
         ]:
             imwrite(
@@ -285,22 +289,23 @@ def train(
                         ),
                         chunks_of(
                             100,
-                            map(_step, chunks_of(len(devices), data)),
+                            [_step(x) for x in
+                             chunks_of(len(devices), data)],
                         ),
                 ):
                     _report(
                         epoch,
                         output,
                         int(np.ceil(len(data) / len(devices))),
-                        not stepper.training,
+                        not state.model.training,
                     )
 
-            stepper.train()
+            state.model.train()
             t.enable_grad()
 
             _step_with(training_data)
 
-            stepper.eval()
+            state.model.eval()
             t.no_grad()
 
             if validation_data is not None and epoch % valid_interval == 0:
@@ -310,9 +315,8 @@ def train(
             if chkpt_interval is not None and epoch % chkpt_interval == 0:
                 save_state(
                     State(
-                        histonet=histonet,
-                        std=std,
-                        optimizer=optimizer,
+                        model=state.model,
+                        optimizer=state.optimizer,
                         epoch=epoch,
                     ),
                     os.path.join(
@@ -327,8 +331,7 @@ def train(
         pass
 
     return State(
-        histonet=histonet,
-        std=std,
-        optimizer=optimizer,
+        model=state.model,
+        optimizer=state.optimizer,
         epoch=epoch,
     )

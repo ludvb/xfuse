@@ -5,7 +5,7 @@ from _io import BufferedReader
 import torch as t
 
 from ..logging import INFO, log
-from ..network import Histonet, STD
+from ..network import XFuse
 from ..optimizer import create_optimizer
 
 
@@ -18,8 +18,7 @@ __all__ = [
 
 
 class State(NamedTuple):
-    histonet: Histonet
-    std: STD
+    model: XFuse
     optimizer: t.optim.Optimizer
     epoch: int
 
@@ -34,8 +33,7 @@ class OptimizerState(NamedTuple):
 
 
 class SavedState(NamedTuple):
-    histonet: ModuleState
-    std: ModuleState
+    model: ModuleState
     optimizer: OptimizerState
     epoch: int
 
@@ -48,13 +46,9 @@ def save_state(state: State, file) -> None:
 
     t.save(
         SavedState(
-            histonet=ModuleState(
-                state_dict=state.histonet.state_dict(),
-                init_args=state.histonet.init_args,
-            ),
-            std=ModuleState(
-                state_dict=state.std.state_dict(),
-                init_args=state.std.init_args,
+            model=ModuleState(
+                state_dict=state.model.state_dict(),
+                init_args=state.model.init_args,
             ),
             optimizer=OptimizerState(
                 state_dict=state.optimizer.state_dict(),
@@ -81,23 +75,20 @@ def load_state(file: Union[str, BufferedReader]) -> State:
         instance.load_state_dict(state.state_dict)
         return instance
 
-    histonet = _reinstatiate_module(Histonet, state.histonet)
-    std = _reinstatiate_module(STD, state.std)
+    model = _reinstatiate_module(XFuse, state.model)
 
-    optimizer = create_optimizer(histonet, std)
+    optimizer = create_optimizer(model)
     optimizer.load_state_dict(state.optimizer.state_dict)
 
     return State(
-        histonet=histonet,
-        std=std,
+        model=model,
         optimizer=optimizer,
         epoch=state.epoch,
     )
 
 
 def to_device(state: State, device: t.device) -> State:
-    state.histonet.to(device)
-    state.std.to(device)
+    state.model.to(device)
     for ps in state.optimizer.state.values():
         p: t.Tensor
         for p in filter(t.is_tensor, ps.values()):

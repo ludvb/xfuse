@@ -189,11 +189,58 @@ class Normal(Distribution):
         return self.loc
 
 
+class Beta(Distribution):
+    def __init__(self, shape1=None, shape2=None):
+        super().__init__()
+        if shape1 is None: shape1 = 1.
+        if shape1 is None: shape2 = 1.
+        self.set_parameter('shape1', shape1)
+        self.set_parameter('shape2', shape2)
+
+    @property
+    def parameters(self):
+        return ['shape1', 'shape2']
+
+    def _set_shape1(self, x):
+        return (
+            t.nn.functional.softplus(x)
+            .clamp_min(1e-10)
+        )
+
+    def _set_shape2(self, x):
+        return (
+            t.nn.functional.softplus(x)
+            .clamp_min(1e-10)
+        )
+
+    def log_prob(self, x):
+        return (
+            t.distributions.Beta(self.shape1, self.shape2)
+            .log_prob(x)
+            .sum()
+        )
+
+    def sample(self):
+        device = self.shape1.device
+        shape1, shape2 = (
+            x.to(t.device('cpu')) for x in (self.shape1, self.shape2))
+        return (
+            t.distributions.Beta(shape1, shape2)
+            .rsample()
+            .to(device)
+        )
+
+    @property
+    def mean(self):
+        return self.shape1 / (self.shape1 + self.shape2)
+
+
 def _as_torch_distribution(x: Distribution):
     try:
         return (
             {
-                Normal: lambda x: t.distributions.Normal(x.loc, x.scale)
+                Normal: lambda x: t.distributions.Normal(x.loc, x.scale),
+                Beta: lambda x: t.distributions.Beta(x.shape1, x.shape2),
             }
             [type(x)](x)
         )

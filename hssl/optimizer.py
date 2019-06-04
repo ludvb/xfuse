@@ -1,21 +1,18 @@
 from inspect import signature
 
-import itertools as it
-
 from typing import Optional
 
 import torch as t
 
-from .network import Histonet, STD
+from .network import XFuse
 
 
 def create_optimizer(
-        histonet: Histonet,
-        std: STD,
+        model: XFuse,
         learning_rate: Optional[float] = None,
 ) -> t.optim.Optimizer:
     return t.optim.Adam(
-        it.chain(histonet.parameters(), std.parameters()),
+        model.parameters(),
         lr=(
             learning_rate
             if learning_rate is not None else
