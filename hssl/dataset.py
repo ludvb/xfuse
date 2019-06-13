@@ -1,6 +1,6 @@
 from abc import abstractmethod
 
-import itertools as it
+from functools import reduce
 
 from typing import List
 
@@ -59,6 +59,7 @@ class Slide(t.utils.data.Dataset):
             image=t.tensor(image / 255 * 2 - 1).permute(2, 0, 1).float(),
             label=t.tensor(label).long(),
             data=data,
+            type='ST',
         )
 
 
@@ -148,33 +149,29 @@ class Dataset(t.utils.data.Dataset):
             **self.slides[slide].__getitem__(
                 self.observations['idx'].iloc[idx]),
             effects=t.tensor(self.design[slide].values),
+            dataset_size=len(self),
         )
 
 
 def collate(xs):
-    ns, data = zip(*[(len(d), d) for d in (x.pop('data') for x in xs)])
-    effects = t.cat([x.pop('effects').expand(n, -1) for n, x in zip(ns, xs)])
-    nlabels = [len(d) for d in data]
-    labels = [
-        (l + n) * (l != 0).long() for l, n in
-        zip((x.pop('label') for x in xs), it.accumulate((0, *nlabels)))
-    ]
+    data         = [x.pop('data')         for x in xs]
+    effects      = [x.pop('effects')      for x in xs]
+    labels       = [x.pop('label')        for x in xs]
+    types        = [x.pop('type')         for x in xs]
+    dataset_size = [x.pop('dataset_size') for x in xs]
     return dict(
-        data=t.cat(data),
-        **(
-            # FIXME: hacky work-around due to torch.nn.parallel not being able
-            # to scatter zero-dimensional tensors
-            dict(effects=effects)
-            if np.prod(effects.shape) > 0 else
-            {}
-        ),
-        label=t.stack(labels),
+        dataset_size=dataset_size[0],
+        batch_size=len(xs),
+        type=types,
+        data=data,
+        effects=t.stack(effects),
+        labels=t.stack(labels),
         **{k: t.stack([x[k] for x in xs]) for k in xs[0].keys()},
     )
 
 
 def spot_size(dataset: Dataset):
     return np.median(np.concatenate([
-        np.bincount(d['label'].flatten())
+        np.bincount(d['labels'].flatten())
         for d in dataset
     ]))

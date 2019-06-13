@@ -1,112 +1,631 @@
 from abc import abstractmethod
 
-from functools import reduce
+from copy import deepcopy
 
-import itertools as it
+from functools import reduce
 
 import operator as op
 
-from typing import List, Optional, Tuple
+from typing import (
+    Dict,
+    List,
+    NamedTuple,
+    Optional,
+    Tuple,
+    Type,
+)
 
 import numpy as np
 
-import torch as t
+import pyro as p
+from pyro.contrib.autoname import scope
+import pyro.distributions as distr
 
-from .distributions import (
-    Distribution,
-    Beta,
-    Normal,
-    Variable,
-    kl_divergence,
-)
+import torch as t
+from torch.autograd import Variable
+
 from .logging import DEBUG, log
 from .utility import center_crop
-from .utility.init_args import store_init_args
 
 
-class Variational(t.nn.Module):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._latents = []
+class ExperimentModel(t.nn.Module):
+    def __init__(self, *_):
+        super().__init__()
 
-    def _register_latent(
+    @abstractmethod
+    def forward(self, data, label, rim, rmg, lg):
+        pass
+
+
+class ExperimentGuide(t.nn.Module):
+    def __init__(self, *_):
+        super().__init__()
+
+    @abstractmethod
+    def forward(self, data, label):
+        pass
+
+
+class ExperimentType(NamedTuple):
+    model: Type[ExperimentModel]
+    guide: Type[ExperimentGuide]
+
+
+__TYPE_STORE: Dict[str, ExperimentType] = {}
+
+
+def _get_type(experiment_type: str) -> ExperimentType:
+    try:
+        return __TYPE_STORE[experiment_type]
+    except KeyError:
+        raise RuntimeError(f'unknown experiment type: {experiment_type}')
+
+
+def _register_type(
+        name: str,
+        model: ExperimentModel,
+        guide: ExperimentGuide
+) -> None:
+    if name in __TYPE_STORE:
+        raise RuntimeError(
+            f'model for experiment type "{name}" already registered')
+    log(DEBUG, 'registering experiment type: %s', name)
+    __TYPE_STORE[name] = ExperimentType(model, guide)
+
+
+class DataRepresentation(t.nn.Module):
+    @abstractmethod
+    def model(self, x, decoded, data_plate):
+        pass
+
+    @abstractmethod
+    def guide_pre(self, x, data_plate) -> t.Tensor:
+        pass
+
+    @abstractmethod
+    def guide_post(self, x, pre, decoded, data_plate) -> None:
+        pass
+
+
+class Image(DataRepresentation):
+    def model(self, x, decoded, data_plate):
+        nc = decoded.shape[1]
+        img_mu = p.module(
+            'img_mu',
+            t.nn.Sequential(
+                t.nn.Conv2d(nc, nc, 3, 1, 1),
+                t.nn.LeakyReLU(0.2, inplace=True),
+                t.nn.BatchNorm2d(nc),
+                t.nn.Conv2d(nc, 3, 3, 1, 1),
+                t.nn.Tanh(),
+            ),
+            update_module_params=True,
+        ).to(decoded)
+        img_sd = p.module(
+            'img_sd',
+            t.nn.Sequential(
+                t.nn.Conv2d(nc, nc, 3, 1, 1),
+                t.nn.LeakyReLU(0.2, inplace=True),
+                t.nn.BatchNorm2d(nc),
+                t.nn.Conv2d(nc, 3, 3, 1, 1),
+                t.nn.Softplus(),
+            ),
+            update_module_params=True,
+        ).to(decoded)
+        mu = center_crop(img_mu(decoded), [None, None, *x['image'].shape[-2:]])
+        sd = center_crop(img_sd(decoded), [None, None, *x['image'].shape[-2:]])
+        with data_plate:
+            p.sample(
+                'image',
+                distr.Normal(mu, sd).to_event(3),
+                obs=x['image'],
+            )
+        # img_sd = p.module(
+        #     'img_sd',
+        #     t.nn.Sequential(
+        #         t.nn.Conv2d(nc, nc, 3, 1, 1),
+        #         t.nn.LeakyReLU(0.2, inplace=True),
+        #         t.nn.BatchNorm2d(nc),
+        #         t.nn.Conv2d(nc, 3 * 3, 3, 1, 1),
+        #         t.nn.Softplus(),
+        #     ),
+        #     update_module_params=True,
+        # ).to(decoded)
+        # mu = center_crop(img_mu(decoded), [None, None, *x['image'].shape[-2:]])
+        # sd = center_crop(img_sd(decoded), [None, None, *x['image'].shape[-2:]])
+        # with data_plate:
+        #     p.sample(
+        #         'image',
+        #         (
+        #             distr.MultivariateNormal(
+        #                 mu.permute(0, 2, 3, 1).reshape(-1, 3),
+        #                 sd.permute(0, 2, 3, 1).reshape(-1, 3, 3),
+        #             )
+        #             .reshape(mu.shape[0], *mu.shape[2:], 3)
+        #             .permute(0, 3, 1, 2)
+        #             .to_event(3)
+        #         ),
+        #         obs=x['image'],
+        #     )
+        return mu
+
+    def guide_pre(self, x, data_plate):
+        return x['image']
+
+    def guide_post(self, x, pre, decoded, data_plate):
+        pass
+
+
+class GeneExpression(DataRepresentation):
+    def __init__(
             self,
-            variable: Variable,
-            prior: Distribution,
-            id: str,
-            is_global: bool = False,
+            genes: List[str],
+            gene_baseline: Optional[np.ndarray] = None,
+            covariates: Optional[List[Tuple[str, List[str]]]] = None,
+            truncation_threshold: int = 20,
     ):
-        if id in self._latents:
-            raise RuntimeError(f'variable {id} has already been registered')
+        super().__init__()
 
-        log(DEBUG, 'registering latent variable %s', id)
-        setattr(self, f'{id}', variable)
-        setattr(self, f'{id}_p', prior)
-        setattr(self, f'{id}_is_global', is_global)
-        self._latents.append(id)
+        self.genes = list(genes)
+        self.covariates = list(covariates or [])
+        self.covariates_size = reduce(
+            op.add, map(lambda x: len(x[1]), self.covariates), 0)
+        self.truncation_threshold = truncation_threshold
 
-    def _get_latent(self, latent_id: str):
-        return (
-            getattr(self, f'{latent_id}'),
-            getattr(self, f'{latent_id}_p'),
-            getattr(self, f'{latent_id}_is_global'),
-        )
+    def model(self, x, decoded, data_plate):
+        nc = decoded.shape[1]
 
-    def _make_covariate(
-            self,
-            name,
-            shape,
-            pdistr=Normal,
-            pparams={'loc': 0., 'scale': np.log(np.exp(1) - 1)},
-            qdistr=Normal,
-            qparams={'loc': 0., 'scale': -1e5},
-    ):
-        def _register_parameter(suffix, param):
-            self.register_parameter(f'{name}_{suffix}', param)
-            return param
+        with data_plate:
+            decoder_scaling = p.module(
+                'decoder_scaling',
+                t.nn.Sequential(
+                    t.nn.Conv2d(nc, nc, 5, padding=2),
+                    t.nn.LeakyReLU(0.2, inplace=True),
+                    t.nn.BatchNorm2d(nc),
+                    t.nn.Conv2d(nc, 1, 5, padding=2),
+                    t.nn.Softplus(),
+                ),
+                update_module_params=True,
+            ).to(decoded)
+            scaling = p.sample(
+                'scaling',
+                distr.Delta(
+                    center_crop(
+                        decoder_scaling(decoded).permute(0, 2, 3, 1),
+                        x['labels'].shape,
+                    ),
+                ).to_event(3),
+            )
 
-        v = Variable(qdistr().set(
-            **{
-                k: _register_parameter(
-                    f'q_{k}', t.nn.Parameter(v * t.ones(shape)))
-                for k, v in qparams.items()
-            },
-            r_transform=True,
+            decoder_activation = p.module(
+                'decoder_activation',
+                t.nn.Sequential(
+                    t.nn.Conv2d(nc, nc, 5, padding=2),
+                    t.nn.LeakyReLU(0.2, inplace=True),
+                    t.nn.BatchNorm2d(nc),
+                ),
+                update_module_params=True,
+            ).to(decoded)
+            decoder_activation_a = p.module(
+                'decoder_activation_a',
+                t.nn.Sequential(
+                    t.nn.Conv2d(nc, self.truncation_threshold, 5, padding=2),
+                ),
+                update_module_params=True,
+            ).to(decoded)
+            decoder_activation_b = p.module(
+                'decoder_activation_b',
+                t.nn.Sequential(
+                    t.nn.Conv2d(nc, self.truncation_threshold, 5, padding=2),
+                ),
+                update_module_params=True,
+            ).to(decoded)
+
+            activation_state = decoder_activation(decoded)
+            activation_a = (
+                decoder_activation_a(activation_state)
+                .permute(0, 2, 3, 1)
+            )
+            activation_b = (
+                decoder_activation_b(activation_state)
+                .permute(0, 2, 3, 1)
+            )
+            # https://github.com/pytorch/pytorch/pull/20244
+            # activation = p.sample(
+            #     'activation_coeffs',
+            #     distr.Beta(activation_a, activation_b).to_event(1),
+            # )
+            activation = p.sample(
+                'activation_coeffs',
+                distr.Normal(
+                    activation_a,
+                    t.nn.functional.softplus(activation_b),
+                ).to_event(3),
+            )
+            activation = t.sigmoid(activation)
+            activation_accumulated = t.stack(
+                [
+                    t.ones(*activation.shape[:-1], device=activation.device),
+                    *(
+                        (1 - activation[..., :i]).prod(-1)
+                        for i in range(1, self.truncation_threshold)
+                    ),
+                ],
+                -1,
+            )
+            activation = activation * activation_accumulated
+            rim = p.sample('rim', distr.Delta(activation).to_event(3))
+            rim = rim * scaling
+
+        rmg = p.sample('rmg', (
+            distr.Normal(
+                t.tensor(0., device=x['data'][0].device),
+                1.,
+            )
+            .expand([self.truncation_threshold, len(self.genes)])
+            .to_event(2)
         ))
 
-        p = pdistr().set(
-            **{
-                k: _register_parameter(
-                    f'p_{k}',
-                    t.nn.Parameter(t.as_tensor(v), requires_grad=False),
-                )
-                for k, v in pparams.items()
-            },
-            r_transform=True,
+        lg = p.sample('lg', (
+            distr.Normal(
+                t.tensor(0., device=x['data'][0].device),
+                1.,
+            )
+            .expand([len(self.genes)])
+            .to_event(1)
+        ))
+
+        effects = t.cat(
+            [
+                t.ones(
+                    x['effects'].shape[0],
+                    1,
+                    dtype=t.float32,
+                    device=x['effects'].device,
+                ),
+                x['effects'].float(),
+            ],
+            1,
+        )
+        rgeff = p.sample('rgeff', (
+            distr.Normal(
+                t.tensor(0., device=x['data'][0].device),
+                1.
+            )
+            .expand([effects.shape[1], len(self.genes)])
+            .to_event(1)
+        ))
+        lgeff = p.sample('lgeff', (
+            distr.Normal(
+                t.tensor(0., device=x['data'][0].device),
+                1.
+            )
+            .expand([effects.shape[1], len(self.genes)])
+            .to_event(1)
+        ))
+
+        rmg = (effects @ rgeff)[:, None] + rmg
+        lg = effects @ lgeff + lg
+
+        for i, (type, data, label, rim_, rmg_, lg_) in enumerate(
+                zip(x['type'], x['data'], x['labels'], rim, rmg, lg)):
+            type_model = p.module(
+                f'{type}_model',
+                _get_type(type).model(data, label, rim_, rmg_, lg_),
+                update_module_params=True,
+            ).train(self.training)
+            with data_plate, scope(prefix=f'sample{i}'):
+                type_model(data, label, rim_, rmg_, lg_)
+
+        return rim, rmg, lg
+
+    def _sample_globals(self, x):
+        device = x['data'][0].device
+
+        globals_list = [
+            ('rmg', [self.truncation_threshold, len(self.genes)]),
+            ('lg',  [len(self.genes)]),
+            ('rgeff', [1 + x['effects'].shape[1], len(self.genes)]),
+            ('lgeff', [1 + x['effects'].shape[1], len(self.genes)]),
+        ]
+
+        nglobals = sum(reduce(op.mul, dims) for _name, dims in globals_list)
+        # TODO: inject dependency
+        globals_sample = p.sample('globals', (
+            distr.Normal(
+                p.param('globals_mu', Variable(t.zeros(nglobals))).to(device),
+                t.nn.functional.softplus(
+                    p.param('globals_sd', Variable(t.zeros(nglobals)))
+                    .to(device)
+                ),
+            )
+            .to_event(1)
+        ))
+
+        remaining = globals_sample.clone()
+
+        # distribute sampled variables to the sites used in the model
+        for name, dims in globals_list:
+            n = reduce(op.mul, dims)
+            p.sample(name, distr.Delta(remaining[:n].reshape(dims)))
+            remaining = remaining[n:]
+
+        assert len(remaining) == 0
+
+        return globals_sample
+
+    def _get_spatial_encoding(self, x):
+        encoded: List[t.Tensor] = []
+
+        for i, (type, data, label) in enumerate(
+                zip(x['type'], x['data'], x['labels'])):
+            type_guide = p.module(
+                f'{type}_guide',
+                _get_type(type).guide(data, label),
+                update_module_params=True,
+            ).train(self.training)
+            with scope(prefix=f'sample{i}'):
+                precoded = type_guide(data, label)
+            encode = p.module(
+                f'{type}_encode',
+                t.nn.Conv2d(precoded.shape[-1], 10, 1, bias=False),
+                update_module_params=True,
+            ).to(precoded)
+            encoded.append(encode(
+                precoded
+                .permute(2, 0, 1)
+                .unsqueeze(0)
+            ))
+
+        encoded = t.cat(encoded)
+
+        return encoded
+
+    def _sample_activation(self, decoded):
+        guide_activation = p.module(
+            'guide_activation',
+            t.nn.Sequential(
+                t.nn.Conv2d(decoded.shape[1], 10, 5, padding=2),
+                t.nn.LeakyReLU(0.2, inplace=True),
+                t.nn.BatchNorm2d(10),
+            ),
+            update_module_params=True,
+        ).to(decoded)
+        guide_activation_a = p.module(
+            'guide_activation_a',
+            t.nn.Sequential(
+                t.nn.Conv2d(10, self.truncation_threshold, 5, padding=2),
+                # t.nn.Softplus(),
+            ),
+            update_module_params=True,
+        ).to(decoded)
+        guide_activation_b = p.module(
+            'guide_activation_b',
+            t.nn.Sequential(
+                t.nn.Conv2d(10, self.truncation_threshold, 5, padding=2),
+                # t.nn.Softplus(),
+            ),
+            update_module_params=True,
+        ).to(decoded)
+
+        activation_state = guide_activation(decoded)
+        activation_a = (
+            guide_activation_a(activation_state)
+            .permute(0, 2, 3, 1)
+        )
+        activation_b = (
+            guide_activation_b(activation_state)
+            .permute(0, 2, 3, 1)
+        )
+        # activation = p.sample(
+        #     'activation_coeffs',
+        #     distr.Beta(activation_a, activation_b).to_event(1),
+        # )
+        activation = p.sample(
+            'activation_coeffs',
+            distr.Normal(
+                activation_a,
+                t.nn.functional.softplus(activation_b),
+            ).to_event(3),
         )
 
-        self._register_latent(v, p, name, True)
+        return activation.permute(0, 3, 1, 2)
 
-    def add_module(self, name, module):
-        if isinstance(module, Variational):
-            for id, variable, prior, is_global in [
-                    (x, *module._get_latent(x)) for x in module._latents]:
-                self._register_latent(variable, prior, id, is_global)
-        return super().add_module(name, module)
+    def guide_pre(self, x, data_plate):
+        globals = self._sample_globals(x)
+        global_encoding = p.module(
+            'global_encoding',
+            t.nn.Sequential(
+                t.nn.Linear(len(globals), 3),
+            ),
+            update_module_params=True,
+        ).to(globals)(globals)
+        spatial_encoding = self._get_spatial_encoding(x)
+        return t.cat(
+            [
+                spatial_encoding,
+                (
+                    global_encoding
+                    .expand(
+                        spatial_encoding.shape[0],
+                        *spatial_encoding.shape[2:],
+                        -1,
+                    )
+                    .permute(0, 3, 1, 2)
+                ),
+                (
+                    x['effects']
+                    .expand(*spatial_encoding.shape[2:], -1, -1)
+                    .permute(2, 3, 0, 1)
+                    .float()
+                ),
+            ],
+            1,
+        )
 
-    def resample_globals(self):
-        for v in (v for v, _p, g in map(self._get_latent, self._latents) if g):
-            v.sample()
-        return self
+    def guide_post(self, x, pre, decoded, data_plate):
+        with data_plate:
+            self._sample_activation(t.cat([pre, decoded], 1))
 
-    def complexity_cost(self, batch_fraction):
-        return sum([
-            kl_divergence(x, p) * (batch_fraction if g else 1.)
-            for x, p, g in map(self._get_latent, self._latents)
-        ])
+
+class Combined(Image, GeneExpression):
+    def __init__(self, *args, **kwargs):
+        Image.__init__(self)
+        GeneExpression.__init__(self, *args, **kwargs)
+
+    def model(self, x, decoded, data_plate):
+        return [
+            Image.model(self, x, decoded, data_plate),
+            GeneExpression.model(self, x, decoded, data_plate),
+        ]
+
+    def guide_pre(self, x, data_plate):
+        encoded_image = Image.guide_pre(self, x, data_plate)
+        encoded_xpr = GeneExpression.guide_pre(self, x, data_plate)
+        return t.cat([encoded_image, encoded_xpr], 1)
+
+    def guide_post(self, x, pre, decoded, data_plate):
+        Image.guide_post(self, x, pre, decoded, data_plate)
+        GeneExpression.guide_post(self, x, pre, decoded, data_plate)
+
+
+class XFuse(t.nn.Module):
+    def __init__(
+            self,
+            representation,
+            latent_size=192,
+            feature_size=32,
+    ):
+        super().__init__()
+
+        self.representation = representation
+        self.add_module('_representation', self.representation)
+
+        self.latent_size = latent_size
+        self.latent_x = self.latent_y = 14
+
+        self.feature_size = feature_size
+
+        self._decoder = t.nn.Sequential(
+            t.nn.Conv2d(
+                self.latent_size, 16 * self.feature_size, 5, padding=2),
+            # x16
+            t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(16 * self.feature_size),
+            Unpool(16 * self.feature_size, 8 * self.feature_size, 5),
+            # x8
+            t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(8 * self.feature_size),
+            Unpool(8 * self.feature_size, 4 * self.feature_size, 5),
+            # x4
+            t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(4 * self.feature_size),
+            Unpool(4 * self.feature_size, 2 * self.feature_size, 5),
+            # x2
+            t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(2 * self.feature_size),
+            Unpool(2 * self.feature_size, self.feature_size, 5),
+            # x1
+            t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(self.feature_size),
+        )
+
+        self._guide_decoder = deepcopy(self._decoder)
+
+        self.latent_loc = t.nn.Sequential(
+            t.nn.Conv2d(
+                16 * self.feature_size, 16 * self.feature_size, 3, 1, 1),
+            t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(16 * self.feature_size),
+            t.nn.Conv2d(16 * self.feature_size, latent_size, 3, 1, 1),
+        )
+        self.latent_scale = t.nn.Sequential(
+            t.nn.Conv2d(
+                16 * self.feature_size, 16 * self.feature_size, 3, 1, 1),
+            t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(16 * self.feature_size),
+            t.nn.Conv2d(16 * self.feature_size, latent_size, 3, 1, 1),
+            t.nn.Softplus(),
+        )
+
+    def _get_decoder(self, x):
+        return p.module('decoder', self._decoder)
+
+    def _get_guide_decoder(self, x):
+        return p.module('guide_decoder', self._guide_decoder)
+
+    def _get_encoder(self, x):
+        return p.module(
+            'encoder',
+            t.nn.Sequential(
+                # x1
+                t.nn.Conv2d(x.shape[1], 2 * self.feature_size, 4, 2, 1),
+                t.nn.LeakyReLU(0.2, inplace=True),
+                t.nn.BatchNorm2d(2 * self.feature_size),
+                # x2
+                t.nn.Conv2d(
+                    2 * self.feature_size, 4 * self.feature_size, 4, 2, 1),
+                t.nn.LeakyReLU(0.2, inplace=True),
+                t.nn.BatchNorm2d(4 * self.feature_size),
+                # x4
+                t.nn.Conv2d(
+                    4 * self.feature_size, 8 * self.feature_size, 4, 2, 1),
+                t.nn.LeakyReLU(0.2, inplace=True),
+                t.nn.BatchNorm2d(8 * self.feature_size),
+                # x8
+                t.nn.Conv2d(
+                    8 * self.feature_size, 16 * self.feature_size, 4, 2, 1),
+                t.nn.LeakyReLU(0.2, inplace=True),
+                t.nn.BatchNorm2d(16 * self.feature_size),
+                # x16
+            ),
+            update_module_params=True,
+        ).to(x)
+
+    def model(self, x):
+        data_plate = p.plate(
+            'data',
+            size=x['dataset_size'],
+            subsample_size=x['batch_size'],
+        )
+        with data_plate:
+            z = p.sample(
+                'z',
+                (
+                    distr.Normal(
+                        t.tensor(0., device=next(self.parameters()).device),
+                        1.,
+                    )
+                    .expand([
+                        x['batch_size'],
+                        self.latent_size,
+                        self.latent_y,
+                        self.latent_x,
+                    ])
+                    .to_event(3)
+                ),
+            )
+        decoded = self._get_decoder(z)(z)
+        return self.representation.model(x, decoded, data_plate)
+
+    def guide(self, x):
+        data_plate = p.plate(
+            'data',
+            size=x['dataset_size'],
+            subsample_size=x['batch_size'],
+        )
+        pre = self.representation.guide_pre(x, data_plate)
+        encoded = self._get_encoder(pre)(pre)
+        loc = p.module('latent_loc', self.latent_loc)(encoded)
+        scale = p.module('latent_scale', self.latent_scale)(encoded)
+        with data_plate:
+            z = p.sample('z', distr.Normal(loc, scale).to_event(3))
+        decoded = self._get_guide_decoder(z)(z)
+        self.representation.guide_post(x, pre, decoded, data_plate)
 
 
 class Unpool(t.nn.Module):
+    # TODO: move elsewhere
     def __init__(
             self,
             in_channels,
@@ -133,51 +652,52 @@ class Unpool(t.nn.Module):
         return x
 
 
-class Encoder(t.nn.Module):
-    @abstractmethod
-    def output_channels(self):
-        pass
+class STModel(ExperimentModel):
+    def forward(self, data, label, rim, rmg, lg):
+        rim = t.einsum(
+            'yxi,yxf->if',
+            (
+                t.eye(label.max() + 1, device=label.device)
+                [label.flatten()]
+                .reshape(*label.shape, -1)
+            ),
+            rim,
+        )
+        rgs = t.einsum('im,mg->ig', rim[1:], rmg.exp())
+        xgs = p.sample(
+            'xgs',
+            (
+                distr.NegativeBinomial(
+                    total_count=rgs,
+                    logits=lg,
+                )
+                .to_event(2)
+            ),
+            obs=data,
+        )
+        return xgs
 
 
-class Decoder(t.nn.Module):
-    def statistics(self, x, result):
-        return {}
+class STGuide(ExperimentGuide):
+    def __init__(self, data, label):
+        super().__init__(data, label)
+        self.xpr_encoder = t.nn.Linear(1 + data.shape[1], 10).to(data)
 
-    @abstractmethod
-    def loglikelihood(self, x, result):
-        pass
-
-
-class STEncoder(Encoder):
-    def __init__(
-            self,
-            genes: List[str],
-            output_size: int = 100,
-    ):
-        super().__init__()
-        self.genes = list(genes)
-        self._output_channels = output_size
-        self.xpr_encoder = t.nn.Linear(1 + len(self.genes), output_size)
-
-    def output_channels(self):
-        return self._output_channels
-
-    def forward(self, x):
-        label, data = x['label'], x['data']
-
+    def forward(self, data, label):
         data_with_missing = t.nn.functional.pad(data, (1, 0, 1, 0))
         data_with_missing[0, 0] = 1.
 
-        # if self.training:
-        #     data_with_missing[
-        #         t.distributions.Bernoulli(0.5)
-        #         .sample((len(data_with_missing), ))
-        #         .byte()
-        #     ] = t.tensor([1., *[0.] * data.shape[1]], device=data.device)
+        if self.training:
+            data_with_missing[
+                t.distributions.Bernoulli(0.5)
+                .sample((len(data_with_missing), ))
+                .byte()
+            ] = t.tensor([1., *[0.] * data.shape[1]], device=data.device)
 
         convolved_data = self.xpr_encoder(data_with_missing)
+
         return t.einsum(
-            'byxi,ic->bcyx',
+            'yxi,ic->yxc',
             (
                 t.eye(len(convolved_data))
                 .to(label)
@@ -189,580 +709,183 @@ class STEncoder(Encoder):
         )
 
 
-class STDecoder(Decoder, Variational):
-    def __init__(
-            self,
-            genes: List[str],
-            gene_baseline: Optional[np.ndarray] = None,
-            covariates: Optional[List[Tuple[str, List[str]]]] = None,
-            truncation_threshold: int = 10,
-            feature_size: int = None
-    ):
-        super().__init__()
+_register_type('ST', STModel, STGuide)
 
-        self.genes = list(genes)
 
-        self._make_covariate('lg', (len(genes), ))
-        self._make_covariate('rg', (len(genes), ))
 
-        self._make_covariate('rgp', (truncation_threshold, len(genes)))
-        self._make_covariate(
-            'r',
-            (self.factors, ),
-            pdistr=Beta, pparams={
-                'shape1': np.log(np.exp(1) - 1),
-                'shape2': np.log(np.exp(1) - 1),
-            },
-            qdistr=Beta, qparams={
-                'shape1': np.log(np.exp(1) - 1),
-                'shape2': np.log(np.exp(1) - 1),
-            },
-        )
 
-        self.gene_decoder = t.nn.Conv2d(
-            feature_size, len(genes), 11, 1, 5, bias=False)
 
-        if covariates is not None and len(covariates) > 0:
-            self._covariates = covariates
-            n_fe = reduce(op.add, map(lambda x: len(x[1]), covariates))
-            self._make_covariate('rgeff', (n_fe, len(genes)))
-            self._make_covariate('lgeff', (n_fe, len(genes)))
-        else:
-            self._covariates = []
 
-        if gene_baseline is not None:
-            if len(gene_baseline) != len(genes):
-                raise ValueError(
-                    'size of `gene_baseline` does not match `genes`'
-                    f' ({gene_baseline.shape[1]} vs. {len(genes)})'
-                )
-            lgb = t.tensor(np.log(gene_baseline)).float()
-            self.rg_q_loc.data = lgb.clone()
-            self.rg_p_loc.data = lgb.clone()
 
-    def forward(self, x, decoded):
-        idxs = np.random.choice(len(self.genes), 100, False)
 
-        rate = t.nn.functional.conv2d(
-            input=decoded,
-            weight=self.gene_decoder.weight[idxs],
-            padding=self.gene_decoder.padding,
-        )
 
-        rate = t.einsum(
-            'byxi,bgyx->ig',
-            (
-                t.eye(
-                    x['label'].max() + 1,
-                    device=x['label'].device,
-                )
-                [x['label']]
-            ),
-            rate.exp(),
-        )
 
-        rate = rate * self.rg.value[idxs].unsqueeze(0)
-        logits = self.lg.value[idxs].unsqueeze(0)
 
-        if x['effects'] is not None:
-            effects = x['effects'].float()
-            rate = rate * (effects @ self.rgeff.value[idxs])
-            logits = logits + (effects @ self.lgeff.value[idxs])
 
-        rate_ = t.zeros((len(rate), len(self.genes))).fill_(float('nan'))
-        rate_[:, idxs] = rate
-        logits_ = t.zeros((len(rate), len(self.genes))).fill_(float('nan'))
-        logits_[:, idxs] = logits
 
-        return rate_, logits_
+def __remove_this():
+    import os
+    import pandas as pd
+    import pyvips
+    from .utility import design_matrix_from, read_data
+    from .dataset import Dataset, RandomSlide, collate
 
-    def statistics(self, x, result):
-        rate, logits = result
-        d = t.distributions.NegativeBinomial(
-            total_count=rate,
-            logits=logits,
-        )
-        return {
-            'rmse': t.mean(
-                t.sqrt(t.mean((d.mean - x['data']) ** 2, 1))
-                .masked_select(x['data'].sum(1) != 0)
-            ),
-        }
+    design_file = os.path.expanduser(
+        '~/histonet-test-data/mob-0.1-validation/design.small.csv')
 
-    def loglikelihood(self, x, result):
-        rate, logits = result
+    design = pd.read_csv(design_file)
+    design_dir = os.path.dirname(design_file)
+
+    def _path(p):
         return (
-            t.distributions.NegativeBinomial(
-                total_count=rate,
-                logits=logits,
+            p
+            if os.path.isabs(p) else
+            os.path.join(design_dir, p)
+        )
+
+    count_data = read_data(map(_path, design.data))
+
+    design_matrix = design_matrix_from(design[[
+        x for x in design.columns
+        if x not in [
+                'name',
+                'image',
+                'labels',
+                'validation',
+                'data',
+        ]
+    ]])
+
+    dataset = Dataset(
+        [
+            RandomSlide(
+                data=counts,
+                image=pyvips.Image.new_from_file(_path(image)),
+                label=pyvips.Image.new_from_file(_path(labels)),
+                patch_size=224,
             )
-            .log_prob(x['data']).sum()
-        )
-
-
-class HEEncoder(Encoder):
-    def __init__(self):
-        super().__init__()
-
-    def output_channels(self):
-        return 3
-
-    def forward(self, x):
-        return x['image']
-
-
-class HEDecoder(Decoder):
-    def __init__(self, feature_size: int = None):
-        super().__init__()
-
-        self.img_mu = t.nn.Sequential(
-            t.nn.Conv2d(feature_size, feature_size, 3, 1, 1, bias=True),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(feature_size),
-            t.nn.Conv2d(feature_size, 3, 3, 1, 1, bias=True),
-            t.nn.Tanh(),
-        )
-        self.img_sd = t.nn.Sequential(
-            t.nn.Conv2d(feature_size, feature_size, 3, 1, 1, bias=True),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(feature_size),
-            t.nn.Conv2d(feature_size, 3, 3, 1, 1, bias=True),
-            t.nn.Softplus(),
-        )
-
-    def forward(self, x, decoded):
-        img_mu = self.img_mu(decoded)
-        img_sd = self.img_sd(decoded)
-        return img_mu, img_sd
-
-    def loglikelihood(self, x, result):
-        img_mu, img_sd = result
-        return (
-            t.distributions.Normal(img_mu, img_sd)
-            .log_prob(x['image']).sum()
-        )
-
-
-@store_init_args
-class XFuse(Variational):
-    def __init__(
-            self,
-            encoders,
-            decoders,
-            latent_size=192,
-            feature_size=32,
-            dataset_size=float('inf'),
-    ):
-        super().__init__()
-
-        self.dataset_size = dataset_size
-
-        def _register_module(module):
-            name = type(module).__name__
-            log(DEBUG, 'registering sub-module %s', name)
-            self.add_module(name, module)
-            return name, module
-
-        self.encoders = {
-            k: v for k, v in [_register_module(x()) for x in encoders]
-        }
-        self.decoders = {
-            k: v for k, v in
-            (_register_module(x(feature_size=feature_size)) for x in decoders)
-        }
-
-        input_size = reduce(
-            op.add,
-            (x.output_channels() for x in self.encoders.values()),
-        )
-
-        self.encoder = t.nn.Sequential(
-            # x1
-            t.nn.Conv2d(input_size, 2 * feature_size, 4, 2, 1),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(2 * feature_size),
-            # x2
-            t.nn.Conv2d(2 * feature_size, 4 * feature_size, 4, 2, 1),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(4 * feature_size),
-            # x4
-            t.nn.Conv2d(4 * feature_size, 8 * feature_size, 4, 2, 1),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(8 * feature_size),
-            # x8
-            t.nn.Conv2d(8 * feature_size, 16 * feature_size, 4, 2, 1),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(16 * feature_size),
-            # x16
-        )
-
-        self.z_mu = t.nn.Conv2d(16 * feature_size, latent_size, 3, 1, 1)
-        self.z_sd = t.nn.Conv2d(16 * feature_size, latent_size, 3, 1, 1)
-        self.z = Variable(Normal())
-        self._register_latent(self.z, Normal(), 'z')
-
-        self.decoder = t.nn.Sequential(
-            t.nn.Conv2d(latent_size, 16 * feature_size, 5, padding=4),
-            # x16
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(16 * feature_size),
-            Unpool(16 * feature_size, 8 * feature_size, 5),
-            # x8
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(8 * feature_size),
-            Unpool(8 * feature_size, 4 * feature_size, 5),
-            # x4
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(4 * feature_size),
-            Unpool(4 * feature_size, 2 * feature_size, 5),
-            # x2
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(2 * feature_size),
-            Unpool(2 * feature_size, feature_size, 5),
-            # x1
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(feature_size),
-        )
-
-    def forward(self, x, compute_loss=True, collect_stats=True):
-        input_volume = t.cat([f(x) for f in self.encoders.values()], 1)
-        encoded = self.encoder(input_volume)
-
-        z_mu = self.z_mu(encoded)
-        z_sd = self.z_sd(encoded)
-
-        self.z.distribution.set(
-            loc=z_mu,
-            scale=z_sd,
-            r_transform=True,
-        )
-        z = self.z.sample().value
-
-        decoded = center_crop(
-            self.decoder(z), [None, None, *input_volume.shape[-2:]])
-
-        results = {n: f(x, decoded) for n, f in self.decoders.items()}
-
-        elbo = (
-            reduce(
-                op.add,
-                (
-                    f.loglikelihood(x, r) for f, r in
-                    zip(self.decoders.values(), results.values())
-                ),
+            for image, labels, counts in zip(
+                design.image,
+                design.labels,
+                (count_data.loc[x] for x in count_data.index.levels[0]),
             )
-            -
-            self.complexity_cost(len(x) / self.dataset_size)
-            if compute_loss else
-            t.tensor(0., device=z.device)
+        ],
+        design_matrix,
+    )
+
+    loader = t.utils.data.DataLoader(
+        dataset,
+        collate_fn=collate,
+        batch_size=2,
+        shuffle=True,
+    )
+
+    genes = list(count_data.columns)
+
+    return dataset, loader, genes
+
+
+def dim_red(x, mask=None, method='pca', n_components=3, **kwargs):
+    if method != 'pca':
+        raise NotImplementedError()
+
+    if mask is None:
+        mask = np.ones(x.shape[:-1], dtype=bool)
+    elif isinstance(mask, t.Tensor):
+        mask = mask.detach().cpu().numpy().astype(bool)
+
+    from sklearn.decomposition import PCA
+
+    if isinstance(x, t.Tensor):
+        x = x.detach().cpu().numpy()
+
+    values = (
+        PCA(n_components=n_components, **kwargs)
+        .fit_transform(x[mask])
+    )
+
+    dst = np.zeros((*mask.shape, n_components))
+    dst[mask] = (values - values.min(0)) / (values.max(0) - values.min(0))
+
+    return dst
+
+
+def prep(x):
+    x = {
+        k: v.to(t.device('cuda')) if isinstance(v, t.Tensor) else v
+        for k, v in x.items()
+    }
+    x['data'] = [v.to(t.device('cuda')) for v in x['data']]
+    return x
+
+
+from torch.utils.tensorboard import SummaryWriter
+writer = SummaryWriter('/tmp/tb')
+
+data, loader, genes = __remove_this()
+xfuse = XFuse(Combined(genes)).to(t.device('cuda'))
+import pyro.optim
+svi = p.infer.SVI(
+    xfuse.model,
+    xfuse.guide,
+    p.optim.Adam({'lr': 1e-5}),
+    p.infer.Trace_ELBO(),
+)
+fixed_x = prep(next(iter(loader)))
+
+
+def do(i):
+    print(i)
+    results = []
+    for x in loader:
+        loss = svi.step(prep(x))
+        writer.add_scalar('loss', loss, i)
+        writer.add_scalar(
+            'encoder-weight-size',
+            xfuse._get_encoder(fixed_x['image'])[0].weight.abs().mean(),
+            i,
         )
-
-        stats = (
-            {
-                k: v.unsqueeze(0)
-                for f, r in zip(self.decoders.values(), results.values())
-                for k, v in f.statistics(x, r).items()
-            }
-            if collect_stats else
-            {}
-        )
-
-        return dict(
-            loss=(-elbo).unsqueeze(0),
-            stats=stats,
-            **results,
-        )
-
-
-@store_init_args
-class Histonet(Variational):
-    def __init__(
-            self,
-            genes,
-            latent_size=192,
-            nf=32,
-    ):
-        super().__init__()
-
-        self.genes = genes
-
-        self.img_encoder = t.nn.Sequential(
-            # x1
-            t.nn.Conv2d(3, 2 * nf, 4, 2, 1, bias=True),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(2 * nf),
-            # x2
-            t.nn.Conv2d(2 * nf, 4 * nf, 4, 2, 1, bias=True),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(4 * nf),
-            # x4
-            t.nn.Conv2d(4 * nf, 8 * nf, 4, 2, 1, bias=True),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(8 * nf),
-            # x8
-            t.nn.Conv2d(8 * nf, 16 * nf, 4, 2, 1, bias=True),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(16 * nf),
-            # x16
-        )
-        self.xpr_encoder1 = t.nn.Linear(1 + len(self.genes), 100)
-        self.xpr_encoder2 = t.nn.Sequential(
-            t.nn.Conv2d(100, 16 * nf, 3, 1, 1, bias=True),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(16 * nf),
-            t.nn.Conv2d(16 * nf, 16 * nf, 3, 1, 1, bias=True),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(16 * nf),
-            t.nn.Conv2d(16 * nf, 16 * nf, 3, 1, 1, bias=True),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(16 * nf),
-        )
-
-        self.z_mu = t.nn.Sequential(
-            t.nn.Conv2d(32 * nf, 16 * nf, 3, 1, 1, bias=True),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(16 * nf),
-            t.nn.Conv2d(16 * nf, latent_size, 3, 1, 1, bias=True),
-        )
-        self.z_sd = t.nn.Sequential(
-            t.nn.Conv2d(32 * nf, 16 * nf, 3, 1, 1, bias=True),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(16 * nf),
-            t.nn.Conv2d(16 * nf, latent_size, 3, 1, 1, bias=True),
-        )
-        self.z = Variable(Normal())
-        self._register_latent(self.z, Normal(), 'z')
-
-        self.decoder = t.nn.Sequential(
-            t.nn.Conv2d(latent_size, 16 * nf, 5, padding=4),
-            # x16
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(16 * nf),
-            Unpool(16 * nf, 8 * nf, 5),
-            # x8
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(8 * nf),
-            Unpool(8 * nf, 4 * nf, 5),
-            # x4
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(4 * nf),
-            Unpool(4 * nf, 2 * nf, 5),
-            # x2
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(2 * nf),
-            Unpool(2 * nf, nf, 5),
-            # x1
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(nf),
-        )
-
-        self.img_mu = t.nn.Sequential(
-            t.nn.Conv2d(nf, nf, 3, 1, 1, bias=True),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(nf),
-            t.nn.Conv2d(nf, 3, 3, 1, 1, bias=True),
-            t.nn.Tanh(),
-        )
-        self.img_sd = t.nn.Sequential(
-            t.nn.Conv2d(nf, nf, 3, 1, 1, bias=True),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(nf),
-            t.nn.Conv2d(nf, 3, 3, 1, 1, bias=True),
-            t.nn.Softplus(),
-        )
-
-        self.xpr_state = t.nn.Sequential(
-            t.nn.Conv2d(nf, nf, 3, 1, 1, bias=True),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(nf),
-        )
-
-    @property
-    def init_args(self):
-        return self._init_args
-
-    def set_factors(self, n):
-        w = self.mixture_loadings[-1].weight
-        b = self.mixture_loadings[-1].bias
-
-        for p in (w, b):
-            while len(p) < n:
-                p.data = t.cat([p.data, p[-1:]])
-            while len(p) > n:
-                p.data = p[:1]
-
-        return self
-
-    def encode(self, img, lbl=None, xpr=None):
-        enc_img = self.img_encoder(img)
-
-        if lbl is not None and xpr is not None:
-            lbl_16 = (
-                t.nn.functional.interpolate(
-                    lbl.float().unsqueeze(1),
-                    enc_img.shape[-2:],
-                )
-                .squeeze(1)
-                .long()
+        results.append(loss)
+    if i % 50 == 0:
+        res = p.poutine.trace(
+            p.poutine.replay(
+                xfuse.model,
+                p.poutine.trace(xfuse.guide).get_trace(fixed_x)
             )
-
-            missing = t.tensor([1., *[0.] * xpr.shape[1]], device=xpr.device)
-
-            data_with_missing = t.nn.functional.pad(
-                xpr, (1, 0, 1, 0))
-            data_with_missing[0] = missing
-
-            if self.training:
-                data_with_missing[
-                    t.distributions.Bernoulli(0.5)
-                    .sample((len(data_with_missing), ))
-                    .byte()
-                ] = missing
-
-            convolved_data = self.xpr_encoder1(data_with_missing)
-            xpr = t.einsum(
-                'byxi,ic->bcyx',
-                (
-                    t.eye(len(convolved_data))
-                    .to(lbl_16)
-                    [lbl_16.flatten()]
-                    .reshape(*lbl_16.shape, -1)
-                    .float()
-                ),
-                convolved_data,
-            )
-        else:
-            xpr = t.zeros((
-                enc_img.shape[0],
-                self.xpr_encoder1.out_features,
-                *enc_img.shape[2:],
-            )).to(img)
-            xpr[:, 0] = 1
-
-        enc_xpr = self.xpr_encoder2(xpr)
-
-        enc_img = center_crop(enc_img, enc_xpr.shape)
-        enc_xpr = center_crop(enc_xpr, enc_img.shape)
-
-        x = t.cat([enc_img, enc_xpr], 1)
-
-        z_mu = self.z_mu(x)
-        z_sd = self.z_sd(x)
-
-        self.z.distribution.set(
-            loc=z_mu,
-            scale=z_sd,
-            r_transform=True,
+        ).get_trace(fixed_x)
+        writer.add_scalar(
+            'loss/image',
+            -res.nodes['image']['fn']
+            .log_prob(res.nodes['image']['value']).sum(),
+            i,
         )
-        z = self.z.sample().value
-
-        return (
-            z,
-            z_mu,
-            z_sd,
+        writer.add_scalar(
+            'loss/xpr',
+            -res.nodes['sample0/xgs']['fn']
+            .log_prob(res.nodes['sample0/xgs']['value']).sum(),
+            i,
         )
-
-    def decode(self, z):
-        state = self.decoder(z)
-
-        img_mu = self.img_mu(state)
-        img_sd = self.img_sd(state)
-
-        xpr_state = self.xpr_state(state)
-
-        return (
-            t.distributions.Normal(img_mu, img_sd),
-            xpr_state,
-            state,
+        writer.add_images('he', (1 + res.nodes['image']['value']) / 2, i)
+        writer.add_images(
+            'he/mean', (1 + res.nodes['image']['fn'].mean) / 2, i)
+        writer.add_images(
+            'he/sample', (1 + res.nodes['image']['fn'].sample()) / 2, i)
+        writer.add_images(
+            'z',
+            dim_red(res.nodes['z']['value'].permute(0, 2, 3, 1)),
+            i,
+            dataformats='NHWC',
         )
-
-    def forward(self, img, lbl, xpr):
-        z, z_mu, z_sd = self.encode(img, lbl, xpr)
-
-        def _crop(y):
-            if isinstance(y, t.Tensor):
-                return center_crop(y, [None, None, *img.shape[-2:]])
-            if isinstance(y, t.distributions.Distribution):
-                return type(y)(**{
-                    k: center_crop(v, [None, None, *img.shape[-2:]])
-                    for k, v in y.__dict__.items() if k[0] != '_'
-                })
-            return y
-
-        return (z, *map(_crop, self.decode(z)))
-
-
-@store_init_args
-class ExpressionProgram(Variational):
-    def __init__(self, genes):
-        self._make_covariate('rg', (self.factors, len(genes)))
-        self._make_covariate(
-            'r',
-            (self.factors, ),
-            pdistr=Beta, pparams={
-                'shape1': np.log(np.exp(1) - 1),
-                'shape2': np.log(np.exp(1) - 1),
-            },
-            qdistr=Beta, qparams={
-                'shape1': np.log(np.exp(1) - 1),
-                'shape2': np.log(np.exp(1) - 1),
-            },
+        writer.add_images(
+            'activation',
+            dim_red(res.nodes['rim']['value']),
+            i,
+            dataformats='NHWC',
         )
-
-    def forward(self, xpr_state):
-        pass
-
-
-@store_init_args
-class STD(Variational):
-    def __init__(
-            self,
-            genes: List[str],
-            gene_baseline: Optional[np.ndarray] = None,
-            covariates: Optional[List[Tuple[str, List[str]]]] = None,
-    ):
-        super().__init__()
-
-        self.genes = list(genes)
-
-        self._make_covariate('lg', (len(genes), ))
-        self._make_covariate('rg', (len(genes), ))
-
-        if covariates is not None and len(covariates) > 0:
-            self._covariates = covariates
-            n_fe = reduce(op.add, map(lambda x: len(x[1]), covariates))
-            self._make_covariate('rgeff', (n_fe, len(genes)))
-            self._make_covariate('lgeff', (n_fe, len(genes)))
-        else:
-            self._covariates = []
-
-        if gene_baseline is not None:
-            if len(gene_baseline) != len(genes):
-                raise ValueError(
-                    'size of `gene_baseline` does not match `genes`'
-                    f' ({gene_baseline.shape[1]} vs. {len(genes)})'
-                )
-            lgb = t.tensor(np.log(gene_baseline)).float()
-            self.rg_q_loc.data = lgb.clone()
-            self.rg_p_loc.data = lgb.clone()
-
-    @property
-    def factor_contrib(self):
-        contrib = self.rt.value
-        if len(contrib) > 1:
-            contrib[1:] *= t.stack([
-                *it.accumulate(1 - self.rt.value[:-1], op.mul)])
-        return contrib
-
-    def forward(self, x, effects=None):
-        rate_tg = (
-            (self.rg.value + self.rtg.value).exp()
-            * self.factor_contrib[:, None]
+        writer.add_images(
+            'activation/coeffs',
+            dim_red(res.nodes['activation_coeffs']['fn'].mean),
+            i,
+            dataformats='NHWC',
         )
-        rate = x @ rate_tg
-        logit = self.lg.value.unsqueeze(0)
-        if effects is not None:
-            effects = effects.float()
-            rate = rate * (effects @ self.rgeff.value.exp())
-            logit = logit + effects @ self.lgeff.value
-        return t.distributions.NegativeBinomial(total_count=rate, logits=logit)
+    return results
