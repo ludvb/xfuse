@@ -841,11 +841,6 @@ def do(i):
     for x in loader:
         loss = svi.step(prep(x))
         writer.add_scalar('loss', loss, i)
-        writer.add_scalar(
-            'encoder-weight-size',
-            xfuse._get_encoder(fixed_x['image'])[0].weight.abs().mean(),
-            i,
-        )
         results.append(loss)
     if i % 50 == 0:
         res = p.poutine.trace(
@@ -854,6 +849,21 @@ def do(i):
                 p.poutine.trace(xfuse.guide).get_trace(fixed_x)
             )
         ).get_trace(fixed_x)
+        writer.add_scalar(
+            'accuracy/rmse',
+            (
+                ((res.nodes['sample0/xgs']['fn'].mean
+                  - res.nodes['sample0/xgs']['value'])
+                 ** 2)
+                .mean(1)
+                .sqrt()
+                .mean()
+            ),
+            i,
+        )
+        for i, factor in enumerate(
+                res.nodes['rim']['value'].permute(3, 0, 1, 2), 1):
+            writer.add_scalar(f'activation/factor{i}', factor.mean(), i)
         writer.add_scalar(
             'loss/image',
             -res.nodes['image']['fn']
