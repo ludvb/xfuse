@@ -442,7 +442,7 @@ class GeneExpression(DataRepresentation):
         spatial_encoding = self._get_spatial_encoding(x)
         return t.cat(
             [
-                spatial_encoding,
+                # spatial_encoding,
                 (
                     global_encoding
                     .expand(
