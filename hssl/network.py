@@ -333,10 +333,9 @@ class GeneExpression(DataRepresentation):
         # TODO: inject dependency
         globals_sample = p.sample('globals', (
             distr.Normal(
-                p.param('globals_mu', Variable(t.zeros(nglobals))).to(device),
+                p.param('globals_mu', t.zeros(nglobals)).to(device),
                 t.nn.functional.softplus(
-                    p.param('globals_sd', Variable(t.zeros(nglobals)))
-                    .to(device)
+                    p.param('globals_sd', t.zeros(nglobals)).to(device)
                 ),
             )
             .to_event(1)
