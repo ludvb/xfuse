@@ -818,8 +818,10 @@ def prep(x):
     return x
 
 
+from datetime import datetime
+import os
 from torch.utils.tensorboard import SummaryWriter
-writer = SummaryWriter('/tmp/tb')
+writer = SummaryWriter(os.path.join('/tmp/tb/', datetime.now().isoformat()))
 
 data, loader, genes = __remove_this()
 xfuse = XFuse(Combined(genes)).to(t.device('cuda'))
