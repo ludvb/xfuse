@@ -22,7 +22,6 @@ from pyro.contrib.autoname import scope
 import pyro.distributions as distr
 
 import torch as t
-from torch.autograd import Variable
 
 from .logging import DEBUG, log
 from .utility import center_crop
@@ -112,8 +111,8 @@ class Image(DataRepresentation):
             ),
             update_module_params=True,
         ).to(decoded)
-        mu = center_crop(img_mu(decoded), [None, None, *x['image'].shape[-2:]])
-        sd = center_crop(img_sd(decoded), [None, None, *x['image'].shape[-2:]])
+        mu = img_mu(center_crop(decoded, [None, None, *x['image'].shape[-2:]]))
+        sd = img_sd(center_crop(decoded, [None, None, *x['image'].shape[-2:]]))
         with data_plate:
             p.sample(
                 'image',
@@ -176,27 +175,6 @@ class GeneExpression(DataRepresentation):
         nc = decoded.shape[1]
 
         with data_plate:
-            decoder_scaling = p.module(
-                'decoder_scaling',
-                t.nn.Sequential(
-                    t.nn.Conv2d(nc, nc, 5, padding=2),
-                    t.nn.LeakyReLU(0.2, inplace=True),
-                    t.nn.BatchNorm2d(nc),
-                    t.nn.Conv2d(nc, 1, 5, padding=2),
-                    t.nn.Softplus(),
-                ),
-                update_module_params=True,
-            ).to(decoded)
-            scaling = p.sample(
-                'scaling',
-                distr.Delta(
-                    center_crop(
-                        decoder_scaling(decoded).permute(0, 2, 3, 1),
-                        x['labels'].shape,
-                    ),
-                ).to_event(3),
-            )
-
             decoder_activation = p.module(
                 'decoder_activation',
                 t.nn.Sequential(
@@ -223,11 +201,17 @@ class GeneExpression(DataRepresentation):
 
             activation_state = decoder_activation(decoded)
             activation_a = (
-                decoder_activation_a(activation_state)
+                center_crop(
+                    decoder_activation_a(activation_state),
+                    [None, None, *x['labels'].shape[-2:]],
+                )
                 .permute(0, 2, 3, 1)
             )
             activation_b = (
-                decoder_activation_b(activation_state)
+                center_crop(
+                    decoder_activation_b(activation_state),
+                    [None, None, *x['labels'].shape[-2:]],
+                )
                 .permute(0, 2, 3, 1)
             )
             # https://github.com/pytorch/pytorch/pull/20244
@@ -254,8 +238,32 @@ class GeneExpression(DataRepresentation):
                 -1,
             )
             activation = activation * activation_accumulated
-            rim = p.sample('rim', distr.Delta(activation).to_event(3))
-            rim = rim * scaling
+
+            decoder_scaling = p.module(
+                'decoder_scaling',
+                t.nn.Sequential(
+                    t.nn.Conv2d(nc, nc, 5, padding=2),
+                    t.nn.LeakyReLU(0.2, inplace=True),
+                    t.nn.BatchNorm2d(nc),
+                    t.nn.Conv2d(nc, 1, 5, padding=2),
+                    t.nn.Softplus(),
+                ),
+                update_module_params=True,
+            ).to(decoded)
+            scaling = p.sample(
+                'scaling',
+                distr.Delta(
+                    center_crop(
+                        decoder_scaling(decoded).permute(0, 2, 3, 1),
+                        activation.shape[:3],
+                    ),
+                ).to_event(3),
+            )
+
+            rim = p.sample(
+                'rim',
+                distr.Delta(scaling * activation).to_event(3),
+            )
 
         rmg = p.sample('rmg', (
             distr.Normal(
@@ -463,6 +471,7 @@ class GeneExpression(DataRepresentation):
         )
 
     def guide_post(self, x, pre, decoded, data_plate):
+        decoded = center_crop(decoded, [None, None, *pre.shape[-2:]])
         with data_plate:
             self._sample_activation(t.cat([pre, decoded], 1))
 
@@ -501,13 +510,12 @@ class XFuse(t.nn.Module):
         self.add_module('_representation', self.representation)
 
         self.latent_size = latent_size
-        self.latent_x = self.latent_y = 14
 
         self.feature_size = feature_size
 
         self._decoder = t.nn.Sequential(
             t.nn.Conv2d(
-                self.latent_size, 16 * self.feature_size, 5, padding=2),
+                self.latent_size, 16 * self.feature_size, 5, padding=5),
             # x16
             t.nn.LeakyReLU(0.2, inplace=True),
             t.nn.BatchNorm2d(16 * self.feature_size),
@@ -595,12 +603,7 @@ class XFuse(t.nn.Module):
                         t.tensor(0., device=next(self.parameters()).device),
                         1.,
                     )
-                    .expand([
-                        x['batch_size'],
-                        self.latent_size,
-                        self.latent_y,
-                        self.latent_x,
-                    ])
+                    .expand([1, 1, 1, 1])
                     .to_event(3)
                 ),
             )
