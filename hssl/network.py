@@ -301,7 +301,7 @@ class GeneExpression(DataRepresentation):
                 1.
             )
             .expand([effects.shape[1], len(self.genes)])
-            .to_event(1)
+            .to_event(2)
         ))
         lgeff = p.sample('lgeff', (
             distr.Normal(
@@ -309,7 +309,7 @@ class GeneExpression(DataRepresentation):
                 1.
             )
             .expand([effects.shape[1], len(self.genes)])
-            .to_event(1)
+            .to_event(2)
         ))
 
         rmg = (effects @ rgeff)[:, None] + rmg
