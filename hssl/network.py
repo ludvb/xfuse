@@ -776,9 +776,9 @@ def do(i):
             ),
             i,
         )
-        for i, factor in enumerate(
+        for n, factor in enumerate(
                 res.nodes['rim']['value'].permute(3, 0, 1, 2), 1):
-            writer.add_scalar(f'activation/factor{i}', factor.mean(), i)
+            writer.add_scalar(f'activation/factor{n}', factor.mean(), i)
         writer.add_scalar(
             'loss/image',
             -res.nodes['image']['fn']
