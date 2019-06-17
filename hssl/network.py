@@ -4,6 +4,8 @@ from copy import deepcopy
 
 from functools import reduce
 
+import itertools as it
+
 import operator as op
 
 from typing import (
@@ -119,33 +121,6 @@ class Image(DataRepresentation):
                 distr.Normal(mu, sd).to_event(3),
                 obs=x['image'],
             )
-        # img_sd = p.module(
-        #     'img_sd',
-        #     t.nn.Sequential(
-        #         t.nn.Conv2d(nc, nc, 3, 1, 1),
-        #         t.nn.LeakyReLU(0.2, inplace=True),
-        #         t.nn.BatchNorm2d(nc),
-        #         t.nn.Conv2d(nc, 3 * 3, 3, 1, 1),
-        #         t.nn.Softplus(),
-        #     ),
-        #     update_module_params=True,
-        # ).to(decoded)
-        # mu = center_crop(img_mu(decoded), [None, None, *x['image'].shape[-2:]])
-        # sd = center_crop(img_sd(decoded), [None, None, *x['image'].shape[-2:]])
-        # with data_plate:
-        #     p.sample(
-        #         'image',
-        #         (
-        #             distr.MultivariateNormal(
-        #                 mu.permute(0, 2, 3, 1).reshape(-1, 3),
-        #                 sd.permute(0, 2, 3, 1).reshape(-1, 3, 3),
-        #             )
-        #             .reshape(mu.shape[0], *mu.shape[2:], 3)
-        #             .permute(0, 3, 1, 2)
-        #             .to_event(3)
-        #         ),
-        #         obs=x['image'],
-        #     )
         return mu
 
     def guide_pre(self, x, data_plate):
@@ -161,7 +136,7 @@ class GeneExpression(DataRepresentation):
             genes: List[str],
             gene_baseline: Optional[np.ndarray] = None,
             covariates: Optional[List[Tuple[str, List[str]]]] = None,
-            truncation_threshold: int = 20,
+            factors: int = 1,
     ):
         super().__init__()
 
@@ -169,110 +144,87 @@ class GeneExpression(DataRepresentation):
         self.covariates = list(covariates or [])
         self.covariates_size = reduce(
             op.add, map(lambda x: len(x[1]), self.covariates), 0)
-        self.truncation_threshold = truncation_threshold
+        self._factors = set()
+        self._factors_counter = it.count()
+        for _ in range(factors):
+            self.add_factor()
+
+    @property
+    def factors(self):
+        return deepcopy(self._factors)
+
+    def add_factor(self):
+        n = next(self._factors_counter)
+        log(DEBUG, 'adding new factor: %d', n)
+        self._factors.add(n)
+        return self
+
+    def remove_facor(self, n):
+        log(DEBUG, 'removing factor: %d', n)
+        try:
+            self._factors.remove(n)
+        except KeyError:
+            raise ValueError(
+                f'attempted to remove factor {n}, which doesn\'t exist!')
+
+        self._factors_counter = it.chain([n], self._factors_counter)
+
+        param_store = p.get_param_store()
+        module_name = f'factor{n}_decoder'
+        for param in filter(
+                lambda x: x[:len(module_name)] == module_name,
+                param_store.keys()
+        ):
+            del param_store[param]
+
+        del param_store[f'factor{n}_mu']
+        del param_store[f'factor{n}_sd']
+
+        return self
 
     def model(self, x, decoded, data_plate):
         nc = decoded.shape[1]
 
-        with data_plate:
-            decoder_activation = p.module(
-                'decoder_activation',
-                t.nn.Sequential(
-                    t.nn.Conv2d(nc, nc, 5, padding=2),
-                    t.nn.LeakyReLU(0.2, inplace=True),
-                    t.nn.BatchNorm2d(nc),
-                ),
-                update_module_params=True,
-            ).to(decoded)
-            decoder_activation_a = p.module(
-                'decoder_activation_a',
-                t.nn.Sequential(
-                    t.nn.Conv2d(nc, self.truncation_threshold, 5, padding=2),
-                ),
-                update_module_params=True,
-            ).to(decoded)
-            decoder_activation_b = p.module(
-                'decoder_activation_b',
-                t.nn.Sequential(
-                    t.nn.Conv2d(nc, self.truncation_threshold, 5, padding=2),
-                ),
-                update_module_params=True,
-            ).to(decoded)
-
-            activation_state = decoder_activation(decoded)
-            activation_a = (
-                center_crop(
-                    decoder_activation_a(activation_state),
-                    [None, None, *x['labels'].shape[-2:]],
-                )
-                .permute(0, 2, 3, 1)
-            )
-            activation_b = (
-                center_crop(
-                    decoder_activation_b(activation_state),
-                    [None, None, *x['labels'].shape[-2:]],
-                )
-                .permute(0, 2, 3, 1)
-            )
-            # https://github.com/pytorch/pytorch/pull/20244
-            # activation = p.sample(
-            #     'activation_coeffs',
-            #     distr.Beta(activation_a, activation_b).to_event(1),
-            # )
-            activation = p.sample(
-                'activation_coeffs',
-                distr.Normal(
-                    activation_a,
-                    t.nn.functional.softplus(activation_b),
-                ).to_event(3),
-            )
-            activation = t.sigmoid(activation)
-            activation_accumulated = t.stack(
-                [
-                    t.ones(*activation.shape[:-1], device=activation.device),
-                    *(
-                        (1 - activation[..., :i]).prod(-1)
-                        for i in range(1, self.truncation_threshold)
+        factor_plate = p.plate('factor', len(self.factors))
+        rim = t.cat(
+            [
+                p.module(
+                    f'factor{n}_decoder',
+                    t.nn.Sequential(
+                        t.nn.Conv2d(nc, nc, 3, 1, 1),
+                        t.nn.LeakyReLU(0.2, inplace=True),
+                        t.nn.BatchNorm2d(nc),
+                        t.nn.Conv2d(nc, 1, 1, 1, 1),
                     ),
-                ],
-                -1,
-            )
-            activation = activation * activation_accumulated
+                    update_module_params=True,
+                )
+                .to(decoded)
+                (decoded)
+                .permute(0, 2, 3, 1)
+                for n in factor_plate
+            ],
+            -1,
+        )
+        rim = p.sample(
+            'rim',
+            distr.Delta(center_crop(rim, x['labels'].shape)),
+        )
 
-            decoder_scaling = p.module(
-                'decoder_scaling',
-                t.nn.Sequential(
-                    t.nn.Conv2d(nc, nc, 5, padding=2),
-                    t.nn.LeakyReLU(0.2, inplace=True),
-                    t.nn.BatchNorm2d(nc),
-                    t.nn.Conv2d(nc, 1, 5, padding=2),
-                    t.nn.Softplus(),
-                ),
-                update_module_params=True,
-            ).to(decoded)
-            scaling = p.sample(
-                'scaling',
-                distr.Delta(
-                    center_crop(
-                        decoder_scaling(decoded).permute(0, 2, 3, 1),
-                        activation.shape[:3],
-                    ),
-                ).to_event(3),
-            )
-
-            rim = p.sample(
-                'rim',
-                distr.Delta(scaling * activation).to_event(3),
-            )
-
-        rmg = p.sample('rmg', (
-            distr.Normal(
-                t.tensor(0., device=x['data'][0].device),
-                1.,
-            )
-            .expand([self.truncation_threshold, len(self.genes)])
-            .to_event(2)
-        ))
+        rmg = p.sample('rmg', distr.Delta(t.stack([
+            p.param(f'factor{n}', t.zeros(
+                len(self.genes),
+                device=x['data'][0].device,
+            ))
+            # p.sample(f'factor{n}', (
+            #     distr.Normal(
+            #         t.tensor(0., device=x['data'][0].device),
+            #         1.,
+            #     )
+            #     .expand([len(self.genes)])
+            #     .to_event(1)
+            # ))
+            for n in factor_plate
+        ])))
 
         lg = p.sample('lg', (
             distr.Normal(
@@ -331,20 +283,29 @@ class GeneExpression(DataRepresentation):
         device = x['data'][0].device
 
         globals_list = [
-            ('rmg', [self.truncation_threshold, len(self.genes)]),
             ('lg',  [len(self.genes)]),
             ('rgeff', [1 + x['effects'].shape[1], len(self.genes)]),
             ('lgeff', [1 + x['effects'].shape[1], len(self.genes)]),
+            # *[(f'factor{n}', [len(self.genes)]) for n in self.factors],
         ]
 
-        nglobals = sum(reduce(op.mul, dims) for _name, dims in globals_list)
         # TODO: inject dependency
         globals_sample = p.sample('globals', (
             distr.Normal(
-                p.param('globals_mu', t.zeros(nglobals)).to(device),
-                t.nn.functional.softplus(
-                    p.param('globals_sd', t.zeros(nglobals)).to(device)
-                ),
+                t.cat([
+                    p.param(f'{param}_mu', t.zeros(reduce(op.mul, dims)))
+                    .to(device)
+                    for param, dims in globals_list
+                ]),
+                t.cat([
+                    p.param(
+                        f'{param}_sd',
+                        t.ones(reduce(op.mul, dims)),
+                        constraint=t.distributions.constraints.positive,
+                    )
+                    .to(device)
+                    for param, dims in globals_list
+                ]),
             )
             .to_event(1)
         ))
@@ -388,78 +349,28 @@ class GeneExpression(DataRepresentation):
 
         return encoded
 
-    def _sample_activation(self, decoded):
-        guide_activation = p.module(
-            'guide_activation',
-            t.nn.Sequential(
-                t.nn.Conv2d(decoded.shape[1], 10, 5, padding=2),
-                t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm2d(10),
-            ),
-            update_module_params=True,
-        ).to(decoded)
-        guide_activation_a = p.module(
-            'guide_activation_a',
-            t.nn.Sequential(
-                t.nn.Conv2d(10, self.truncation_threshold, 5, padding=2),
-                # t.nn.Softplus(),
-            ),
-            update_module_params=True,
-        ).to(decoded)
-        guide_activation_b = p.module(
-            'guide_activation_b',
-            t.nn.Sequential(
-                t.nn.Conv2d(10, self.truncation_threshold, 5, padding=2),
-                # t.nn.Softplus(),
-            ),
-            update_module_params=True,
-        ).to(decoded)
-
-        activation_state = guide_activation(decoded)
-        activation_a = (
-            guide_activation_a(activation_state)
-            .permute(0, 2, 3, 1)
-        )
-        activation_b = (
-            guide_activation_b(activation_state)
-            .permute(0, 2, 3, 1)
-        )
-        # activation = p.sample(
-        #     'activation_coeffs',
-        #     distr.Beta(activation_a, activation_b).to_event(1),
-        # )
-        activation = p.sample(
-            'activation_coeffs',
-            distr.Normal(
-                activation_a,
-                t.nn.functional.softplus(activation_b),
-            ).to_event(3),
-        )
-
-        return activation.permute(0, 3, 1, 2)
-
     def guide_pre(self, x, data_plate):
         globals = self._sample_globals(x)
-        global_encoding = p.module(
-            'global_encoding',
-            t.nn.Sequential(
-                t.nn.Linear(len(globals), 3),
-            ),
-            update_module_params=True,
-        ).to(globals)(globals)
+        # global_encoding = p.module(
+        #     'global_encoding',
+        #     t.nn.Sequential(
+        #         t.nn.Linear(len(globals), 3),
+        #     ),
+        #     update_module_params=True,
+        # ).to(globals)(globals)
         spatial_encoding = self._get_spatial_encoding(x)
         return t.cat(
             [
                 # spatial_encoding,
-                (
-                    global_encoding
-                    .expand(
-                        spatial_encoding.shape[0],
-                        *spatial_encoding.shape[2:],
-                        -1,
-                    )
-                    .permute(0, 3, 1, 2)
-                ),
+                # (
+                #     global_encoding
+                #     .expand(
+                #         spatial_encoding.shape[0],
+                #         *spatial_encoding.shape[2:],
+                #         -1,
+                #     )
+                #     .permute(0, 3, 1, 2)
+                # ),
                 (
                     x['effects']
                     .expand(*spatial_encoding.shape[2:], -1, -1)
@@ -471,9 +382,7 @@ class GeneExpression(DataRepresentation):
         )
 
     def guide_post(self, x, pre, decoded, data_plate):
-        decoded = center_crop(decoded, [None, None, *pre.shape[-2:]])
-        with data_plate:
-            self._sample_activation(t.cat([pre, decoded], 1))
+        pass
 
 
 class Combined(Image, GeneExpression):
@@ -663,7 +572,7 @@ class STModel(ExperimentModel):
                 [label.flatten()]
                 .reshape(*label.shape, -1)
             ),
-            rim,
+            t.nn.functional.softplus(rim),
         )
         rgs = t.einsum('im,mg->ig', rim[1:], rmg.exp())
         xgs = p.sample(
@@ -826,8 +735,11 @@ import os
 from torch.utils.tensorboard import SummaryWriter
 writer = SummaryWriter(os.path.join('/tmp/tb/', datetime.now().isoformat()))
 
+from .logging import set_level, DEBUG
+set_level(DEBUG)
+
 data, loader, genes = __remove_this()
-xfuse = XFuse(Combined(genes)).to(t.device('cuda'))
+xfuse = XFuse(Combined(genes, factors=20)).to(t.device('cuda'))
 import pyro.optim
 svi = p.infer.SVI(
     xfuse.model,
@@ -839,12 +751,12 @@ fixed_x = prep(next(iter(loader)))
 
 
 def do(i):
-    print(i)
     results = []
     for x in loader:
         loss = svi.step(prep(x))
         writer.add_scalar('loss', loss, i)
         results.append(loss)
+    print(f'{i}: {loss}')
     if i % 50 == 0:
         res = p.poutine.trace(
             p.poutine.replay(
@@ -890,16 +802,23 @@ def do(i):
             i,
             dataformats='NHWC',
         )
-        writer.add_images(
-            'activation',
-            dim_red(res.nodes['rim']['value']),
-            i,
-            dataformats='NHWC',
-        )
-        writer.add_images(
-            'activation/coeffs',
-            dim_red(res.nodes['activation_coeffs']['fn'].mean),
-            i,
-            dataformats='NHWC',
-        )
+        # writer.add_images(
+        #     'activation',
+        #     dim_red(res.nodes['rim']['value']),
+        #     i,
+        #     dataformats='NHWC',
+        # )
     return results
+
+
+def compare_elbo():
+    guide = p.poutine.trace(xfuse.guide).get_trace(fixed_x)
+    full_model = p.poutine.trace(
+        p.poutine.replay(xfuse.model, guide)
+    ).get_trace(fixed_x)
+    reduced_model = p.poutine.trace(
+        p.poutine.replay(
+            p.poutine.block(lambda x: x['name'] and x['name'][:7] == 'factor0'),
+            guide,
+        ),
+    ).get_trace(fixed_x)
