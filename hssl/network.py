@@ -623,7 +623,15 @@ class STModel(ExperimentModel):
 class STGuide(ExperimentGuide):
     def __init__(self, data, label):
         super().__init__(data, label)
-        self.xpr_encoder = t.nn.Linear(1 + data.shape[1], 10).to(data)
+        self.xpr_encoder1 = t.nn.Linear(1 + data.shape[1], 10).to(data)
+        self.xpr_encoder2 = t.nn.Sequential(
+            t.nn.Conv2d(10, 10, 3, 1, 1, bias=True),
+            t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(10),
+            t.nn.Conv2d(10, 10, 3, 1, 1, bias=True),
+            t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(10),
+        ).to(data)
 
     def forward(self, data, label):
         data_with_missing = t.nn.functional.pad(data, (1, 0, 1, 0))
@@ -637,20 +645,28 @@ class STGuide(ExperimentGuide):
             ] = t.tensor([1., *[0.] * data.shape[1]], device=data.device)
 
         convolved_data = (
-            p.module('xpr_encoder', self.xpr_encoder)
+            p.module('xpr_encoder1', self.xpr_encoder1)
             (data_with_missing)
         )
 
-        return t.einsum(
-            'yxi,ic->yxc',
+        return (
+            p.module('xpr_encoder2', self.xpr_encoder2)
             (
-                t.eye(len(convolved_data))
-                .to(label)
-                [label.flatten()]
-                .reshape(*label.shape, -1)
-                .float()
-            ),
-            convolved_data,
+                t.einsum(
+                    'yxi,ic->cyx',
+                    (
+                        t.eye(len(convolved_data))
+                        .to(label)
+                        [label.flatten()]
+                        .reshape(*label.shape, -1)
+                        .float()
+                    ),
+                    convolved_data,
+                )
+                .unsqueeze(0)
+            )
+            .squeeze(0)
+            .permute(1, 2, 0)
         )
 
 
