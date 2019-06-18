@@ -34,7 +34,7 @@ class ExperimentModel(t.nn.Module):
         super().__init__()
 
     @abstractmethod
-    def forward(self, data, label, rim, rmg, lg):
+    def forward(self, data, label, scale, rim, rmg, lg):
         pass
 
 
@@ -141,6 +141,7 @@ class GeneExpression(DataRepresentation):
         super().__init__()
 
         self.genes = list(genes)
+        self.gene_baseline = gene_baseline
         self.covariates = list(covariates or [])
         self.covariates_size = reduce(
             op.add, map(lambda x: len(x[1]), self.covariates), 0)
@@ -148,6 +149,29 @@ class GeneExpression(DataRepresentation):
         self._factors_counter = it.count()
         for _ in range(factors):
             self.add_factor()
+
+    def _create_factor_decoder(self, in_channels):
+        decoder = t.nn.Sequential(
+            t.nn.Conv2d(in_channels, in_channels, 3, 1, 1),
+            t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(in_channels),
+            t.nn.Conv2d(in_channels, 1, 1, 1, 1),
+        )
+        t.nn.init.constant_(decoder[-1].weight, 0.)
+        t.nn.init.constant_(decoder[-1].bias, 0.)
+        return decoder
+
+    def _create_scale_decoder(self, in_channels):
+        decoder = t.nn.Sequential(
+            t.nn.Conv2d(in_channels, in_channels, 3, 1, 1),
+            t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(in_channels),
+            t.nn.Conv2d(in_channels, 1, 1, 1, 1),
+            t.nn.Softplus(),
+        )
+        t.nn.init.constant_(decoder[-2].weight, 0.)
+        t.nn.init.constant_(decoder[-2].bias, np.log(np.e - 1))
+        return decoder
 
     @property
     def factors(self):
@@ -185,29 +209,40 @@ class GeneExpression(DataRepresentation):
     def model(self, x, decoded, data_plate):
         nc = decoded.shape[1]
 
+        scale = (
+            p.module(
+                'scale',
+                self._create_scale_decoder(nc),
+                update_module_params=True,
+            )
+            .to(decoded)
+            (decoded)
+        )
+        scale = p.sample(
+            'scale',
+            distr.Delta(center_crop(
+                scale.squeeze(1), x['labels'].shape)),
+        )
+
         factor_plate = p.plate('factor', len(self.factors))
         rim = t.cat(
             [
                 p.module(
                     f'factor{n}_decoder',
-                    t.nn.Sequential(
-                        t.nn.Conv2d(nc, nc, 3, 1, 1),
-                        t.nn.LeakyReLU(0.2, inplace=True),
-                        t.nn.BatchNorm2d(nc),
-                        t.nn.Conv2d(nc, 1, 1, 1, 1),
-                    ),
+                    self._create_factor_decoder(nc),
                     update_module_params=True,
                 )
                 .to(decoded)
                 (decoded)
-                .permute(0, 2, 3, 1)
                 for n in factor_plate
             ],
-            -1,
+            1,
         )
+        rim = t.nn.functional.softmax(rim, dim=1)
         rim = p.sample(
             'rim',
-            distr.Delta(center_crop(rim, x['labels'].shape)),
+            distr.Delta(center_crop(
+                rim.permute(0, 2, 3, 1), x['labels'].shape)),
         )
 
         rmg = p.sample('rmg', distr.Delta(t.stack([
@@ -215,14 +250,6 @@ class GeneExpression(DataRepresentation):
                 len(self.genes),
                 device=x['data'][0].device,
             ))
-            # p.sample(f'factor{n}', (
-            #     distr.Normal(
-            #         t.tensor(0., device=x['data'][0].device),
-            #         1.,
-            #     )
-            #     .expand([len(self.genes)])
-            #     .to_event(1)
-            # ))
             for n in factor_plate
         ])))
 
@@ -267,15 +294,15 @@ class GeneExpression(DataRepresentation):
         rmg = (effects @ rgeff)[:, None] + rmg
         lg = effects @ lgeff + lg
 
-        for i, (type, data, label, rim_, rmg_, lg_) in enumerate(
-                zip(x['type'], x['data'], x['labels'], rim, rmg, lg)):
+        for i, (type, data, label, scale_, rim_, rmg_, lg_) in enumerate(
+                zip(x['type'], x['data'], x['labels'], scale, rim, rmg, lg)):
             type_model = p.module(
                 f'{type}_model',
-                _get_type(type).model(data, label, rim_, rmg_, lg_),
+                _get_type(type).model(),
                 update_module_params=True,
             ).train(self.training)
             with data_plate, scope(prefix=f'sample{i}'):
-                type_model(data, label, rim_, rmg_, lg_)
+                type_model(data, label, scale_, rim_, rmg_, lg_)
 
         return rim, rmg, lg
 
@@ -351,26 +378,26 @@ class GeneExpression(DataRepresentation):
 
     def guide_pre(self, x, data_plate):
         globals = self._sample_globals(x)
-        # global_encoding = p.module(
-        #     'global_encoding',
-        #     t.nn.Sequential(
-        #         t.nn.Linear(len(globals), 3),
-        #     ),
-        #     update_module_params=True,
-        # ).to(globals)(globals)
+        global_encoding = p.module(
+            'global_encoding',
+            t.nn.Sequential(
+                t.nn.Linear(len(globals), 3),
+            ),
+            update_module_params=True,
+        ).to(globals)(globals)
         spatial_encoding = self._get_spatial_encoding(x)
         return t.cat(
             [
-                # spatial_encoding,
-                # (
-                #     global_encoding
-                #     .expand(
-                #         spatial_encoding.shape[0],
-                #         *spatial_encoding.shape[2:],
-                #         -1,
-                #     )
-                #     .permute(0, 3, 1, 2)
-                # ),
+                spatial_encoding,
+                (
+                    global_encoding
+                    .expand(
+                        spatial_encoding.shape[0],
+                        *spatial_encoding.shape[2:],
+                        -1,
+                    )
+                    .permute(0, 3, 1, 2)
+                ),
                 (
                     x['effects']
                     .expand(*spatial_encoding.shape[2:], -1, -1)
@@ -564,15 +591,16 @@ class Unpool(t.nn.Module):
 
 
 class STModel(ExperimentModel):
-    def forward(self, data, label, rim, rmg, lg):
+    def forward(self, data, label, scale, rim, rmg, lg):
         rim = t.einsum(
-            'yxi,yxf->if',
+            'yxi,yxf,yx->if',
             (
                 t.eye(label.max() + 1, device=label.device)
                 [label.flatten()]
                 .reshape(*label.shape, -1)
             ),
             t.nn.functional.softplus(rim),
+            scale,
         )
         rgs = t.einsum('im,mg->ig', rim[1:], rmg.exp())
         xgs = p.sample(
@@ -605,7 +633,10 @@ class STGuide(ExperimentGuide):
                 .byte()
             ] = t.tensor([1., *[0.] * data.shape[1]], device=data.device)
 
-        convolved_data = self.xpr_encoder(data_with_missing)
+        convolved_data = (
+            p.module('xpr_encoder', self.xpr_encoder)
+            (data_with_missing)
+        )
 
         return t.einsum(
             'yxi,ic->yxc',
@@ -802,12 +833,12 @@ def do(i):
             i,
             dataformats='NHWC',
         )
-        # writer.add_images(
-        #     'activation',
-        #     dim_red(res.nodes['rim']['value']),
-        #     i,
-        #     dataformats='NHWC',
-        # )
+        writer.add_images(
+            'activation',
+            dim_red(res.nodes['rim']['value']),
+            i,
+            dataformats='NHWC',
+        )
     return results
 
 
