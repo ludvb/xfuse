@@ -134,14 +134,14 @@ class GeneExpression(DataRepresentation):
     def __init__(
             self,
             genes: List[str],
-            gene_baseline: Optional[np.ndarray] = None,
+            default_scale: Optional[float] = 1.,
             covariates: Optional[List[Tuple[str, List[str]]]] = None,
             factors: int = 1,
     ):
         super().__init__()
 
         self.genes = list(genes)
-        self.gene_baseline = gene_baseline
+        self.default_scale = default_scale
         self.covariates = list(covariates or [])
         self.covariates_size = reduce(
             op.add, map(lambda x: len(x[1]), self.covariates), 0)
@@ -170,7 +170,10 @@ class GeneExpression(DataRepresentation):
             t.nn.Softplus(),
         )
         t.nn.init.constant_(decoder[-2].weight, 0.)
-        t.nn.init.constant_(decoder[-2].bias, np.log(np.e - 1))
+        t.nn.init.constant_(
+            decoder[-2].bias,
+            np.log(np.exp(self.default_scale) - 1),
+        )
         return decoder
 
     @property
@@ -724,7 +727,12 @@ def __remove_this():
 
     genes = list(count_data.columns)
 
-    return dataset, loader, genes
+    from .dataset import spot_size
+
+    return (
+        dataset, loader, genes,
+        count_data.mean().mean() / spot_size(dataset),
+    )
 
 
 def dim_red(x, mask=None, method='pca', n_components=3, **kwargs):
@@ -769,8 +777,9 @@ writer = SummaryWriter(os.path.join('/tmp/tb/', datetime.now().isoformat()))
 from .logging import set_level, DEBUG
 set_level(DEBUG)
 
-data, loader, genes = __remove_this()
-xfuse = XFuse(Combined(genes, factors=20)).to(t.device('cuda'))
+from .dataset import spot_size
+data, loader, genes, scale = __remove_this()
+xfuse = XFuse(Combined(genes, default_scale=scale, factors=20)).to(t.device('cuda'))
 import pyro.optim
 svi = p.infer.SVI(
     xfuse.model,
