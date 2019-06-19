@@ -25,79 +25,93 @@ import pyro.distributions as distr
 
 import torch as t
 
-from .logging import DEBUG, log
+from .logging import DEBUG, INFO, log
 from .utility import center_crop
 
 
-class ExperimentModel(t.nn.Module):
-    def __init__(self, *_):
-        super().__init__()
+def _find_device(x):
+    # TODO: move elsewhere
+    if isinstance(x, t.Tensor):
+        return x.device
+    if isinstance(x, list):
+        for y in x:
+            device = _find_device(y)
+            if device is not None:
+                return device
+    if isinstance(x, dict):
+        for y in x.values():
+            device = _find_device(y)
+            if device is not None:
+                return device
+    return None
 
+
+class ExperimentType(t.nn.Module):
+    def __init__(self, n: int):
+        self.n = n
+
+    def _sample_global(name, *args, **kwargs):
+        try:
+            return p.sample(name, *args, **kwargs)
+        except RuntimeError:
+            return p.poutine.runtime._PYRO_STACK[-1].trace.nodes[name]['value']
+
+    @property
     @abstractmethod
-    def forward(self, data, label, scale, rim, rmg, lg):
-        pass
-
-
-class ExperimentGuide(t.nn.Module):
-    def __init__(self, *_):
-        super().__init__()
-
-    @abstractmethod
-    def forward(self, data, label):
-        pass
-
-
-class ExperimentType(NamedTuple):
-    model: Type[ExperimentModel]
-    guide: Type[ExperimentGuide]
-
-
-__TYPE_STORE: Dict[str, ExperimentType] = {}
-
-
-def _get_type(experiment_type: str) -> ExperimentType:
-    try:
-        return __TYPE_STORE[experiment_type]
-    except KeyError:
-        raise RuntimeError(f'unknown experiment type: {experiment_type}')
-
-
-def _register_type(
-        name: str,
-        model: ExperimentModel,
-        guide: ExperimentGuide
-) -> None:
-    if name in __TYPE_STORE:
-        raise RuntimeError(
-            f'model for experiment type "{name}" already registered')
-    log(DEBUG, 'registering experiment type: %s', name)
-    __TYPE_STORE[name] = ExperimentType(model, guide)
-
-
-class DataRepresentation(t.nn.Module):
-    @abstractmethod
-    def model(self, x, decoded, data_plate):
+    def tag(self):
         pass
 
     @abstractmethod
-    def guide_pre(self, x, data_plate) -> t.Tensor:
+    def model(self, x, z):
         pass
 
     @abstractmethod
-    def guide_post(self, x, pre, decoded, data_plate) -> None:
+    def guide(self, x):
         pass
 
 
-class Image(DataRepresentation):
-    def model(self, x, decoded, data_plate):
-        nc = decoded.shape[1]
+class ImagingExperiment(ExperimentType):
+    @property
+    def tag(self):
+        return 'image'
+
+    def _decode(self, z):
+        decoder = p.module(
+            'img_decoder',
+            t.nn.Sequential(
+                t.nn.Conv2d(z.shape[1], 512, 5, padding=5),
+                # x16
+                t.nn.LeakyReLU(0.2, inplace=True),
+                t.nn.BatchNorm2d(512),
+                Unpool(512, 256, 5),
+                # x8
+                t.nn.LeakyReLU(0.2, inplace=True),
+                t.nn.BatchNorm2d(256),
+                Unpool(256, 128, 5),
+                # x4
+                t.nn.LeakyReLU(0.2, inplace=True),
+                t.nn.BatchNorm2d(128),
+                Unpool(128, 64, 5),
+                # x2
+                t.nn.LeakyReLU(0.2, inplace=True),
+                t.nn.BatchNorm2d(64),
+                Unpool(64, 32, 5),
+                # x1
+                t.nn.LeakyReLU(0.2, inplace=True),
+                t.nn.BatchNorm2d(32),
+            ),
+            update_module_params=True,
+        ).to(z)
+        return decoder(z)
+
+    def _sample_image(self, x, decoded):
         img_mu = p.module(
             'img_mu',
             t.nn.Sequential(
-                t.nn.Conv2d(nc, nc, 3, 1, 1),
+                t.nn.Conv2d(32, 16, 3, 1, 1),
                 t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm2d(nc),
-                t.nn.Conv2d(nc, 3, 3, 1, 1),
+                t.nn.BatchNorm2d(16),
+                t.nn.Conv2d(16, 3, 3, 1, 1),
                 t.nn.Tanh(),
             ),
             update_module_params=True,
@@ -105,63 +119,96 @@ class Image(DataRepresentation):
         img_sd = p.module(
             'img_sd',
             t.nn.Sequential(
-                t.nn.Conv2d(nc, nc, 3, 1, 1),
+                t.nn.Conv2d(32, 16, 3, 1, 1),
                 t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm2d(nc),
-                t.nn.Conv2d(nc, 3, 3, 1, 1),
+                t.nn.BatchNorm2d(16),
+                t.nn.Conv2d(16, 3, 3, 1, 1),
                 t.nn.Softplus(),
             ),
             update_module_params=True,
         ).to(decoded)
-        mu = img_mu(center_crop(decoded, [None, None, *x['image'].shape[-2:]]))
-        sd = img_sd(center_crop(decoded, [None, None, *x['image'].shape[-2:]]))
-        with data_plate:
-            p.sample(
-                'image',
-                distr.Normal(mu, sd).to_event(3),
-                obs=x['image'],
-            )
-        return mu
+        mu = center_crop(img_mu(decoded), [None, None, *x['image'].shape[-2:]])
+        sd = center_crop(img_sd(decoded), [None, None, *x['image'].shape[-2:]])
 
-    def guide_pre(self, x, data_plate):
-        return x['image']
+        return p.sample(
+            'image',
+            distr.Normal(mu, sd).to_event(3),
+            obs=x['image'],
+        )
 
-    def guide_post(self, x, pre, decoded, data_plate):
-        pass
+    def model(self, x, z):
+        decoded = self._decode(z)
+        with p.poutine.scale(self.n/len(x)):
+            self._sample_image(x, decoded)
+
+    def guide(self, x):
+        encoder = p.module(
+            'img_encoder',
+            t.nn.Sequential(
+                # x1
+                t.nn.Conv2d(3, 64, 4, 2, 1),
+                t.nn.LeakyReLU(0.2, inplace=True),
+                t.nn.BatchNorm2d(64),
+                # x2
+                t.nn.Conv2d(64, 128, 4, 2, 1),
+                t.nn.LeakyReLU(0.2, inplace=True),
+                t.nn.BatchNorm2d(128),
+                # x4
+                t.nn.Conv2d(128, 256, 4, 2, 1),
+                t.nn.LeakyReLU(0.2, inplace=True),
+                t.nn.BatchNorm2d(256),
+                # x8
+                t.nn.Conv2d(256, 512, 4, 2, 1),
+                t.nn.LeakyReLU(0.2, inplace=True),
+                t.nn.BatchNorm2d(512),
+                # x16
+            ),
+            update_module_params=True,
+        ).to(x['image'])
+        return encoder(x['image'])
 
 
-class GeneExpression(DataRepresentation):
+class STExperiment(ImagingExperiment):
+    @property
+    def tag(self):
+        return 'ST'
+
     def __init__(
             self,
-            genes: List[str],
-            default_scale: Optional[float] = 1.,
-            covariates: Optional[List[Tuple[str, List[str]]]] = None,
-            factors: int = 1,
+            *args,
+            num_factors: int = 1,
+            default_scale: float = 1.,
+            **kwargs,
     ):
-        super().__init__()
+        super().__init__(*args, **kwargs)
 
-        self.genes = list(genes)
-        self.default_scale = default_scale
-        self.covariates = list(covariates or [])
-        self.covariates_size = reduce(
-            op.add, map(lambda x: len(x[1]), self.covariates), 0)
-        self._factors = set()
-        self._factors_counter = it.count()
-        for _ in range(factors):
+        self.__factors = set()
+        self.__factors_counter = it.count()
+        for _ in range(num_factors):
             self.add_factor()
 
-    def _create_factor_decoder(self, in_channels):
-        decoder = t.nn.Sequential(
-            t.nn.Conv2d(in_channels, in_channels, 3, 1, 1),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(in_channels),
-            t.nn.Conv2d(in_channels, 1, 1, 1, 1),
-        )
-        t.nn.init.constant_(decoder[-1].weight, 0.)
-        t.nn.init.constant_(decoder[-1].bias, 0.)
-        return decoder
+        self.__default_scale = default_scale
 
-    def _create_scale_decoder(self, in_channels):
+    @property
+    def factors(self):
+        return deepcopy(self.__factors)
+
+    def add_factor(self):
+        n = next(self.__factors_counter)
+        log(DEBUG, 'adding new factor: %d', n)
+        self.__factors.add(n)
+        return self
+
+    def remove_facor(self, n):
+        log(DEBUG, 'removing factor: %d', n)
+        try:
+            self.__factors.remove(n)
+        except KeyError:
+            raise ValueError(
+                f'attempted to remove factor {n}, which doesn\'t exist!')
+        self.__factors_counter = it.chain([n], self.__factors_counter)
+
+    def _get_scale_decoder(self, in_channels):
         decoder = t.nn.Sequential(
             t.nn.Conv2d(in_channels, in_channels, 3, 1, 1),
             t.nn.LeakyReLU(0.2, inplace=True),
@@ -172,397 +219,219 @@ class GeneExpression(DataRepresentation):
         t.nn.init.constant_(decoder[-2].weight, 0.)
         t.nn.init.constant_(
             decoder[-2].bias,
-            np.log(np.exp(self.default_scale) - 1),
+            np.log(np.exp(self.__default_scale) - 1),
         )
-        return decoder
+        return p.module('scale', decoder, update_module_params=True)
 
-    @property
-    def factors(self):
-        return deepcopy(self._factors)
+    def _get_factor_decoder(self, in_channels, n):
+        decoder = t.nn.Sequential(
+            t.nn.Conv2d(in_channels, in_channels, 3, 1, 1),
+            t.nn.LeakyReLU(0.2, inplace=True),
+            t.nn.BatchNorm2d(in_channels),
+            t.nn.Conv2d(in_channels, 1, 1, 1, 1),
+        )
+        t.nn.init.constant_(decoder[-1].weight, 0.)
+        t.nn.init.constant_(decoder[-1].bias, 0.)
+        return p.module(f'factor{n}', decoder, update_module_params=True)
 
-    def add_factor(self):
-        n = next(self._factors_counter)
-        log(DEBUG, 'adding new factor: %d', n)
-        self._factors.add(n)
-        return self
+    def model(self, x, z):
+        num_genes = x['data'][0].shape[1]
 
-    def remove_facor(self, n):
-        log(DEBUG, 'removing factor: %d', n)
-        try:
-            self._factors.remove(n)
-        except KeyError:
-            raise ValueError(
-                f'attempted to remove factor {n}, which doesn\'t exist!')
+        decoded = self._decode(z)
 
-        self._factors_counter = it.chain([n], self._factors_counter)
-
-        param_store = p.get_param_store()
-        module_name = f'factor{n}_decoder'
-        for param in filter(
-                lambda x: x[:len(module_name)] == module_name,
-                param_store.keys()
-        ):
-            del param_store[param]
-
-        del param_store[f'factor{n}_mu']
-        del param_store[f'factor{n}_sd']
-
-        return self
-
-    def model(self, x, decoded, data_plate):
-        nc = decoded.shape[1]
-
-        scale = (
-            p.module(
-                'scale',
-                self._create_scale_decoder(nc),
-                update_module_params=True,
+        scale = p.sample('scale', distr.Delta(
+            center_crop(
+                self._get_scale_decoder(decoded.shape[1]).to(decoded)(decoded),
+                [None, None, *x['label'].shape[-2:]],
             )
-            .to(decoded)
-            (decoded)
-        )
-        scale = p.sample(
-            'scale',
-            distr.Delta(center_crop(
-                scale.squeeze(1), x['labels'].shape)),
-        )
-
-        factor_plate = p.plate('factor', len(self.factors))
-        rim = t.cat(
-            [
-                p.module(
-                    f'factor{n}_decoder',
-                    self._create_factor_decoder(nc),
-                    update_module_params=True,
-                )
-                .to(decoded)
-                (decoded)
-                for n in factor_plate
-            ],
-            1,
-        )
-        rim = t.nn.functional.softmax(rim, dim=1)
-        rim = p.sample(
-            'rim',
-            distr.Delta(center_crop(
-                rim.permute(0, 2, 3, 1), x['labels'].shape)),
-        )
+        ))
+        rim = p.sample('rim', distr.Delta(
+            center_crop(
+                t.cat(
+                    [
+                        self._get_factor_decoder(decoded.shape[1], n)
+                        .to(decoded)(decoded)
+                        for n in self.factors
+                    ],
+                    dim=1,
+                ),
+                [None, None, *x['label'].shape[-2:]],
+            )
+        ))
+        rim = scale * t.nn.functional.softmax(rim, dim=1)
 
         rmg = p.sample('rmg', distr.Delta(t.stack([
-            p.param(f'factor{n}', t.zeros(
-                len(self.genes),
-                device=x['data'][0].device,
+            p.sample(f'factor{n}', (
+                distr.Normal(t.tensor(0.).to(z), 1.).expand([num_genes])
             ))
-            for n in factor_plate
+            for n in self.factors
         ])))
 
         lg = p.sample('lg', (
-            distr.Normal(
-                t.tensor(0., device=x['data'][0].device),
-                1.,
-            )
-            .expand([len(self.genes)])
-            .to_event(1)
+            distr.Normal(t.tensor(0.).to(z), 1.).expand([num_genes])
         ))
 
-        effects = t.cat(
-            [
-                t.ones(
-                    x['effects'].shape[0],
-                    1,
-                    dtype=t.float32,
-                    device=x['effects'].device,
-                ),
-                x['effects'].float(),
-            ],
-            1,
-        )
+        effects = t.cat([
+            t.ones(x['effects'].shape[0], 1).float().to(z),
+            x['effects'].float(),
+        ], dim=1)
         rgeff = p.sample('rgeff', (
-            distr.Normal(
-                t.tensor(0., device=x['data'][0].device),
-                1.
-            )
-            .expand([effects.shape[1], len(self.genes)])
-            .to_event(2)
+            distr.Normal(t.tensor(0.).to(z), 1)
+            .expand([effects.shape[1], num_genes])
         ))
         lgeff = p.sample('lgeff', (
-            distr.Normal(
-                t.tensor(0., device=x['data'][0].device),
-                1.
-            )
-            .expand([effects.shape[1], len(self.genes)])
-            .to_event(2)
+            distr.Normal(t.tensor(0.).to(z), 1)
+            .expand([effects.shape[1], num_genes])
         ))
-
         rmg = (effects @ rgeff)[:, None] + rmg
         lg = effects @ lgeff + lg
 
-        for i, (type, data, label, scale_, rim_, rmg_, lg_) in enumerate(
-                zip(x['type'], x['data'], x['labels'], scale, rim, rmg, lg)):
-            type_model = p.module(
-                f'{type}_model',
-                _get_type(type).model(),
-                update_module_params=True,
-            ).train(self.training)
-            with data_plate, scope(prefix=f'sample{i}'):
-                type_model(data, label, scale_, rim_, rmg_, lg_)
+        with p.poutine.scale(scale=self.n/len(x)):
+            with scope(prefix=self.tag):
+                image = self._sample_image(x, decoded)
 
-        return rim, rmg, lg
+                def _compute_sample_params(label, rim, rmg, lg):
+                    rim = t.einsum(
+                        'yxi,myx->im',
+                        (
+                            t.eye(label.max() + 1, device=label.device)
+                            [label.flatten()]
+                            .reshape(*label.shape, -1)
+                        ),
+                        rim,
+                    )
+                    rgs = t.einsum('im,mg->ig', rim[1:], rmg.exp())
+                    return rgs, lg.expand(len(rgs), -1)
 
-    def _sample_globals(self, x):
-        device = x['data'][0].device
+                rgs, lg = zip(*it.starmap(
+                    _compute_sample_params,
+                    zip(x['label'], rim, rmg, lg),
+                ))
+                expression = p.sample(
+                    'xsg',
+                    distr.NegativeBinomial(
+                        total_count=t.cat(rgs),
+                        logits=t.cat(lg),
+                    ),
+                    obs=t.cat(x['data']),
+                )
 
-        globals_list = [
-            ('lg',  [len(self.genes)]),
-            ('rgeff', [1 + x['effects'].shape[1], len(self.genes)]),
-            ('lgeff', [1 + x['effects'].shape[1], len(self.genes)]),
-            # *[(f'factor{n}', [len(self.genes)]) for n in self.factors],
-        ]
+        return image, expression
 
-        # TODO: inject dependency
-        globals_sample = p.sample('globals', (
-            distr.Normal(
-                t.cat([
-                    p.param(f'{param}_mu', t.zeros(reduce(op.mul, dims)))
-                    .to(device)
-                    for param, dims in globals_list
-                ]),
-                t.cat([
+    def guide(self, x):
+        num_genes = x['data'][0].shape[1]
+        for name, dim in [
+            ('lg',  [num_genes]),
+            ('rgeff', [1 + x['effects'].shape[1], num_genes]),
+            ('lgeff', [1 + x['effects'].shape[1], num_genes]),
+            *[(f'factor{n}', [num_genes]) for n in self.factors],
+        ]:
+            p.sample(
+                name,
+                distr.Normal(
                     p.param(
-                        f'{param}_sd',
-                        t.ones(reduce(op.mul, dims)),
+                        f'{name}_mu',
+                        t.zeros(dim).to(_find_device(x)),
+                    ),
+                    p.param(
+                        f'{name}_sd',
+                        t.ones(dim).to(_find_device(x)),
                         constraint=t.distributions.constraints.positive,
-                    )
-                    .to(device)
-                    for param, dims in globals_list
-                ]),
+                    ),
+                ),
             )
-            .to_event(1)
-        ))
-
-        remaining = globals_sample.clone()
-
-        # distribute sampled variables to the sites used in the model
-        for name, dims in globals_list:
-            n = reduce(op.mul, dims)
-            p.sample(name, distr.Delta(remaining[:n].reshape(dims)))
-            remaining = remaining[n:]
-
-        assert len(remaining) == 0
-
-        return globals_sample
-
-    def _get_spatial_encoding(self, x):
-        encoded: List[t.Tensor] = []
-
-        for i, (type, data, label) in enumerate(
-                zip(x['type'], x['data'], x['labels'])):
-            type_guide = p.module(
-                f'{type}_guide',
-                _get_type(type).guide(data, label),
-                update_module_params=True,
-            ).train(self.training)
-            with scope(prefix=f'sample{i}'):
-                precoded = type_guide(data, label)
-            encode = p.module(
-                f'{type}_encode',
-                t.nn.Conv2d(precoded.shape[-1], 10, 1, bias=False),
-                update_module_params=True,
-            ).to(precoded)
-            encoded.append(encode(
-                precoded
-                .permute(2, 0, 1)
-                .unsqueeze(0)
-            ))
-
-        encoded = t.cat(encoded)
-
-        return encoded
-
-    def guide_pre(self, x, data_plate):
-        globals = self._sample_globals(x)
-        global_encoding = p.module(
-            'global_encoding',
-            t.nn.Sequential(
-                t.nn.Linear(len(globals), 3),
-            ),
-            update_module_params=True,
-        ).to(globals)(globals)
-        spatial_encoding = self._get_spatial_encoding(x)
-        return t.cat(
-            [
-                spatial_encoding,
-                (
-                    global_encoding
-                    .expand(
-                        spatial_encoding.shape[0],
-                        *spatial_encoding.shape[2:],
-                        -1,
-                    )
-                    .permute(0, 3, 1, 2)
-                ),
-                (
-                    x['effects']
-                    .expand(*spatial_encoding.shape[2:], -1, -1)
-                    .permute(2, 3, 0, 1)
-                    .float()
-                ),
-            ],
-            1,
-        )
-
-    def guide_post(self, x, pre, decoded, data_plate):
-        pass
-
-
-class Combined(Image, GeneExpression):
-    def __init__(self, *args, **kwargs):
-        Image.__init__(self)
-        GeneExpression.__init__(self, *args, **kwargs)
-
-    def model(self, x, decoded, data_plate):
-        return [
-            Image.model(self, x, decoded, data_plate),
-            GeneExpression.model(self, x, decoded, data_plate),
-        ]
-
-    def guide_pre(self, x, data_plate):
-        encoded_image = Image.guide_pre(self, x, data_plate)
-        encoded_xpr = GeneExpression.guide_pre(self, x, data_plate)
-        return t.cat([encoded_image, encoded_xpr], 1)
-
-    def guide_post(self, x, pre, decoded, data_plate):
-        Image.guide_post(self, x, pre, decoded, data_plate)
-        GeneExpression.guide_post(self, x, pre, decoded, data_plate)
+        return super().guide(x)
 
 
 class XFuse(t.nn.Module):
     def __init__(
             self,
-            representation,
+            experiments: List[ExperimentType],
             latent_size=192,
-            feature_size=32,
     ):
         super().__init__()
-
-        self.representation = representation
-        self.add_module('_representation', self.representation)
-
         self.latent_size = latent_size
 
-        self.feature_size = feature_size
+        self.__experiment_store = {}
+        for experiment in experiments:
+            self._register_experiment(experiment)
 
-        self._decoder = t.nn.Sequential(
-            t.nn.Conv2d(
-                self.latent_size, 16 * self.feature_size, 5, padding=5),
-            # x16
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(16 * self.feature_size),
-            Unpool(16 * self.feature_size, 8 * self.feature_size, 5),
-            # x8
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(8 * self.feature_size),
-            Unpool(8 * self.feature_size, 4 * self.feature_size, 5),
-            # x4
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(4 * self.feature_size),
-            Unpool(4 * self.feature_size, 2 * self.feature_size, 5),
-            # x2
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(2 * self.feature_size),
-            Unpool(2 * self.feature_size, self.feature_size, 5),
-            # x1
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(self.feature_size),
+    def _get_experiment(
+            self,
+            experiment_type: str,
+    ) -> ExperimentType:
+        try:
+            return self.__experiment_store[experiment_type]
+        except KeyError:
+            raise RuntimeError(f'unknown experiment type: {experiment_type}')
+
+    def _register_experiment(
+            self,
+            experiment: ExperimentType,
+    ) -> None:
+        if experiment.tag in self.__experiment_store:
+            raise RuntimeError(
+                f'model for data type "{experiment.tag}" already registered')
+        log(
+            INFO,
+            'registering experiment: %s (data type: "%s")',
+            type(experiment).__name__,
+            experiment.tag,
         )
+        self.__experiment_store[experiment.tag] = experiment
 
-        self._guide_decoder = deepcopy(self._decoder)
-
-        self.latent_loc = t.nn.Sequential(
-            t.nn.Conv2d(
-                16 * self.feature_size, 16 * self.feature_size, 3, 1, 1),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(16 * self.feature_size),
-            t.nn.Conv2d(16 * self.feature_size, latent_size, 3, 1, 1),
-        )
-        self.latent_scale = t.nn.Sequential(
-            t.nn.Conv2d(
-                16 * self.feature_size, 16 * self.feature_size, 3, 1, 1),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(16 * self.feature_size),
-            t.nn.Conv2d(16 * self.feature_size, latent_size, 3, 1, 1),
-            t.nn.Softplus(),
-        )
-
-    def _get_decoder(self, x):
-        return p.module('decoder', self._decoder)
-
-    def _get_guide_decoder(self, x):
-        return p.module('guide_decoder', self._guide_decoder)
-
-    def _get_encoder(self, x):
-        return p.module(
-            'encoder',
-            t.nn.Sequential(
-                # x1
-                t.nn.Conv2d(x.shape[1], 2 * self.feature_size, 4, 2, 1),
-                t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm2d(2 * self.feature_size),
-                # x2
-                t.nn.Conv2d(
-                    2 * self.feature_size, 4 * self.feature_size, 4, 2, 1),
-                t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm2d(4 * self.feature_size),
-                # x4
-                t.nn.Conv2d(
-                    4 * self.feature_size, 8 * self.feature_size, 4, 2, 1),
-                t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm2d(8 * self.feature_size),
-                # x8
-                t.nn.Conv2d(
-                    8 * self.feature_size, 16 * self.feature_size, 4, 2, 1),
-                t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm2d(16 * self.feature_size),
-                # x16
-            ),
-            update_module_params=True,
-        ).to(x)
-
-    def model(self, x):
-        data_plate = p.plate(
-            'data',
-            size=x['dataset_size'],
-            subsample_size=x['batch_size'],
-        )
-        with data_plate:
-            z = p.sample(
-                'z',
-                (
+    def model(self, xs):
+        def _go(e, x):
+            with p.poutine.scale(scale=e.n/len(x)):
+                z = p.sample(f'z-{e.tag}', (
                     distr.Normal(
-                        t.tensor(0., device=next(self.parameters()).device),
+                        t.tensor(0., device=_find_device(x)),
                         1.,
                     )
                     .expand([1, 1, 1, 1])
                     .to_event(3)
-                ),
-            )
-        decoded = self._get_decoder(z)(z)
-        return self.representation.model(x, decoded, data_plate)
+                ))
+            e.model(x, z)
+            return z
+        p.sample('z', distr.Delta(
+            t.cat([_go(self._get_experiment(e), x) for e, x in xs.items()], 0),
+        ))
 
-    def guide(self, x):
-        data_plate = p.plate(
-            'data',
-            size=x['dataset_size'],
-            subsample_size=x['batch_size'],
-        )
-        pre = self.representation.guide_pre(x, data_plate)
-        encoded = self._get_encoder(pre)(pre)
-        loc = p.module('latent_loc', self.latent_loc)(encoded)
-        scale = p.module('latent_scale', self.latent_scale)(encoded)
-        with data_plate:
-            z = p.sample('z', distr.Normal(loc, scale).to_event(3))
-        decoded = self._get_guide_decoder(z)(z)
-        self.representation.guide_post(x, pre, decoded, data_plate)
+    def guide(self, xs):
+        def _go(e, x):
+            preencoded = e.guide(x)
+            z_mu = p.module(
+                'z_mu',
+                t.nn.Sequential(
+                    t.nn.Conv2d(preencoded.shape[1], 256, 3, 1, 1),
+                    t.nn.LeakyReLU(0.2, inplace=True),
+                    t.nn.BatchNorm2d(256),
+                    t.nn.Conv2d(256, self.latent_size, 3, 1, 1),
+                ),
+                update_module_params=True,
+            ).to(preencoded)
+            z_sd = p.module(
+                'z_sd',
+                t.nn.Sequential(
+                    t.nn.Conv2d(preencoded.shape[1], 256, 3, 1, 1),
+                    t.nn.LeakyReLU(0.2, inplace=True),
+                    t.nn.BatchNorm2d(256),
+                    t.nn.Conv2d(256, self.latent_size, 3, 1, 1),
+                    t.nn.Softplus(),
+                ),
+                update_module_params=True,
+            ).to(preencoded)
+            with p.poutine.scale(scale=e.n/len(x)):
+                return p.sample(f'z-{e.tag}', (
+                    distr.Normal(
+                        z_mu(preencoded),
+                        z_sd(preencoded),
+                    )
+                    .to_event(3)
+                ))
+        p.sample('z', distr.Delta(
+            t.cat([_go(self._get_experiment(e), x) for e, x in xs.items()], 0),
+        ))
 
 
 class Unpool(t.nn.Module):
@@ -593,34 +462,7 @@ class Unpool(t.nn.Module):
         return x
 
 
-class STModel(ExperimentModel):
-    def forward(self, data, label, scale, rim, rmg, lg):
-        rim = t.einsum(
-            'yxi,yxf,yx->if',
-            (
-                t.eye(label.max() + 1, device=label.device)
-                [label.flatten()]
-                .reshape(*label.shape, -1)
-            ),
-            t.nn.functional.softplus(rim),
-            scale,
-        )
-        rgs = t.einsum('im,mg->ig', rim[1:], rmg.exp())
-        xgs = p.sample(
-            'xgs',
-            (
-                distr.NegativeBinomial(
-                    total_count=rgs,
-                    logits=lg,
-                )
-                .to_event(2)
-            ),
-            obs=data,
-        )
-        return xgs
-
-
-class STGuide(ExperimentGuide):
+class STGuide:
     def __init__(self, data, label):
         super().__init__(data, label)
         self.xpr_encoder1 = t.nn.Linear(1 + data.shape[1], 10).to(data)
@@ -668,9 +510,6 @@ class STGuide(ExperimentGuide):
             .squeeze(0)
             .permute(1, 2, 0)
         )
-
-
-_register_type('ST', STModel, STGuide)
 
 
 
@@ -777,12 +616,12 @@ def dim_red(x, mask=None, method='pca', n_components=3, **kwargs):
 
 
 def prep(x):
-    x = {
-        k: v.to(t.device('cuda')) if isinstance(v, t.Tensor) else v
-        for k, v in x.items()
-    }
-    x['data'] = [v.to(t.device('cuda')) for v in x['data']]
-    return x
+    if isinstance(x, t.Tensor):
+        return x.to(t.device('cuda'))
+    if isinstance(x, list):
+        return [prep(y) for y in x]
+    if isinstance(x, dict):
+        return {k: prep(v) for k, v in x.items()}
 
 
 from datetime import datetime
@@ -795,7 +634,9 @@ set_level(DEBUG)
 
 from .dataset import spot_size
 data, loader, genes, scale = __remove_this()
-xfuse = XFuse(Combined(genes, default_scale=scale, factors=20)).to(t.device('cuda'))
+xfuse = XFuse([
+    STExperiment(n=len(data), num_factors=10)
+]).to(t.device('cuda'))
 import pyro.optim
 svi = p.infer.SVI(
     xfuse.model,
@@ -823,8 +664,8 @@ def do(i):
         writer.add_scalar(
             'accuracy/rmse',
             (
-                ((res.nodes['sample0/xgs']['fn'].mean
-                  - res.nodes['sample0/xgs']['value'])
+                ((res.nodes['ST/xsg']['fn'].mean
+                  - res.nodes['ST/xsg']['value'])
                  ** 2)
                 .mean(1)
                 .sqrt()
@@ -833,25 +674,25 @@ def do(i):
             i,
         )
         for n, factor in enumerate(
-                res.nodes['rim']['value'].permute(3, 0, 1, 2), 1):
+                res.nodes['rim']['value'].permute(1, 0, 2, 3), 1):
             writer.add_scalar(f'activation/factor{n}', factor.mean(), i)
         writer.add_scalar(
             'loss/image',
-            -res.nodes['image']['fn']
-            .log_prob(res.nodes['image']['value']).sum(),
+            -res.nodes['ST/image']['fn']
+            .log_prob(res.nodes['ST/image']['value']).sum(),
             i,
         )
         writer.add_scalar(
             'loss/xpr',
-            -res.nodes['sample0/xgs']['fn']
-            .log_prob(res.nodes['sample0/xgs']['value']).sum(),
+            -res.nodes['ST/xsg']['fn']
+            .log_prob(res.nodes['ST/xsg']['value']).sum(),
             i,
         )
-        writer.add_images('he', (1 + res.nodes['image']['value']) / 2, i)
+        writer.add_images('he', (1 + res.nodes['ST/image']['value']) / 2, i)
         writer.add_images(
-            'he/mean', (1 + res.nodes['image']['fn'].mean) / 2, i)
+            'he/mean', (1 + res.nodes['ST/image']['fn'].mean) / 2, i)
         writer.add_images(
-            'he/sample', (1 + res.nodes['image']['fn'].sample()) / 2, i)
+            'he/sample', (1 + res.nodes['ST/image']['fn'].sample()) / 2, i)
         writer.add_images(
             'z',
             dim_red(res.nodes['z']['value'].permute(0, 2, 3, 1)),
@@ -860,7 +701,7 @@ def do(i):
         )
         writer.add_images(
             'activation',
-            dim_red(res.nodes['rim']['value']),
+            dim_red(res.nodes['rim']['value'].permute(0, 2, 3, 1)),
             i,
             dataformats='NHWC',
         )

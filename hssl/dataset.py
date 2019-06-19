@@ -2,6 +2,8 @@ from abc import abstractmethod
 
 from functools import reduce
 
+import itertools as it
+
 from typing import List
 
 import numpy as np
@@ -14,6 +16,7 @@ from scipy.ndimage.morphology import binary_fill_holes
 
 import torch as t
 import torch.utils.data
+from torch.utils.data.dataloader import default_collate
 
 from torchvision import transforms
 from torchvision.transforms.functional import affine, to_pil_image
@@ -149,25 +152,30 @@ class Dataset(t.utils.data.Dataset):
             **self.slides[slide].__getitem__(
                 self.observations['idx'].iloc[idx]),
             effects=t.tensor(self.design[slide].values),
-            dataset_size=len(self),
         )
 
 
 def collate(xs):
-    data         = [x.pop('data')         for x in xs]
-    effects      = [x.pop('effects')      for x in xs]
-    labels       = [x.pop('label')        for x in xs]
-    types        = [x.pop('type')         for x in xs]
-    dataset_size = [x.pop('dataset_size') for x in xs]
-    return dict(
-        dataset_size=dataset_size[0],
-        batch_size=len(xs),
-        type=types,
-        data=data,
-        effects=t.stack(effects),
-        labels=t.stack(labels),
-        **{k: t.stack([x[k] for x in xs]) for k in xs[0].keys()},
-    )
+    def _remove_key(v):
+        v.pop('type')
+        return v
+
+    def _sort_key(x):
+        return x['type']
+
+    def _collate(ys):
+        # we can't collate the count data as a tensor since its dimension will
+        # differ between samples. therefore, we return it as a list instead.
+        data = [y.pop('data') for y in ys]
+        return {
+            'data': data,
+            **default_collate(ys),
+        }
+
+    return {
+        k: _collate([_remove_key(v) for v in vs])
+        for k, vs in it.groupby(sorted(xs, key=_sort_key), key=_sort_key)
+    }
 
 
 def spot_size(dataset: Dataset):
