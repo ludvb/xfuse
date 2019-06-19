@@ -178,6 +178,7 @@ class STExperiment(ImagingExperiment):
             *args,
             num_factors: int = 1,
             default_scale: float = 1.,
+            gene_baseline: Optional[t.Tensor] = None,
             **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -188,6 +189,11 @@ class STExperiment(ImagingExperiment):
             self.add_factor()
 
         self.__default_scale = default_scale
+
+        if gene_baseline is not None:
+            p.get_param_store().setdefault(
+                'rg',
+                gene_baseline.clone().detach())
 
     @property
     def factors(self):
@@ -245,20 +251,18 @@ class STExperiment(ImagingExperiment):
                 [None, None, *x['label'].shape[-2:]],
             )
         ))
-        rim = p.sample('rim', distr.Delta(
-            center_crop(
-                t.cat(
-                    [
-                        self._get_factor_decoder(decoded.shape[1], n)
-                        .to(decoded)(decoded)
-                        for n in self.factors
-                    ],
-                    dim=1,
-                ),
-                [None, None, *x['label'].shape[-2:]],
-            )
-        ))
-        rim = scale * t.nn.functional.softmax(rim, dim=1)
+        rim = t.cat(
+            [
+                self._get_factor_decoder(decoded.shape[1], n)
+                .to(decoded)(decoded)
+                for n in self.factors
+            ],
+            dim=1,
+        )
+        rim = center_crop(rim, [None, None, *x['label'].shape[-2:]])
+        rim = t.nn.functional.softmax(rim, dim=1)
+        rim = p.sample('rim', distr.Delta(rim))
+        rim = scale * rim
 
         rmg = p.sample('rmg', distr.Delta(t.stack([
             p.sample(f'factor{n}', (
@@ -270,11 +274,10 @@ class STExperiment(ImagingExperiment):
         lg = p.sample('lg', (
             distr.Normal(t.tensor(0.).to(z), 1.).expand([num_genes])
         ))
+        rg = p.sample('rg', (
+            distr.Normal(t.tensor(0.).to(z), 1).expand([num_genes])))
 
-        effects = t.cat([
-            t.ones(x['effects'].shape[0], 1).float().to(z),
-            x['effects'].float(),
-        ], dim=1)
+        effects = x['effects'].float()
         rgeff = p.sample('rgeff', (
             distr.Normal(t.tensor(0.).to(z), 1)
             .expand([effects.shape[1], num_genes])
@@ -283,8 +286,10 @@ class STExperiment(ImagingExperiment):
             distr.Normal(t.tensor(0.).to(z), 1)
             .expand([effects.shape[1], num_genes])
         ))
-        rmg = (effects @ rgeff)[:, None] + rmg
+
         lg = effects @ lgeff + lg
+        rg = effects @ rgeff + rg
+        rmg = rg[:, None] + rmg
 
         with p.poutine.scale(scale=self.n/len(x)):
             with scope(prefix=self.tag):
@@ -304,9 +309,7 @@ class STExperiment(ImagingExperiment):
                     return rgs, lg.expand(len(rgs), -1)
 
                 rgs, lg = zip(*it.starmap(
-                    _compute_sample_params,
-                    zip(x['label'], rim, rmg, lg),
-                ))
+                    _compute_sample_params, zip(x['label'], rim, rmg, lg)))
                 expression = p.sample(
                     'xsg',
                     distr.NegativeBinomial(
@@ -320,10 +323,12 @@ class STExperiment(ImagingExperiment):
 
     def guide(self, x):
         num_genes = x['data'][0].shape[1]
+
         for name, dim in [
             ('lg',  [num_genes]),
-            ('rgeff', [1 + x['effects'].shape[1], num_genes]),
-            ('lgeff', [1 + x['effects'].shape[1], num_genes]),
+            ('rg',  [num_genes]),
+            ('rgeff', [x['effects'].shape[1], num_genes]),
+            ('lgeff', [x['effects'].shape[1], num_genes]),
             *[(f'factor{n}', [num_genes]) for n in self.factors],
         ]:
             p.sample(
@@ -335,12 +340,54 @@ class STExperiment(ImagingExperiment):
                     ),
                     p.param(
                         f'{name}_sd',
-                        t.ones(dim).to(_find_device(x)),
+                        1e-2 * t.ones(dim).to(_find_device(x)),
                         constraint=t.distributions.constraints.positive,
                     ),
                 ),
             )
-        return super().guide(x)
+
+        image = super().guide(x)
+
+        expression_encoder = p.module(
+            'expression_encoder',
+            t.nn.Sequential(
+                t.nn.Linear(1 + num_genes, 100),
+                t.nn.LeakyReLU(0.2, inplace=True),
+                t.nn.BatchNorm1d(100),
+                t.nn.Linear(100, 100),
+            ),
+            update_module_params=True,
+        ).to(image)
+
+        def encode(data, label):
+            missing = t.tensor([1., *[0.] * data.shape[1]]).to(data)
+            data_with_missing = t.nn.functional.pad(data, (1, 0, 1, 0))
+            data_with_missing[0] = missing
+            encoded_data = expression_encoder(data_with_missing)
+            return t.einsum(
+                'yxi,ic->cyx',
+                (
+                    t.eye(len(encoded_data)).to(label)
+                    [label.flatten()]
+                    .reshape(*label.shape, -1)
+                    .float()
+                ),
+                encoded_data,
+            )
+
+        label = (
+            t.nn.functional.interpolate(
+                x['label'].float().unsqueeze(1),
+                image.shape[-2:],
+            )
+            .squeeze(1)
+            .long()
+        )
+        expression = t.stack([
+            encode(data, label) for data, label in zip(x['data'], label)
+        ])
+
+        return t.cat([image, expression], dim=1)
 
 
 class XFuse(t.nn.Module):
@@ -462,56 +509,6 @@ class Unpool(t.nn.Module):
         return x
 
 
-class STGuide:
-    def __init__(self, data, label):
-        super().__init__(data, label)
-        self.xpr_encoder1 = t.nn.Linear(1 + data.shape[1], 10).to(data)
-        self.xpr_encoder2 = t.nn.Sequential(
-            t.nn.Conv2d(10, 10, 3, 1, 1, bias=True),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(10),
-            t.nn.Conv2d(10, 10, 3, 1, 1, bias=True),
-            t.nn.LeakyReLU(0.2, inplace=True),
-            t.nn.BatchNorm2d(10),
-        ).to(data)
-
-    def forward(self, data, label):
-        data_with_missing = t.nn.functional.pad(data, (1, 0, 1, 0))
-        data_with_missing[0, 0] = 1.
-
-        if self.training:
-            data_with_missing[
-                t.distributions.Bernoulli(0.5)
-                .sample((len(data_with_missing), ))
-                .byte()
-            ] = t.tensor([1., *[0.] * data.shape[1]], device=data.device)
-
-        convolved_data = (
-            p.module('xpr_encoder1', self.xpr_encoder1)
-            (data_with_missing)
-        )
-
-        return (
-            p.module('xpr_encoder2', self.xpr_encoder2)
-            (
-                t.einsum(
-                    'yxi,ic->cyx',
-                    (
-                        t.eye(len(convolved_data))
-                        .to(label)
-                        [label.flatten()]
-                        .reshape(*label.shape, -1)
-                        .float()
-                    ),
-                    convolved_data,
-                )
-                .unsqueeze(0)
-            )
-            .squeeze(0)
-            .permute(1, 2, 0)
-        )
-
-
 
 
 
@@ -528,7 +525,7 @@ def __remove_this():
     import pandas as pd
     import pyvips
     from .utility import design_matrix_from, read_data
-    from .dataset import Dataset, RandomSlide, collate
+    from .dataset import Dataset, RandomSlide, collate, spot_size
 
     design_file = os.path.expanduser(
         '~/histonet-test-data/mob-0.1-validation/design.small.csv')
@@ -582,11 +579,10 @@ def __remove_this():
 
     genes = list(count_data.columns)
 
-    from .dataset import spot_size
-
     return (
         dataset, loader, genes,
         count_data.mean().mean() / spot_size(dataset),
+        t.as_tensor(count_data.mean(0).values).log(),
     )
 
 
@@ -633,9 +629,14 @@ from .logging import set_level, DEBUG
 set_level(DEBUG)
 
 from .dataset import spot_size
-data, loader, genes, scale = __remove_this()
+data, loader, genes, scale, baseline = __remove_this()
 xfuse = XFuse([
-    STExperiment(n=len(data), num_factors=10)
+    STExperiment(
+        n=len(data),
+        num_factors=10,
+        default_scale=scale,
+        gene_baseline=baseline,
+    )
 ]).to(t.device('cuda'))
 import pyro.optim
 svi = p.infer.SVI(
@@ -661,21 +662,25 @@ def do(i):
                 p.poutine.trace(xfuse.guide).get_trace(fixed_x)
             )
         ).get_trace(fixed_x)
-        writer.add_scalar(
-            'accuracy/rmse',
-            (
-                ((res.nodes['ST/xsg']['fn'].mean
-                  - res.nodes['ST/xsg']['value'])
-                 ** 2)
-                .mean(1)
-                .sqrt()
-                .mean()
-            ),
-            i,
+        rmse = (
+            ((res.nodes['ST/xsg']['fn'].mean
+              - res.nodes['ST/xsg']['value'])
+             ** 2)
+            .mean(1)
+            .sqrt()
+            .mean()
         )
+        print(f'rmse={rmse:.2f}')
+        writer.add_scalar('accuracy/rmse', rmse, i)
         for n, factor in enumerate(
                 res.nodes['rim']['value'].permute(1, 0, 2, 3), 1):
             writer.add_scalar(f'activation/factor{n}', factor.mean(), i)
+            writer.add_images(
+                f'factors/factor{n}',
+                factor.unsqueeze(1),
+                i,
+                dataformats='NCHW',
+            )
         writer.add_scalar(
             'loss/image',
             -res.nodes['ST/image']['fn']
@@ -700,10 +705,16 @@ def do(i):
             dataformats='NHWC',
         )
         writer.add_images(
-            'activation',
+            'expression/activation',
             dim_red(res.nodes['rim']['value'].permute(0, 2, 3, 1)),
             i,
             dataformats='NHWC',
+        )
+        writer.add_images(
+            'expression/scale',
+            res.nodes['scale']['value'],
+            i,
+            dataformats='NCHW',
         )
     return results
 
