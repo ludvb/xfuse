@@ -192,8 +192,9 @@ class STExperiment(ImagingExperiment):
 
         if gene_baseline is not None:
             p.get_param_store().setdefault(
-                'rg',
-                gene_baseline.clone().detach())
+                'rg_mu',
+                gene_baseline.clone().detach().float(),
+            )
 
     @property
     def factors(self):
@@ -336,13 +337,13 @@ class STExperiment(ImagingExperiment):
                 distr.Normal(
                     p.param(
                         f'{name}_mu',
-                        t.zeros(dim).to(_find_device(x)),
-                    ),
+                        t.zeros(dim),
+                    ).to(_find_device(x)),
                     p.param(
                         f'{name}_sd',
-                        1e-2 * t.ones(dim).to(_find_device(x)),
+                        1e-2 * t.ones(dim),
                         constraint=t.distributions.constraints.positive,
-                    ),
+                    ).to(_find_device(x)),
                 ),
             )
 
