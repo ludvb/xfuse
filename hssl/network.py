@@ -176,40 +176,36 @@ class STExperiment(ImagingExperiment):
     def __init__(
             self,
             *args,
-            num_factors: int = 1,
+            factors: List[Tuple[float, t.Tensor]] = [],
             default_scale: float = 1.,
-            gene_baseline: Optional[t.Tensor] = None,
             **kwargs,
     ):
         super().__init__(*args, **kwargs)
 
-        self.__factors = set()
+        self.__factors: Dict[str, Tuple(float, t.Tensor)] = {}
         self.__factors_counter = it.count()
-        for _ in range(num_factors):
-            self.add_factor()
+        for factor in factors:
+            self.add_factor(factor)
 
         self.__default_scale = default_scale
-
-        if gene_baseline is not None:
-            p.get_param_store().setdefault(
-                'rg_mu',
-                gene_baseline.clone().detach().float(),
-            )
 
     @property
     def factors(self):
         return deepcopy(self.__factors)
 
-    def add_factor(self):
+    def add_factor(self, factor=None):
+        if factor is None:
+            factor = (0., None)
         n = next(self.__factors_counter)
+        assert n not in self.__factors
         log(DEBUG, 'adding new factor: %d', n)
-        self.__factors.add(n)
+        self.__factors.setdefault(n, factor)
         return self
 
-    def remove_facor(self, n):
+    def remove_factor(self, n):
         log(DEBUG, 'removing factor: %d', n)
         try:
-            self.__factors.remove(n)
+            self.__factors.pop(n)
         except KeyError:
             raise ValueError(
                 f'attempted to remove factor {n}, which doesn\'t exist!')
@@ -238,7 +234,7 @@ class STExperiment(ImagingExperiment):
             t.nn.Conv2d(in_channels, 1, 1, 1, 1),
         )
         t.nn.init.constant_(decoder[-1].weight, 0.)
-        t.nn.init.constant_(decoder[-1].bias, 0.)
+        t.nn.init.constant_(decoder[-1].bias, self.__factors[n][0])
         return p.module(f'factor{n}', decoder, update_module_params=True)
 
     def model(self, x, z):
@@ -272,12 +268,6 @@ class STExperiment(ImagingExperiment):
             for n in self.factors
         ])))
 
-        lg = p.sample('lg', (
-            distr.Normal(t.tensor(0.).to(z), 1.).expand([num_genes])
-        ))
-        rg = p.sample('rg', (
-            distr.Normal(t.tensor(0.).to(z), 1).expand([num_genes])))
-
         effects = x['effects'].float()
         rgeff = p.sample('rgeff', (
             distr.Normal(t.tensor(0.).to(z), 1)
@@ -288,8 +278,8 @@ class STExperiment(ImagingExperiment):
             .expand([effects.shape[1], num_genes])
         ))
 
-        lg = effects @ lgeff + lg
-        rg = effects @ rgeff + rg
+        lg = effects @ lgeff
+        rg = effects @ rgeff
         rmg = rg[:, None] + rmg
 
         with p.poutine.scale(scale=self.n/len(x)):
@@ -326,11 +316,8 @@ class STExperiment(ImagingExperiment):
         num_genes = x['data'][0].shape[1]
 
         for name, dim in [
-            ('lg',  [num_genes]),
-            ('rg',  [num_genes]),
             ('rgeff', [x['effects'].shape[1], num_genes]),
             ('lgeff', [x['effects'].shape[1], num_genes]),
-            *[(f'factor{n}', [num_genes]) for n in self.factors],
         ]:
             p.sample(
                 name,
@@ -342,6 +329,24 @@ class STExperiment(ImagingExperiment):
                     p.param(
                         f'{name}_sd',
                         1e-2 * t.ones(dim),
+                        constraint=t.distributions.constraints.positive,
+                    ).to(_find_device(x)),
+                ),
+            )
+
+        for n, (_, factor_default) in self.factors.items():
+            if factor_default is None:
+                factor_default = t.zeros(num_genes)
+            p.sample(
+                f'factor{n}',
+                distr.Normal(
+                    p.param(
+                        f'factor{n}_mu',
+                        factor_default.float(),
+                    ).to(_find_device(x)),
+                    p.param(
+                        f'factor{n}_sd',
+                        1e-2 * t.ones_like(factor_default).float(),
                         constraint=t.distributions.constraints.positive,
                     ).to(_find_device(x)),
                 ),
@@ -584,6 +589,7 @@ def __remove_this():
         dataset, loader, genes,
         count_data.mean().mean() / spot_size(dataset),
         t.as_tensor(count_data.mean(0).values).log(),
+        count_data,
     )
 
 
@@ -630,23 +636,31 @@ from .logging import set_level, DEBUG
 set_level(DEBUG)
 
 from .dataset import spot_size
-data, loader, genes, scale, baseline = __remove_this()
+data, loader, genes, scale, baseline, counts = __remove_this()
 xfuse = XFuse([
     STExperiment(
         n=len(data),
-        num_factors=10,
         default_scale=scale,
-        gene_baseline=baseline,
+        factors=[
+            (0., baseline),
+            (-10, None),
+        ],
     )
 ]).to(t.device('cuda'))
 import pyro.optim
 svi = p.infer.SVI(
     xfuse.model,
     xfuse.guide,
-    p.optim.Adam({'lr': 1e-5}),
+    p.optim.Adam({'lr': 1e-3}),
     p.infer.Trace_ELBO(),
 )
 fixed_x = prep(next(iter(loader)))
+
+
+def normalize(img):
+    mins = img.permute(0, 2, 3, 1).reshape(-1, img.shape[1]).min(0).values[None, :, None, None]
+    maxs = img.permute(0, 2, 3, 1).reshape(-1, img.shape[1]).max(0).values[None, :, None, None]
+    return (img - mins) / (maxs - mins)
 
 
 def do(i):
@@ -656,6 +670,51 @@ def do(i):
         writer.add_scalar('loss', loss, i)
         results.append(loss)
     print(f'{i}: {loss}')
+    if i % 100 == 0:
+        print('starting factor purge')
+        with t.no_grad():
+            def _model_without(n):
+                reduced_model = deepcopy(xfuse)
+                reduced_model._XFuse__experiment_store['ST'].remove_factor(n)
+                return reduced_model
+
+            reduced_models, ns = zip(*[
+                (_model_without(n), n)
+                for n in xfuse._get_experiment('ST').factors
+            ])
+
+            def _compare_once():
+                guide = p.poutine.trace(xfuse.guide).get_trace(fixed_x)
+
+                def _evaluate(model):
+                    return (
+                        p.poutine.trace(p.poutine.replay(model, guide))
+                        .get_trace(fixed_x)
+                        .log_prob_sum()
+                        .item()
+                    )
+
+                full = _evaluate(xfuse.model)
+                deltas = [
+                    _evaluate(xfuse.model) - full for xfuse in reduced_models]
+                return deltas
+
+            res = [_compare_once() for _ in range(10)]
+            res = np.array(res).mean(0)
+            dubious = [
+                n for n, res in sorted(zip(ns, res))
+                if res >= 0
+            ]
+            if dubious == []:
+                print('no factors are dubious')
+                xfuse._get_experiment('ST').add_factor((-10., None))
+            else:
+                print(
+                    'the following factors are dubious: '
+                    + ', '.join(map(str, dubious))
+                )
+                for n in dubious[:-1][:len(res) - 2]:
+                    xfuse._get_experiment('ST').remove_factor(n)
     if i % 50 == 0:
         res = p.poutine.trace(
             p.poutine.replay(
@@ -705,29 +764,17 @@ def do(i):
             i,
             dataformats='NHWC',
         )
-        writer.add_images(
-            'expression/activation',
-            dim_red(res.nodes['rim']['value'].permute(0, 2, 3, 1)),
-            i,
-            dataformats='NHWC',
-        )
+        if res.nodes['rim']['value'].shape[1] >= 3:
+            writer.add_images(
+                'expression/activation',
+                dim_red(res.nodes['rim']['value'].permute(0, 2, 3, 1)),
+                i,
+                dataformats='NHWC',
+            )
         writer.add_images(
             'expression/scale',
-            res.nodes['scale']['value'],
+            normalize(res.nodes['scale']['value']),
             i,
             dataformats='NCHW',
         )
     return results
-
-
-def compare_elbo():
-    guide = p.poutine.trace(xfuse.guide).get_trace(fixed_x)
-    full_model = p.poutine.trace(
-        p.poutine.replay(xfuse.model, guide)
-    ).get_trace(fixed_x)
-    reduced_model = p.poutine.trace(
-        p.poutine.replay(
-            p.poutine.block(lambda x: x['name'] and x['name'][:7] == 'factor0'),
-            guide,
-        ),
-    ).get_trace(fixed_x)
