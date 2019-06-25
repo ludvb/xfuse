@@ -702,7 +702,7 @@ def do(i):
             res = [_compare_once() for _ in range(10)]
             res = np.array(res).mean(0)
             dubious = [
-                n for n, res in sorted(zip(ns, res))
+                n for res, n in reversed(sorted(zip(res, ns)))
                 if res >= 0
             ]
             if dubious == []:
