@@ -733,7 +733,7 @@ def do(i):
         print(f'rmse={rmse:.2f}')
         writer.add_scalar('accuracy/rmse', rmse, i)
         for n, factor in enumerate(
-                res.nodes['rim']['value'].permute(1, 0, 2, 3), 1):
+                res.nodes['rim']['value'].permute(1, 0, 2, 3)):
             writer.add_scalar(f'activation/factor{n}', factor.mean(), i)
             writer.add_images(
                 f'factors/factor{n}',
