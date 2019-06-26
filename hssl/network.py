@@ -2,19 +2,12 @@ from abc import abstractmethod
 
 from copy import deepcopy
 
-from functools import reduce
-
 import itertools as it
-
-import operator as op
 
 from typing import (
     Dict,
     List,
-    NamedTuple,
-    Optional,
     Tuple,
-    Type,
 )
 
 import numpy as np
@@ -26,24 +19,11 @@ import pyro.distributions as distr
 import torch as t
 
 from .logging import DEBUG, INFO, log
-from .utility import center_crop
-
-
-def _find_device(x):
-    # TODO: move elsewhere
-    if isinstance(x, t.Tensor):
-        return x.device
-    if isinstance(x, list):
-        for y in x:
-            device = _find_device(y)
-            if device is not None:
-                return device
-    if isinstance(x, dict):
-        for y in x.values():
-            device = _find_device(y)
-            if device is not None:
-                return device
-    return None
+from .utility import (
+    Unpool,
+    center_crop,
+    find_device,
+)
 
 
 class ExperimentType(t.nn.Module):
@@ -325,12 +305,12 @@ class STExperiment(ImagingExperiment):
                     p.param(
                         f'{name}_mu',
                         t.zeros(dim),
-                    ).to(_find_device(x)),
+                    ).to(find_device(x)),
                     p.param(
                         f'{name}_sd',
                         1e-2 * t.ones(dim),
                         constraint=t.distributions.constraints.positive,
-                    ).to(_find_device(x)),
+                    ).to(find_device(x)),
                 ),
             )
 
@@ -343,12 +323,12 @@ class STExperiment(ImagingExperiment):
                     p.param(
                         f'factor{n}_mu',
                         factor_default.float(),
-                    ).to(_find_device(x)),
+                    ).to(find_device(x)),
                     p.param(
                         f'factor{n}_sd',
                         1e-2 * t.ones_like(factor_default).float(),
                         constraint=t.distributions.constraints.positive,
-                    ).to(_find_device(x)),
+                    ).to(find_device(x)),
                 ),
             )
 
@@ -438,7 +418,7 @@ class XFuse(t.nn.Module):
             with p.poutine.scale(scale=e.n/len(x)):
                 z = p.sample(f'z-{e.tag}', (
                     distr.Normal(
-                        t.tensor(0., device=_find_device(x)),
+                        t.tensor(0., device=find_device(x)),
                         1.,
                     )
                     .expand([1, 1, 1, 1])
@@ -486,33 +466,6 @@ class XFuse(t.nn.Module):
             t.cat([_go(self._get_experiment(e), x) for e, x in xs.items()], 0),
         ))
 
-
-class Unpool(t.nn.Module):
-    # TODO: move elsewhere
-    def __init__(
-            self,
-            in_channels,
-            out_channels=None,
-            kernel_size=3,
-            stride=2,
-            padding=None,
-    ):
-        super().__init__()
-
-        if out_channels is None:
-            out_channels = in_channels
-
-        if padding is None:
-            padding = kernel_size // 2
-
-        self.conv = t.nn.Conv2d(
-            in_channels, out_channels, kernel_size, padding=padding)
-        self.scale_factor = stride
-
-    def forward(self, x):
-        x = t.nn.functional.interpolate(x, scale_factor=self.scale_factor)
-        x = self.conv(x)
-        return x
 
 
 

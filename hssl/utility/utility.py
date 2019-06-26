@@ -15,21 +15,20 @@ import torch as t
 from ..logging import INFO, log
 
 
-def set_rng_seed(seed: int):
-    import random
-    i32max = np.iinfo(np.int32).max
-    random.seed(seed)
-    n_seed = random.choice(range(i32max + 1))
-    t_seed = random.choice(range(i32max + 1))
-    np.random.seed(n_seed)
-    t.manual_seed(t_seed)
-    t.backends.cudnn.deterministic = True
-    t.backends.cudnn.benchmark = False
-    log(INFO, ' / '.join([
-        'random rng seeded with %d',
-        'numpy rng seeded with %d',
-        'torch rng seeded with %d',
-    ]), seed, n_seed, t_seed)
+__all__ = [
+    'compose',
+    'zip_dicts',
+    'set_rng_seed',
+    'collect_items',
+    'center_crop',
+    'read_data',
+    'design_matrix_from',
+    'argmax',
+    'integrate_loadings',
+    'with_interrupt_handler',
+    'chunks_of',
+    'find_device',
+]
 
 
 def compose(f, *gs):
@@ -50,6 +49,23 @@ def zip_dicts(ds):
             except AttributeError:
                 raise ValueError('dict keys are inconsistent')
     return d
+
+
+def set_rng_seed(seed: int):
+    import random
+    i32max = np.iinfo(np.int32).max
+    random.seed(seed)
+    n_seed = random.choice(range(i32max + 1))
+    t_seed = random.choice(range(i32max + 1))
+    np.random.seed(n_seed)
+    t.manual_seed(t_seed)
+    t.backends.cudnn.deterministic = True
+    t.backends.cudnn.benchmark = False
+    log(INFO, ' / '.join([
+        'random rng seeded with %d',
+        'numpy rng seeded with %d',
+        'torch rng seeded with %d',
+    ]), seed, n_seed, t_seed)
 
 
 def collect_items(d):
@@ -216,3 +232,19 @@ def chunks_of(n, xs):
         lambda xs: [*filter(lambda x: x is not FillMarker, xs)],
         it.zip_longest(*[iter(xs)]*n, fillvalue=FillMarker),
     )
+
+
+def find_device(x):
+    if isinstance(x, t.Tensor):
+        return x.device
+    if isinstance(x, list):
+        for y in x:
+            device = find_device(y)
+            if device is not None:
+                return device
+    if isinstance(x, dict):
+        for y in x.values():
+            device = find_device(y)
+            if device is not None:
+                return device
+    return None
