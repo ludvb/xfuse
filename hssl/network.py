@@ -23,6 +23,7 @@ from .utility import (
     Unpool,
     center_crop,
     find_device,
+    sparseonehot,
 )
 
 
@@ -267,14 +268,10 @@ class STExperiment(ImagingExperiment):
                 image = self._sample_image(x, decoded)
 
                 def _compute_sample_params(label, rim, rmg, lg):
-                    rim = t.einsum(
-                        'yxi,myx->im',
-                        (
-                            t.eye(label.max() + 1, device=label.device)
-                            [label.flatten()]
-                            .reshape(*label.shape, -1)
-                        ),
-                        rim,
+                    labelonehot = sparseonehot(label.flatten())
+                    rim = t.sparse.mm(
+                        labelonehot.t().float(),
+                        rim.permute(1, 2, 0).view(-1, rim.shape[0]),
                     )
                     rgs = t.einsum('im,mg->ig', rim[1:], rmg.exp())
                     return rgs, lg.expand(len(rgs), -1)
@@ -350,16 +347,9 @@ class STExperiment(ImagingExperiment):
             data_with_missing = t.nn.functional.pad(data, (1, 0, 1, 0))
             data_with_missing[0] = missing
             encoded_data = expression_encoder(data_with_missing)
-            return t.einsum(
-                'yxi,ic->cyx',
-                (
-                    t.eye(len(encoded_data)).to(label)
-                    [label.flatten()]
-                    .reshape(*label.shape, -1)
-                    .float()
-                ),
-                encoded_data,
-            )
+            labelonehot = sparseonehot(label.flatten(), len(encoded_data))
+            expanded = t.sparse.mm(labelonehot.float(), encoded_data)
+            return expanded.t().reshape(-1, *label.shape)
 
         label = (
             t.nn.functional.interpolate(

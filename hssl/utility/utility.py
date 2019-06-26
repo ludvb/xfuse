@@ -28,6 +28,7 @@ __all__ = [
     'with_interrupt_handler',
     'chunks_of',
     'find_device',
+    'sparseonehot',
 ]
 
 
@@ -248,3 +249,14 @@ def find_device(x):
             if device is not None:
                 return device
     return None
+
+
+def sparseonehot(labels, classes=None):
+    if classes is None:
+        classes = labels.max().item() + 1
+    idx = t.stack([t.arange(len(labels)).to(labels), labels])
+    return t.sparse.LongTensor(
+        idx,
+        t.ones(idx.shape[1]).to(idx),
+        t.Size([len(labels), classes]),
+    )
