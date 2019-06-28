@@ -56,6 +56,8 @@ class Slide(t.utils.data.Dataset):
 
         labels = [*sorted(np.unique(label))]
         data = self.data[[x - 1 for x in labels if x > 0], :]
+        if len(data) == 0:
+            return self.__getitem__((idx + 1) % len(self))
         label = np.searchsorted(labels, label)
 
         return dict(
