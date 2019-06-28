@@ -2,3 +2,4 @@
 
 from .misc import *
 from .utility import *
+from .visualization import *
