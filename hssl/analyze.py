@@ -130,31 +130,6 @@ def visualize_greyscale(im, mask=None):
     ).astype(np.uint8)
 
 
-def dim_red(x, mask=None, method='pca', n_components=3, **kwargs):
-    if method != 'pca':
-        raise NotImplementedError()
-
-    if mask is None:
-        mask = np.ones(x.shape[:-1], dtype=bool)
-    elif isinstance(mask, t.Tensor):
-        mask = mask.detach().cpu().numpy().astype(bool)
-
-    from sklearn.decomposition import PCA
-
-    if isinstance(x, t.Tensor):
-        x = x.detach().cpu().numpy()
-
-    values = (
-        PCA(n_components=n_components, **kwargs)
-        .fit_transform(x[mask])
-    )
-
-    dst = np.zeros((*mask.shape, n_components))
-    dst[mask] = (values - values.min(0)) / (values.max(0) - values.min(0))
-
-    return dst
-
-
 def visualize_batch(batch, normalize=False, **kwargs):
     if isinstance(batch, t.Tensor):
         batch = batch.detach().cpu()

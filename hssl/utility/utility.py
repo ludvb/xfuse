@@ -29,6 +29,7 @@ __all__ = [
     'chunks_of',
     'find_device',
     'sparseonehot',
+    'to_device',
 ]
 
 
@@ -260,3 +261,12 @@ def sparseonehot(labels, classes=None):
         t.ones(idx.shape[1]).to(idx),
         t.Size([len(labels), classes]),
     )
+
+
+def to_device(x, device):
+    if isinstance(x, t.Tensor):
+        return x.to(device)
+    if isinstance(x, list):
+        return [to_device(y, device) for y in x]
+    if isinstance(x, dict):
+        return {k: to_device(v, device) for k, v in x.items()}

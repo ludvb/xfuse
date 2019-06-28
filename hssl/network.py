@@ -4,13 +4,19 @@ from contextlib import ExitStack
 
 from copy import deepcopy
 
+from datetime import datetime
+
+import os
+
 import numpy as np
 
 import pyro as p
+from pyro.optim import Adam
 
 import torch as t
 from torch.utils.tensorboard.writer import SummaryWriter
 
+from .dataset import spot_size
 from .handlers.stats import (
     FactorActivationHistogram,
     FactorActivationMaps,
@@ -24,6 +30,7 @@ from .handlers.stats import (
 from .logging import DEBUG, set_level
 from .model import XFuse
 from .model.experiment import ST
+from .utility import to_device
 
 
 def __remove_this():
@@ -95,48 +102,10 @@ def __remove_this():
     )
 
 
-def dim_red(x, mask=None, method='pca', n_components=3, **kwargs):
-    if method != 'pca':
-        raise NotImplementedError()
-
-    if mask is None:
-        mask = np.ones(x.shape[:-1], dtype=bool)
-    elif isinstance(mask, t.Tensor):
-        mask = mask.detach().cpu().numpy().astype(bool)
-
-    from sklearn.decomposition import PCA
-
-    if isinstance(x, t.Tensor):
-        x = x.detach().cpu().numpy()
-
-    values = (
-        PCA(n_components=n_components, **kwargs)
-        .fit_transform(x[mask])
-    )
-
-    dst = np.zeros((*mask.shape, n_components))
-    dst[mask] = (values - values.min(0)) / (values.max(0) - values.min(0))
-
-    return dst
-
-
-def prep(x):
-    if isinstance(x, t.Tensor):
-        return x.to(t.device('cuda'))
-    if isinstance(x, list):
-        return [prep(y) for y in x]
-    if isinstance(x, dict):
-        return {k: prep(v) for k, v in x.items()}
-
-
-from datetime import datetime
-import os
-from torch.utils.tensorboard import SummaryWriter
 writer = SummaryWriter(os.path.join('/tmp/tb/', datetime.now().isoformat()))
 
 set_level(DEBUG)
 
-from .dataset import spot_size
 data, loader, genes, scale, baseline, counts = __remove_this()
 xfuse = XFuse([
     ST(
@@ -148,25 +117,16 @@ xfuse = XFuse([
         ],
     )
 ]).to(t.device('cuda'))
-import pyro.optim
 svi = p.infer.SVI(
     xfuse.model,
     xfuse.guide,
-    p.optim.Adam({'lr': 1e-3}),
+    Adam({'lr': 1e-3}),
     p.infer.Trace_ELBO(),
 )
-fixed_x = prep(next(iter(loader)))
-
-
-def normalize(img):
-    mins = img.permute(0, 2, 3, 1).reshape(-1, img.shape[1]).min(0).values[None, :, None, None]
-    maxs = img.permute(0, 2, 3, 1).reshape(-1, img.shape[1]).max(0).values[None, :, None, None]
-    return (img - mins) / (maxs - mins)
-
-
 global_step = 0
 
-def do():
+
+def do(epoch):
     global global_step
     stats_trackers = [
         (1, LogLikelihood),
@@ -194,13 +154,14 @@ def do():
                     if global_step % freq == 0
             ]:
                 stack.enter_context(tracker(writer, global_step))
-            loss = svi.step(prep(x))
+            loss = svi.step(to_device(x, t.device('cuda')))
             writer.add_scalar('loss/elbo', loss, global_step)
-            print(f'{np.mean(loss)}')
+            print(f'{loss}')
             global_step += 1
 
-    print('starting factor purge')
-    with t.no_grad():
+    if epoch % 50 == 0:
+        print('starting factor purge')
+
         def _model_without(n):
             reduced_model = deepcopy(xfuse)
             reduced_model._XFuse__experiment_store['ST'].remove_factor(n)
@@ -211,23 +172,27 @@ def do():
             for n in xfuse._get_experiment('ST').factors
         ])
 
-        def _compare_once():
-            guide = p.poutine.trace(xfuse.guide).get_trace(fixed_x)
+        def _compare_on(x):
+            def _once():
+                guide = p.poutine.trace(xfuse.guide).get_trace(x)
 
-            def _evaluate(model):
-                return (
-                    p.poutine.trace(p.poutine.replay(model, guide))
-                    .get_trace(fixed_x)
-                    .log_prob_sum()
-                    .item()
-                )
+                def _evaluate(model):
+                    with p.poutine.trace() as tr, \
+                         p.poutine.block(
+                             hide_fn=lambda x: not x['is_observed']), \
+                         p.poutine.replay(trace=guide):
+                        model(x)
+                    return tr.trace.log_prob_sum().item()
 
-            full = _evaluate(xfuse.model)
-            deltas = [
-                _evaluate(xfuse.model) - full for xfuse in reduced_models]
-            return deltas
+                full = _evaluate(xfuse.model)
+                deltas = [_evaluate(xfuse.model) - full
+                          for xfuse in reduced_models]
+                return deltas
+            return np.mean([_once() for _ in range(5)], 0)
 
-        res = [_compare_once() for _ in range(10)]
+        with t.no_grad():
+            res = [_compare_on(to_device(x, t.device('cuda')))
+                   for x, _ in zip(loader, range(5))]
         res = np.array(res).mean(0)
         dubious = [
             n for res, n in reversed(sorted(zip(res, ns)))
