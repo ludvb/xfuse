@@ -76,7 +76,7 @@ class Image(Experiment):
 
     def model(self, x, z):
         decoded = self._decode(z)
-        with p.poutine.scale(self.n/len(x)):
+        with p.poutine.scale(self.n/len(x['image'])):
             self._sample_image(x, decoded)
 
     def guide(self, x):

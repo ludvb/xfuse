@@ -131,7 +131,7 @@ class ST(Image):
         rg = effects @ rgeff
         rmg = rg[:, None] + rmg
 
-        with p.poutine.scale(scale=self.n/len(x)):
+        with p.poutine.scale(scale=self.n/len(x['data'])):
             with scope(prefix=self.tag):
                 image = self._sample_image(x, decoded)
 
