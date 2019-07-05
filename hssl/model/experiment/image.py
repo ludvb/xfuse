@@ -68,16 +68,14 @@ class Image(Experiment):
         mu = center_crop(img_mu(decoded), [None, None, *x['image'].shape[-2:]])
         sd = center_crop(img_sd(decoded), [None, None, *x['image'].shape[-2:]])
 
-        return p.sample(
-            'image',
-            Normal(mu, sd).to_event(3),
-            obs=x['image'],
-        )
+        image_distr = Normal(mu, sd).to_event(3)
+        p.sample('image', image_distr, obs=x['image'])
+        return image_distr
 
     def model(self, x, z):
         decoded = self._decode(z)
         with p.poutine.scale(self.n/len(x['image'])):
-            self._sample_image(x, decoded)
+            return self._sample_image(x, decoded)
 
     def guide(self, x):
         encoder = p.module(

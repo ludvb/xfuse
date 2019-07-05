@@ -1,17 +1,28 @@
 from abc import abstractmethod
 
+from typing import Callable, Optional
+
 from pyro.poutine.messenger import Messenger
 
 from torch.utils.tensorboard.writer import SummaryWriter
 
+from ...session import get_global_step
+
 
 class StatsHandler(Messenger):
-    def __init__(self, writer: SummaryWriter, global_step: int):
+    def __init__(
+            self,
+            writer: SummaryWriter,
+            predicate: Optional[Callable[..., bool]] = None,
+    ):
         from functools import wraps
         import inspect
 
+        if predicate is None:
+            predicate = lambda **_: True
+        self.predicate = predicate
+
         self.__writer = writer
-        self._global_step = global_step
 
         def _add_writer_method(name, method):
             setattr(
@@ -19,7 +30,7 @@ class StatsHandler(Messenger):
                 name,
                 wraps(method)(
                     lambda *args, **kwargs: method(
-                        *args, global_step=self._global_step, **kwargs)
+                        *args, global_step=int(get_global_step()), **kwargs)
                     if "global_step" in inspect.signature(method).parameters
                     else
                     lambda *args, **kwargs: method(*args, **kwargs)
@@ -44,6 +55,6 @@ class StatsHandler(Messenger):
     def _select_msg(self, **msg) -> bool:
         pass
 
-    def _postprocess_message(self, msg):
-        if msg['type'] == 'sample' and self._select_msg(**msg):
+    def _pyro_post_sample(self, msg):
+        if self._select_msg(**msg) and self.predicate(**msg):
             self._handle(**msg)

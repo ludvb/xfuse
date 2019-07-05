@@ -61,32 +61,3 @@ def set_level(level: int):
     None
     """
     LOGGER.setLevel(level)
-
-
-class LoggedExecution(ContextDecorator):
-    def __init__(self, log_file=None):
-        self.log_file = log_file
-        self._file_handle = None
-        self._log_handler = None
-
-    def __enter__(self):
-        if self.log_file is not None:
-            self._file_handle = open(self.log_file, 'a')
-            from logging import StreamHandler
-            self._log_handler = StreamHandler(self._file_handle)
-            self._log_handler.setFormatter(Formatter(fancy_formatting=False))
-            LOGGER.addHandler(self._log_handler)
-
-    def __exit__(self, err_type, err, tb):
-        if err is not None:
-            while tb.tb_next is not None:
-                tb = tb.tb_next
-            frame = tb.tb_frame
-            LOGGER.findCaller = (
-                lambda self, stack_info=None, f=frame:
-                (f.f_code.co_filename, f.f_lineno, f.f_code.co_name, None)
-            )
-            log(ERROR, str(err))
-        if self._log_handler is not None:
-            LOGGER.removeHandler(self._log_handler)
-            self._file_handle.close()

@@ -58,11 +58,12 @@ class XFuse(t.nn.Module):
                     .expand([1, 1, 1, 1])
                     .to_event(3)
                 ))
-            e.model(x, z)
-            return z
-        p.sample('z', Delta(
-            t.cat([_go(self._get_experiment(e), x) for e, x in xs.items()], 0),
-        ))
+            return z, e.model(x, z)
+
+        results = {e: _go(self._get_experiment(e), x) for e, x in xs.items()}
+        z = p.sample('z', Delta(t.cat([z for z, _ in results.values()])))
+        outputs = {e: output for e, (_, output) in results.items()}
+        return z, outputs
 
     def guide(self, xs):
         def _go(e, x):

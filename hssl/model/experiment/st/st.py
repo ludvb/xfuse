@@ -12,9 +12,9 @@ from pyro.contrib.autoname import scope
 
 import torch as t
 
-from . import Image
-from ...logging import DEBUG, log
-from ...utility import center_crop, find_device, sparseonehot
+from ..image import Image
+from ....logging import INFO, log
+from ....utility import center_crop, find_device, sparseonehot
 
 
 class ST(Image):
@@ -47,12 +47,12 @@ class ST(Image):
             factor = (0., None)
         n = next(self.__factors_counter)
         assert n not in self.__factors
-        log(DEBUG, 'adding new factor: %d', n)
+        log(INFO, 'adding factor: %d', n)
         self.__factors.setdefault(n, factor)
         return self
 
     def remove_factor(self, n):
-        log(DEBUG, 'removing factor: %d', n)
+        log(INFO, 'removing factor: %d', n)
         try:
             self.__factors.pop(n)
         except KeyError:
@@ -133,7 +133,7 @@ class ST(Image):
 
         with p.poutine.scale(scale=self.n/len(x['data'])):
             with scope(prefix=self.tag):
-                image = self._sample_image(x, decoded)
+                image_distr = self._sample_image(x, decoded)
 
                 def _compute_sample_params(label, rim, rmg, lg):
                     labelonehot = sparseonehot(label.flatten())
@@ -146,16 +146,12 @@ class ST(Image):
 
                 rgs, lg = zip(*it.starmap(
                     _compute_sample_params, zip(x['label'], rim, rmg, lg)))
-                expression = p.sample(
-                    'xsg',
-                    NegativeBinomial(
-                        total_count=t.cat(rgs),
-                        logits=t.cat(lg),
-                    ),
-                    obs=t.cat(x['data']),
-                )
 
-        return image, expression
+                expression_distr = NegativeBinomial(
+                    total_count=t.cat(rgs), logits=t.cat(lg))
+                p.sample('xsg', expression_distr, obs=t.cat(x['data']))
+
+        return image_distr, expression_distr
 
     def guide(self, x):
         num_genes = x['data'][0].shape[1]

@@ -1,6 +1,6 @@
 # pylint: disable=missing-docstring, invalid-name, too-many-instance-attributes
 
-from functools import partial
+from contextlib import ExitStack
 
 from datetime import datetime as dt
 
@@ -16,41 +16,31 @@ import sys
 
 import click
 
-import numpy as np
-
 import pandas as pd
 
 from pyvips import Image
 
+import pyro as p
+import pyro.optim
+
 import torch as t
+from torch.utils.tensorboard.writer import SummaryWriter
 
 from . import __version__
-from .analyze import (
-    Sample,
-    analyze as default_analysis,
-    analyze_gene_profiles,
-    analyze_genes,
-    dge as dge_analysis,
-    impute_counts,
-)
-from .dataset import Dataset, RandomSlide, spot_size
+from .data import Dataset
+from .data.slide import RandomSlide
+from .data.utility import make_dataloader, spot_size
+from .handlers import Checkpointer, stats
 from .logging import (
     DEBUG,
-    ERROR,
     INFO,
     WARNING,
-    LoggedExecution,
     log,
     set_level,
 )
-from .network import (
-    XFuse,
-    STEncoder,
-    STDecoder,
-    HEEncoder,
-    HEDecoder,
-)
-from .optimizer import create_optimizer
+from .model import XFuse
+from .model.experiment.st import ST, FactorPurger, purge_factors
+from .session import Session, get_global_step, get_model, get_save_path
 from .train import train as _train
 from .utility import (
     compose,
@@ -58,37 +48,38 @@ from .utility import (
     read_data,
     set_rng_seed,
 )
-from .utility.state import (
-    State,
-    load_state,
-    save_state,
-    to_device,
-)
+from .utility.file import unique_prefix
+from .utility.session import load_session, save_session
 
 
 DEVICE = t.device('cuda' if t.cuda.is_available() else 'cpu')
 
 
-def _logged_command(get_output_dir):
+def _with_save_path(path):
     def _decorator(f):
         @wraps(f)
         def _wrapper(*args, **kwargs):
-            output_dir = get_output_dir(*args, **kwargs)
-
-            if os.path.exists(output_dir):
-                log(ERROR, 'output directory %s already exists', output_dir)
-                sys.exit(1)
-
-            os.makedirs(output_dir)
-
-            with LoggedExecution(os.path.join(output_dir, 'log')):
-                log(INFO, 'this is %s %s', __package__, __version__)
-                log(DEBUG, 'invoked by %s', ' '.join(sys.argv))
-                log(INFO, 'device: %s', str(DEVICE))
-
+            _path = path(*args, **kwargs) if callable(path) else path
+            if os.path.exists(_path):
+                log(WARNING, 'save path %s already exists', _path)
+            else:
+                os.makedirs(_path)
+            with Session(save_path=_path):
                 f(*args, **kwargs)
         return _wrapper
     return _decorator
+
+
+def _with_logging(f):
+    @wraps(f)
+    def _wrapper(*args, **kwargs):
+        save_path = get_save_path()
+        log_path = unique_prefix(os.path.join(save_path, 'log'))
+        with Session(log_file=log_path):
+            log(INFO, 'this is %s %s', __package__, __version__)
+            log(DEBUG, 'invoked by %s', ' '.join(sys.argv))
+            f(*args, **kwargs)
+    return _wrapper
 
 
 @click.group()
@@ -103,35 +94,38 @@ def cli(verbose):
 
 @click.command()
 @click.argument('design-file', type=click.File('rb'))
-@click.option('--factors', type=int, default=50)
+@click.option('--learning-rate', type=float, default=2e-4)
 @click.option('--patch-size', type=int, default=512)
-@click.option('--lr', type=float, default=1e-3)
 @click.option('--batch-size', type=int, default=8)
-@click.option('--workers', type=int)
+@click.option('--workers', type=int, default=0)
 @click.option('--seed', type=int)
+@click.option('--epochs', type=int)
 @click.option(
     '--restore',
-    'state_file',
+    'session',
     type=click.Path(exists=True, dir_okay=False, resolve_path=True),
 )
 @click.option(
-    '-o', '--output',
+    '-o', '--save-path',
     type=click.Path(resolve_path=True),
     default=f'{__package__}-{dt.now().isoformat()}',
 )
-@click.option('--checkpoint', 'chkpt_interval', type=int)
+@click.option('--checkpoint-interval', type=int)
 @click.option('--image', 'image_interval', type=int, default=1000)
 @click.option('--epochs', type=int)
-@_logged_command(lambda *_, **args: args['output'])
+@_with_save_path(lambda *args, **kwargs: kwargs['save_path'])
+@_with_logging
 def train(
         design_file,
-        factors,
         patch_size,
-        lr,
-        output,
-        state_file,
+        save_path,
+        session,
+        learning_rate,
+        batch_size,
         workers,
         seed,
+        epochs,
+        checkpoint_interval,
         **kwargs,
 ):
     if seed is not None:
@@ -161,7 +155,6 @@ def train(
                 'name',
                 'image',
                 'labels',
-                'validation',
                 'data',
         ]
     ]])
@@ -182,69 +175,75 @@ def train(
         ],
         design_matrix,
     )
-    try:
-        dataset_validation = Dataset(
-            [
-                RandomSlide(
-                    data=counts,
-                    image=Image.new_from_file(_path(image)),
-                    label=Image.new_from_file(_path(labels)),
-                    patch_size=patch_size,
-                )
-                for image, labels, counts in zip(
-                    design.image,
-                    design.validation,
-                    (count_data.loc[x] for x in count_data.index.levels[0]),
-                )
-            ],
-            design_matrix,
-        )
-    except AttributeError:
-        dataset_validation = None
 
-    state: State
-    if state_file is not None:
-        state = load_state(state_file)
-    else:
-        st_encoder = partial(
-            STEncoder,
-            genes=count_data.columns,
-        )
-        st_decoder = partial(
-            STDecoder,
-            genes=count_data.columns,
-            covariates=[
-                (k, set(v for k, v in items))
-                for k, items in it.groupby(
-                        design_matrix.index.to_flat_index().to_list(),
-                        lambda x: x[0],
-                )
-            ],
-            gene_baseline=count_data.mean(0).values,
-        )
-
-        he_encoder = HEEncoder
-        he_decoder = HEDecoder
-
-        model = XFuse(
-            [st_encoder, he_encoder],
-            [st_decoder, he_decoder],
-            dataset_size=len(dataset),
-        )
-
-        optimizer = create_optimizer(model, learning_rate=lr)
-        state = State(model, optimizer, 0)
-
-    state = _train(
-        state=state,
-        output_prefix=output,
-        dataset=dataset,
-        dataset_validation=dataset_validation,
-        workers=workers,
-        **kwargs,
+    dataloader = make_dataloader(
+        dataset,
+        batch_size=batch_size,
+        num_workers=workers,
     )
 
-    save_state(state, os.path.join(output, 'final-state.pkl'))
+    if session is not None:
+        default_session = load_session(session)
+    else:
+        st_experiment = ST(
+            n=len(dataset),
+            default_scale=count_data.mean().mean() / spot_size(dataset),
+            factors=[
+                (0., t.as_tensor(count_data.mean(0).values).log()),
+                (-10, None),
+            ],
+        )
+        xfuse = XFuse([st_experiment]).to(DEVICE)
+        default_session = Session(
+            model=xfuse,
+            optimizer=p.optim.Adam({'lr': learning_rate}),
+        )
+
+    def _every(n):
+        def _predicate(**msg):
+            if int(get_global_step()) % n == 0:
+                return True
+            return False
+        return _predicate
+
+    writer = SummaryWriter(os.path.join(save_path, 'stats'))
+
+    stats_handlers = [
+        stats.ELBO(writer, _every(1)),
+        stats.FactorActivationHistogram(writer, _every(10)),
+        stats.FactorActivationMaps(writer, _every(100)),
+        stats.FactorActivationMean(writer, _every(1)),
+        stats.FactorActivationSummary(writer, _every(100)),
+        stats.Image(writer, _every(100)),
+        stats.Latent(writer, _every(100)),
+        stats.LogLikelihood(writer, _every(1)),
+        stats.RMSE(writer, _every(1)),
+    ]
+
+    contexts = [
+        FactorPurger(dataloader, frequency=100, extra_factors=1),
+    ]
+
+    if checkpoint_interval is not None:
+        contexts.append(Checkpointer(frequency=checkpoint_interval))
+
+    def _panic(session, err_type, err, tb):
+        save_session(f'session-exception')
+
+    with default_session, Session(panic=_panic):
+        with ExitStack() as stack:
+            for context in contexts:
+                stack.enter_context(context)
+            for stats_handler in stats_handlers:
+                stack.enter_context(stats_handler)
+            _train(dataloader, epochs)
+        purge_factors(
+            get_model(),
+            dataloader,
+            extra_factors=0,
+            num_samples=10,
+        )
+    save_session(f'session-final')
 
 
 cli.add_command(train)
@@ -264,16 +263,17 @@ cli.add_command(train)
     type=click.File('rb'),
 )
 @click.option(
-    '-o', '--output',
+    '-o', '--save-path',
     type=click.Path(resolve_path=True),
     default=f'{__package__}-{dt.now().isoformat()}',
 )
+@_with_save_path(lambda *args, **kwargs: kwargs['save_path'])
+@_with_logging
 def analyze(**_):
     pass
 
 
 @analyze.resultcallback()
-@_logged_command(lambda *_, **args: args['output'])
 def _run_analysis(analyses, design_file, state_file, output):
     state = load_state(state_file.name)
     to_device(state, DEVICE)

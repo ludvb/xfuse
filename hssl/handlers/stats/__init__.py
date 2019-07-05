@@ -1,5 +1,6 @@
 # flake8: noqa
 
+from .elbo import *
 from .factor_activation import *
 from .image import *
 from .latent import *

@@ -1,10 +1,7 @@
-import pyro as p
-
 import torch as t
 
 
 __all__ = [
-    'MultivariateNormal',
     'Unpool',
 ]
 
@@ -34,15 +31,3 @@ class Unpool(t.nn.Module):
         x = t.nn.functional.interpolate(x, scale_factor=self.scale_factor)
         x = self.conv(x)
         return x
-
-
-class MultivariateNormal(p.distributions.MultivariateNormal):
-    def log_prob(self, x, *args, **kwargs):
-        device = self.loc.device
-        self.loc = self.loc.cpu()
-        self._unbroadcasted_scale_tril = self._unbroadcasted_scale_tril.cpu()
-        result = super().log_prob(x.cpu()).to(device)
-        self.loc = self.loc.to(device)
-        self._unbroadcasted_scale_tril = \
-            self._unbroadcasted_scale_tril.to(device)
-        return result

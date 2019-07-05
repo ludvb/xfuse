@@ -13,6 +13,7 @@ import pandas as pd
 import torch as t
 
 from ..logging import INFO, log
+from ..session import get_default_device
 
 
 __all__ = [
@@ -263,7 +264,9 @@ def sparseonehot(labels, classes=None):
     )
 
 
-def to_device(x, device):
+def to_device(x, device=None):
+    if device is None:
+        device = get_default_device()
     if isinstance(x, t.Tensor):
         return x.to(device)
     if isinstance(x, list):

@@ -1,5 +1,5 @@
 from .stats_handler import StatsHandler
-from ...utility import reduce_last_dimension
+from ...utility.visualization import reduce_last_dimension
 
 
 class Latent(StatsHandler):
