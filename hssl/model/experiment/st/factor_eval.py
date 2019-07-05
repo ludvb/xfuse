@@ -71,7 +71,6 @@ class FactorPurger(Messenger):
             frequency: int = 1,
             **kwargs: Any,
     ):
-        self._xfuse: XFuse = get_model()
         self._data = data
         self._freq = frequency
         self._kwargs = kwargs
@@ -85,4 +84,4 @@ class FactorPurger(Messenger):
     def _pyro_post_epoch(self, msg) -> None:
         if msg['kwargs']['epoch'] % self._freq == 0:
             with Session(pyro_stack=[]):
-                purge_factors(self._xfuse, self._data, **self._kwargs)
+                purge_factors(get_model(), self._data, **self._kwargs)
