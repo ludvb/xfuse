@@ -21,7 +21,7 @@ class FactorActivation(StatsHandler):
         try:
             st_experiment: ST = get_model()._get_experiment('ST')
         except (AttributeError, KeyError):
-            log(WARNING, 'could not find an ST experiment.'
+            log(WARNING, 'session model does not have an ST experiment.'
                          f' {cls.__name__} will be disabled.')
             return Noop()
         instance = super().__new__(cls)

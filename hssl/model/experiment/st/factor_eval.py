@@ -7,6 +7,8 @@ import numpy as np
 import pyro as p
 from pyro.poutine.messenger import Messenger
 
+import torch as t
+
 from ... import XFuse
 from ...utility import compare
 from ....handlers import Noop
@@ -34,16 +36,34 @@ def purge_factors(
             for n in xfuse._get_experiment('ST').factors
         ])
 
-        def _compare_on(x):
+        def _eval_on(x):
             guide = p.poutine.trace(xfuse.guide).get_trace(x)
+
             full, *reduced = compare(
                 x, guide, xfuse.model, *reduced_models, **kwargs)
-            return [x - full for x in reduced]
+            scores = [x - full for x in reduced]
 
-        res = np.array([_compare_on(to_device(x)) for x in data]).mean(0)
+            with p.poutine.trace() as tr:
+                with p.poutine.replay(trace=guide):
+                    xfuse.model(x)
+            mean_expression = (
+                tr.trace.nodes['rmg']['fn'].mean.mean(0)
+                .detach().cpu()
+            )
+            min_activation = (
+                tr.trace.nodes['rim_raw']['fn'].mean.min()
+                .detach().cpu()
+            )
+
+            return scores, mean_expression, min_activation
+
+        scores, mean_expression, min_activation = (
+            np.stack(xs).mean(0)
+            for xs in zip(*[_eval_on(to_device(x)) for x in data])
+        )
 
     noncontrib = [
-        n for res, n in reversed(sorted(zip(res, ns)))
+        n for res, n in reversed(sorted(zip(scores, ns)))
         if res >= 0
     ]
     contrib = [n for n in ns if n not in noncontrib]
@@ -59,7 +79,8 @@ def purge_factors(
     )
     if noncontrib == []:
         for _ in range(extra_factors):
-            xfuse._get_experiment('ST').add_factor((-10., None))
+            xfuse._get_experiment('ST').add_factor(
+                (min_activation, t.as_tensor(mean_expression)))
     else:
         for n in noncontrib[:-extra_factors]:
             xfuse._get_experiment('ST').remove_factor(n)
@@ -71,7 +92,7 @@ class FactorPurger(Messenger):
             xfuse = get_model()
             _ = xfuse._get_experiment('ST')
         except (AttributeError, KeyError):
-            log(WARNING, 'could not find an ST experiment.'
+            log(WARNING, 'session model does not have an ST experiment.'
                          f' {cls.__name__} will be disabled.')
             return Noop()
         instance = super().__new__(cls)

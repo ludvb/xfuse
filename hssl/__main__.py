@@ -190,7 +190,7 @@ def train(
             default_scale=count_data.mean().mean() / spot_size(dataset),
             factors=[
                 (0., t.as_tensor(count_data.mean(0).values).log()),
-                (-10, None),
+                (0., t.as_tensor(count_data.mean(0).values).log()),
             ],
         )
         xfuse = XFuse([st_experiment]).to(DEVICE)

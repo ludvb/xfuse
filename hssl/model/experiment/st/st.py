@@ -97,14 +97,14 @@ class ST(Image):
                 [None, None, *x['label'].shape[-2:]],
             )
         ))
-        rim = t.cat(
+        rim = p.sample('rim_raw', Delta(t.cat(
             [
                 self._get_factor_decoder(decoded.shape[1], n)
                 .to(decoded)(decoded)
                 for n in self.factors
             ],
             dim=1,
-        )
+        )))
         rim = center_crop(rim, [None, None, *x['label'].shape[-2:]])
         rim = t.nn.functional.softmax(rim, dim=1)
         rim = p.sample('rim', Delta(rim))
