@@ -1,12 +1,20 @@
 import os
 
+from typing import Optional
+
 from pyro.poutine.messenger import Messenger
 
+from . import Noop
 from ..utility.session import save_session
 from ..session import Session, get_global_step, get_save_path
 
 
 class Checkpointer(Messenger):
+    def __new__(cls, frequency: Optional[int]):
+        if frequency is None:
+            return Noop()
+        return super().__new__(cls)
+
     def __init__(self, frequency: int = 1):
         self._freq = frequency
 

@@ -9,6 +9,7 @@ from pyro.poutine.messenger import Messenger
 
 from ... import XFuse
 from ...utility import compare
+from ....handlers import Noop
 from ....logging import INFO, WARNING, log
 from ....session import Session, get_model
 from ....utility import to_device
@@ -60,11 +61,23 @@ def purge_factors(
         for _ in range(extra_factors):
             xfuse._get_experiment('ST').add_factor((-10., None))
     else:
-        for n in noncontrib[:-extra_factors][:len(res) - 1 - extra_factors]:
+        for n in noncontrib[:-extra_factors]:
             xfuse._get_experiment('ST').remove_factor(n)
 
 
 class FactorPurger(Messenger):
+    def __new__(cls, *args, **kwargs):
+        try:
+            xfuse = get_model()
+            _ = xfuse._get_experiment('ST')
+        except (AttributeError, KeyError):
+            log(WARNING, 'could not find an ST experiment.'
+                         f' {cls.__name__} will be disabled.')
+            return Noop()
+        instance = super().__new__(cls)
+        instance._model = xfuse
+        return instance
+
     def __init__(
             self,
             data: Iterable[Any],
@@ -84,4 +97,4 @@ class FactorPurger(Messenger):
     def _pyro_post_epoch(self, msg) -> None:
         if msg['kwargs']['epoch'] % self._freq == 0:
             with Session(pyro_stack=[]):
-                purge_factors(get_model(), self._data, **self._kwargs)
+                purge_factors(self._model, self._data, **self._kwargs)

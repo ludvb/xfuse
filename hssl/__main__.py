@@ -199,50 +199,51 @@ def train(
             optimizer=p.optim.Adam({'lr': learning_rate}),
         )
 
-    def _every(n):
-        def _predicate(**msg):
-            if int(get_global_step()) % n == 0:
-                return True
-            return False
-        return _predicate
-
-    writer = SummaryWriter(os.path.join(save_path, 'stats'))
-
-    stats_handlers = [
-        stats.ELBO(writer, _every(1)),
-        stats.FactorActivationHistogram(writer, _every(10)),
-        stats.FactorActivationMaps(writer, _every(100)),
-        stats.FactorActivationMean(writer, _every(1)),
-        stats.FactorActivationSummary(writer, _every(100)),
-        stats.Image(writer, _every(100)),
-        stats.Latent(writer, _every(100)),
-        stats.LogLikelihood(writer, _every(1)),
-        stats.RMSE(writer, _every(1)),
-    ]
-
-    contexts = [
-        FactorPurger(dataloader, frequency=100, extra_factors=1),
-    ]
-
-    if checkpoint_interval is not None:
-        contexts.append(Checkpointer(frequency=checkpoint_interval))
-
     def _panic(session, err_type, err, tb):
         save_session(f'session-exception')
 
     with default_session, Session(panic=_panic):
+        def _every(n):
+            def _predicate(**msg):
+                if int(get_global_step()) % n == 0:
+                    return True
+                return False
+            return _predicate
+
+        writer = SummaryWriter(os.path.join(save_path, 'stats'))
+
+        stats_handlers = [
+            stats.ELBO(writer, _every(1)),
+            stats.FactorActivationHistogram(writer, _every(10)),
+            stats.FactorActivationMaps(writer, _every(100)),
+            stats.FactorActivationMean(writer, _every(1)),
+            stats.FactorActivationSummary(writer, _every(100)),
+            stats.Image(writer, _every(100)),
+            stats.Latent(writer, _every(100)),
+            stats.LogLikelihood(writer, _every(1)),
+            stats.RMSE(writer, _every(1)),
+        ]
+
+        contexts = [
+            Checkpointer(frequency=checkpoint_interval),
+            FactorPurger(dataloader, frequency=100, extra_factors=1),
+        ]
+
         with ExitStack() as stack:
             for context in contexts:
                 stack.enter_context(context)
             for stats_handler in stats_handlers:
                 stack.enter_context(stats_handler)
+
             _train(dataloader, epochs)
+
         purge_factors(
             get_model(),
             dataloader,
             extra_factors=0,
             num_samples=10,
         )
+
     save_session(f'session-final')
 
 

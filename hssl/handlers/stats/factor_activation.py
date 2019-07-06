@@ -1,6 +1,7 @@
 from abc import abstractmethod
 
 from .stats_handler import StatsHandler
+from .. import Noop
 from ...logging import WARNING, log
 from ...model.experiment.st import ST
 from ...utility.visualization import reduce_last_dimension
@@ -16,6 +17,17 @@ __all__ = [
 
 
 class FactorActivation(StatsHandler):
+    def __new__(cls, *args, **kwargs):
+        try:
+            st_experiment: ST = get_model()._get_experiment('ST')
+        except (AttributeError, KeyError):
+            log(WARNING, 'could not find an ST experiment.'
+                         f' {cls.__name__} will be disabled.')
+            return Noop()
+        instance = super().__new__(cls)
+        instance._experiment = st_experiment
+        return instance
+
     def _select_msg(self, name, **_):
         return name[-3:] == 'rim'
 
@@ -24,14 +36,8 @@ class FactorActivation(StatsHandler):
         pass
 
     def _handle(self, fn, **_):
-        try:
-            experiment = get_model()._get_experiment('ST')
-        except KeyError:
-            log(WARNING, 'can\'t track factor activation:'
-                         'model does not have an ST experiment')
-            return None
         for name, factor in zip(
-                experiment.factors, fn.mean.permute(1, 0, 2, 3)):
+                self._experiment.factors, fn.mean.permute(1, 0, 2, 3)):
             self._handle_factor_activation(name, factor)
 
 
