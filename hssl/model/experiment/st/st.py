@@ -2,7 +2,7 @@ from copy import deepcopy
 
 import itertools as it
 
-from typing import Dict, List, Tuple
+from typing import Dict, List, NamedTuple, Optional
 
 import numpy as np
 
@@ -15,6 +15,16 @@ import torch as t
 from ..image import Image
 from ....logging import INFO, log
 from ....utility import center_crop, find_device, sparseonehot
+from ....session import get_param_store
+
+
+class FactorDefault(NamedTuple):
+    scale: float
+    profile: Optional[t.Tensor]
+
+
+def _encode_factor_name(n: str):
+    return f'!!factor!{n}!!'
 
 
 class ST(Image):
@@ -25,40 +35,51 @@ class ST(Image):
     def __init__(
             self,
             *args,
-            factors: List[Tuple[float, t.Tensor]] = [],
+            factors: List[FactorDefault] = [],
             default_scale: float = 1.,
             **kwargs,
     ):
         super().__init__(*args, **kwargs)
 
-        self.__factors: Dict[str, Tuple(float, t.Tensor)] = {}
-        self.__factors_counter = it.count()
+        self.__factors: Dict[str, FactorDefault] = {}
+        self.__factors_counter = map(str, it.count())
         for factor in factors:
             self.add_factor(factor)
 
         self.__default_scale = default_scale
 
     @property
-    def factors(self):
+    def factors(self) -> Dict[str, FactorDefault]:
         return deepcopy(self.__factors)
 
-    def add_factor(self, factor=None):
+    def add_factor(self, factor: Optional[FactorDefault] = None):
         if factor is None:
-            factor = (0., None)
+            factor = FactorDefault(0., None)
+
         n = next(self.__factors_counter)
         assert n not in self.__factors
-        log(INFO, 'adding factor: %d', n)
-        self.__factors.setdefault(n, factor)
-        return self
 
-    def remove_factor(self, n):
-        log(INFO, 'removing factor: %d', n)
+        log(INFO, 'adding factor: %s', n)
+        self.__factors.setdefault(n, factor)
+
+        return n
+
+    def remove_factor(self, n, remove_params=False):
+        log(INFO, 'removing factor: %s', n)
+
         try:
             self.__factors.pop(n)
         except KeyError:
             raise ValueError(
                 f'attempted to remove factor {n}, which doesn\'t exist!')
+
         self.__factors_counter = it.chain([n], self.__factors_counter)
+
+        if remove_params:
+            store = get_param_store()
+            pname = _encode_factor_name(n)
+            for param in [p for p in store.keys() if pname in p]:
+                del store[param]
 
     def _get_scale_decoder(self, in_channels):
         decoder = t.nn.Sequential(
@@ -84,7 +105,11 @@ class ST(Image):
         )
         t.nn.init.constant_(decoder[-1].weight, 0.)
         t.nn.init.constant_(decoder[-1].bias, self.__factors[n][0])
-        return p.module(f'factor{n}', decoder, update_module_params=True)
+        return p.module(
+            _encode_factor_name(n),
+            decoder,
+            update_module_params=True,
+        )
 
     def model(self, x, z):
         num_genes = x['data'][0].shape[1]
@@ -97,25 +122,33 @@ class ST(Image):
                 [None, None, *x['label'].shape[-2:]],
             )
         ))
-        rim = p.sample('rim_raw', Delta(t.cat(
-            [
-                self._get_factor_decoder(decoded.shape[1], n)
-                .to(decoded)(decoded)
-                for n in self.factors
-            ],
-            dim=1,
-        )))
-        rim = center_crop(rim, [None, None, *x['label'].shape[-2:]])
-        rim = t.nn.functional.softmax(rim, dim=1)
-        rim = p.sample('rim', Delta(rim))
-        rim = scale * rim
 
-        rmg = p.sample('rmg', Delta(t.stack([
-            p.sample(f'factor{n}', (
-                Normal(t.tensor(0.).to(z), 1.).expand([num_genes])
+        if len(self.factors) > 0:
+            rim = t.cat(
+                [
+                    self._get_factor_decoder(decoded.shape[1], n)
+                    .to(decoded)(decoded)
+                    for n in self.factors
+                ],
+                dim=1,
+            )
+            rim = center_crop(rim, [None, None, *x['label'].shape[-2:]])
+            rim = t.nn.functional.softmax(rim, dim=1)
+            rim = p.sample('rim', Delta(rim))
+            rim = scale * rim
+
+            rmg = p.sample('rmg', Delta(t.stack([
+                p.sample(_encode_factor_name(n), (
+                    Normal(t.tensor(0.).to(z), 1.).expand([num_genes])
+                ))
+                for n in self.factors
+            ])))
+        else:
+            rim = p.sample('rim', Delta(
+                t.zeros(len(x['data']), 0, *x['label'].shape[-2:])
+                .to(decoded)
             ))
-            for n in self.factors
-        ])))
+            rmg = p.sample('rmg', Delta(t.zeros(0, num_genes).to(decoded)))
 
         effects = x['effects'].float()
         rgeff = p.sample('rgeff', (
@@ -139,9 +172,12 @@ class ST(Image):
                     labelonehot = sparseonehot(label.flatten())
                     rim = t.sparse.mm(
                         labelonehot.t().float(),
-                        rim.permute(1, 2, 0).view(-1, rim.shape[0]),
+                        rim.permute(1, 2, 0).view(
+                            rim.shape[1] * rim.shape[2],
+                            rim.shape[0],
+                        ),
                     )
-                    rgs = t.einsum('im,mg->ig', rim[1:], rmg.exp())
+                    rgs = rim[1:] @ rmg.exp()
                     return rgs, lg.expand(len(rgs), -1)
 
                 rgs, lg = zip(*it.starmap(
@@ -175,19 +211,19 @@ class ST(Image):
                 ),
             )
 
-        for n, (_, factor_default) in self.factors.items():
-            if factor_default is None:
-                factor_default = t.zeros(num_genes)
+        for n, factor in self.factors.items():
+            if factor.profile is None:
+                factor = FactorDefault(factor.scale, t.zeros(num_genes))
             p.sample(
-                f'factor{n}',
+                _encode_factor_name(n),
                 Normal(
                     p.param(
-                        f'factor{n}_mu',
-                        factor_default.float(),
+                        f'{_encode_factor_name(n)}_mu',
+                        factor.profile.float(),
                     ).to(find_device(x)),
                     p.param(
-                        f'factor{n}_sd',
-                        1e-2 * t.ones_like(factor_default).float(),
+                        f'{_encode_factor_name(n)}_sd',
+                        1e-2 * t.ones_like(factor.profile).float(),
                         constraint=t.distributions.constraints.positive,
                     ).to(find_device(x)),
                 ),

@@ -13,14 +13,17 @@ from ... import XFuse
 from ...utility import compare
 from ....handlers import Noop
 from ....logging import INFO, WARNING, log
-from ....session import Session, get_model
+from ....session.session import (
+    Session,
+    get_factor_expansion_strategy,
+    get_model,
+)
 from ....utility import to_device
 
 
 def purge_factors(
         xfuse: XFuse,
         data: Iterable[Any],
-        extra_factors: int = 0,
         baseline: Optional[t.Tensor] = None,
         **kwargs: Any,
 ) -> None:
@@ -28,7 +31,8 @@ def purge_factors(
 
     def _xfuse_without(n):
         reduced_xfuse = deepcopy(xfuse)
-        reduced_xfuse._XFuse__experiment_store['ST'].remove_factor(n)
+        reduced_xfuse._XFuse__experiment_store['ST'].remove_factor(
+            n, remove_params=False)
         return reduced_xfuse
 
     with Session(log_level=WARNING):
@@ -44,42 +48,29 @@ def purge_factors(
                 x, guide, xfuse.model, *reduced_models, **kwargs)
             scores = [x - full for x in reduced]
 
-            with p.poutine.trace() as tr:
-                with p.poutine.replay(trace=guide):
-                    xfuse.model(x)
-            min_activation = (
-                tr.trace.nodes['rim_raw']['fn'].mean.mean(0).min()
-                .detach().cpu()
-            )
+            return scores
 
-            return scores, min_activation
-
-        scores, min_activation = (
-            np.stack(xs).mean(0)
-            for xs in zip(*[_eval_on(to_device(x)) for x in data])
-        )
+        scores = np.stack([_eval_on(to_device(x)) for x in data]).mean(0)
 
     noncontrib = [
         n for res, n in reversed(sorted(zip(scores, ns)))
         if res >= 0
     ]
     contrib = [n for n in ns if n not in noncontrib]
+
     log(
         INFO,
         'contributing factors: %s',
-        ', '.join(map(str, contrib)) if contrib != [] else '-',
+        ', '.join(contrib) if contrib != [] else '-',
     )
     log(
         INFO,
         'non-contributing factors: %s',
-        ', '.join(map(str, noncontrib)) if noncontrib != [] else '-',
+        ', '.join(noncontrib) if noncontrib != [] else '-',
     )
-    if noncontrib == []:
-        for _ in range(extra_factors):
-            xfuse._get_experiment('ST').add_factor((min_activation, baseline))
-    else:
-        for n in noncontrib[:-extra_factors]:
-            xfuse._get_experiment('ST').remove_factor(n)
+
+    expand_factors = get_factor_expansion_strategy()
+    expand_factors(xfuse._get_experiment('ST'), contrib, noncontrib)
 
 
 class FactorPurger(Messenger):

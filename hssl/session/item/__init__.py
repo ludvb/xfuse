@@ -1,4 +1,5 @@
 from .default_device import *
+from .gene_list import *
 from .global_step import *
 from .log_file import *
 from .log_level import *

@@ -39,8 +39,18 @@ from .logging import (
     set_level,
 )
 from .model import XFuse
-from .model.experiment.st import ST, FactorPurger, purge_factors
-from .session import Session, get_global_step, get_model, get_save_path
+from .model.experiment.st import (
+    ST,
+    FactorDefault,
+    FactorPurger,
+    purge_factors,
+)
+from .session import (
+    Session,
+    get_global_step,
+    get_model,
+    get_save_path,
+)
 from .train import train as _train
 from .utility import (
     compose,
@@ -191,7 +201,7 @@ def train(
         st_experiment = ST(
             n=len(dataset),
             default_scale=count_data.mean().mean() / spot_size(dataset),
-            factors=3 * [(0., factor_baseline)],
+            factors=[FactorDefault(0., factor_baseline)],
         )
         xfuse = XFuse([st_experiment]).to(DEVICE)
         default_session = Session(
@@ -229,7 +239,6 @@ def train(
             FactorPurger(
                 dataloader,
                 frequency=100,
-                extra_factors=2,
                 baseline=factor_baseline,
             ),
         ]
