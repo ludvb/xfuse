@@ -85,7 +85,7 @@ def _with_logging(f):
     def _wrapper(*args, **kwargs):
         save_path = get_save_path()
         log_path = unique_prefix(os.path.join(save_path, 'log'))
-        with Session(log_file=log_path):
+        with Session(log_file=log_path, log_level=-100):
             log(INFO, 'this is %s %s', __package__, __version__)
             log(DEBUG, 'invoked by %s', ' '.join(sys.argv))
             f(*args, **kwargs)
@@ -96,6 +96,7 @@ def _with_logging(f):
 @click.option('-v', '--verbose', is_flag=True)
 @click.version_option()
 def cli(verbose):
+    # TODO: this has no effect; needs to be integrated with Session
     if verbose:
         set_level(DEBUG)
     else:
@@ -232,6 +233,7 @@ def train(
             stats.Latent(writer, _every(100)),
             stats.LogLikelihood(writer, _every(1)),
             stats.RMSE(writer, _every(1)),
+            stats.Scale(writer, _every(100)),
         ]
 
         contexts = [

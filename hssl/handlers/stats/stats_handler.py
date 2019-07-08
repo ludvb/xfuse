@@ -6,6 +6,7 @@ from pyro.poutine.messenger import Messenger
 
 from torch.utils.tensorboard.writer import SummaryWriter
 
+from ...logging import DEBUG, log
 from ...session import get_global_step
 
 
@@ -46,6 +47,14 @@ class StatsHandler(Messenger):
                 if name[0] != '_' if callable(attr)
         ):
             _add_writer_method(name, method)
+
+    def __enter__(self, *args, **kwargs):
+        log(DEBUG, 'activating stats tracker: %s', type(self).__name__)
+        super().__enter__(*args, **kwargs)
+
+    def __exit__(self, *args, **kwargs):
+        log(DEBUG, 'deactivating stats tracker: %s', type(self).__name__)
+        super().__exit__(*args, **kwargs)
 
     @abstractmethod
     def _handle(self, **msg) -> None:
