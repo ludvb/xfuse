@@ -183,16 +183,15 @@ def train(
         shuffle=True,
     )
 
+    factor_baseline = t.as_tensor(count_data.mean(0).values).log()
+
     if session is not None:
         default_session = load_session(session)
     else:
         st_experiment = ST(
             n=len(dataset),
             default_scale=count_data.mean().mean() / spot_size(dataset),
-            factors=[
-                (0., t.as_tensor(count_data.mean(0).values).log()),
-                (0., t.as_tensor(count_data.mean(0).values).log()),
-            ],
+            factors=3 * [(0., factor_baseline)],
         )
         xfuse = XFuse([st_experiment]).to(DEVICE)
         default_session = Session(
@@ -227,7 +226,12 @@ def train(
 
         contexts = [
             Checkpointer(frequency=checkpoint_interval),
-            FactorPurger(dataloader, frequency=100, extra_factors=1),
+            FactorPurger(
+                dataloader,
+                frequency=100,
+                extra_factors=2,
+                baseline=factor_baseline,
+            ),
         ]
 
         with ExitStack() as stack:

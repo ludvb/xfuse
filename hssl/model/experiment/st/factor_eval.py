@@ -1,6 +1,6 @@
 from copy import deepcopy
 
-from typing import Any, Iterable
+from typing import Any, Iterable, Optional
 
 import numpy as np
 
@@ -21,6 +21,7 @@ def purge_factors(
         xfuse: XFuse,
         data: Iterable[Any],
         extra_factors: int = 0,
+        baseline: Optional[t.Tensor] = None,
         **kwargs: Any,
 ) -> None:
     log(INFO, 'evaluating factors')
@@ -46,18 +47,14 @@ def purge_factors(
             with p.poutine.trace() as tr:
                 with p.poutine.replay(trace=guide):
                     xfuse.model(x)
-            mean_expression = (
-                tr.trace.nodes['rmg']['fn'].mean.mean(0)
-                .detach().cpu()
-            )
             min_activation = (
-                tr.trace.nodes['rim_raw']['fn'].mean.min()
+                tr.trace.nodes['rim_raw']['fn'].mean.mean(0).min()
                 .detach().cpu()
             )
 
-            return scores, mean_expression, min_activation
+            return scores, min_activation
 
-        scores, mean_expression, min_activation = (
+        scores, min_activation = (
             np.stack(xs).mean(0)
             for xs in zip(*[_eval_on(to_device(x)) for x in data])
         )
@@ -79,8 +76,7 @@ def purge_factors(
     )
     if noncontrib == []:
         for _ in range(extra_factors):
-            xfuse._get_experiment('ST').add_factor(
-                (min_activation, t.as_tensor(mean_expression)))
+            xfuse._get_experiment('ST').add_factor((min_activation, baseline))
     else:
         for n in noncontrib[:-extra_factors]:
             xfuse._get_experiment('ST').remove_factor(n)
