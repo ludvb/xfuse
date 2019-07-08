@@ -180,6 +180,7 @@ def train(
         dataset,
         batch_size=batch_size,
         num_workers=workers,
+        shuffle=True,
     )
 
     if session is not None:

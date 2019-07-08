@@ -6,6 +6,7 @@ import torch as t
 from torch.utils.data.dataloader import default_collate
 
 from ..dataset import Dataset
+from ...session import get_global_step
 
 
 __all__ = [
@@ -44,4 +45,15 @@ def make_dataloader(*args, **kwargs):
             k: _collate([_remove_key(v) for v in vs])
             for k, vs in it.groupby(sorted(xs, key=_sort_key), key=_sort_key)
         }
-    return t.utils.data.DataLoader(*args, collate_fn=_collate, **kwargs)
+
+    def _worker_init(n):
+        np.random.seed(np.random.get_state()[1][0] + get_global_step())
+        np.random.seed(np.random.randint(
+            np.iinfo(np.int32).max) + n)
+
+    return t.utils.data.DataLoader(
+        *args,
+        collate_fn=_collate,
+        worker_init_fn=_worker_init,
+        **kwargs,
+    )
