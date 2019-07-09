@@ -7,8 +7,8 @@ from typing import Callable, List, Optional, Set
 import torch as t
 
 from . import ST, FactorDefault
-from ....logging import DEBUG, INFO, log
-from ....session.session import _register_session_item
+from ....logging import DEBUG, log
+from ....session.session import _register_session_item, get_param_store
 from ....session.item import SessionItem
 
 
@@ -155,8 +155,7 @@ class RetractAndSplit(ExpansionStrategy):
                 if root.contributing:
                     return Split(
                         root,
-                        Leaf(experiment.add_factor(
-                            experiment.factors[root.name])),
+                        Leaf(experiment.split_factor(root.name)),
                     )
                 return root
             raise NotImplementedError()

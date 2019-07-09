@@ -13,7 +13,7 @@ from pyro.contrib.autoname import scope
 import torch as t
 
 from ..image import Image
-from ....logging import INFO, log
+from ....logging import DEBUG, INFO, log
 from ....utility import center_crop, find_device, sparseonehot
 from ....session import get_param_store
 
@@ -56,13 +56,37 @@ class ST(Image):
         if factor is None:
             factor = FactorDefault(0., None)
 
-        n = next(self.__factors_counter)
-        assert n not in self.__factors
+        new_factor = next(self.__factors_counter)
+        assert new_factor not in self.__factors
 
-        log(INFO, 'adding factor: %s', n)
-        self.__factors.setdefault(n, factor)
+        log(INFO, 'adding factor: %s', new_factor)
+        self.__factors.setdefault(new_factor, factor)
 
-        return n
+        return new_factor
+
+    def split_factor(self, factor: str):
+        new_factor = self.add_factor(self.factors[factor])
+        log(INFO, 'splitting factor: %s -> %s', factor, new_factor)
+
+        name = _encode_factor_name(factor)
+        new_name = _encode_factor_name(new_factor)
+
+        store = get_param_store()
+
+        for pname in [p for p in store.keys() if name in p]:
+            new_pname = pname.replace(name, new_name)
+            log(DEBUG, 'copying param: %s -> %s', pname, new_pname)
+            store.setdefault(
+                new_pname,
+                store[pname].clone().detach(),
+                store._constraints[pname],
+            )
+
+        for b in (self._get_factor_decoder(1, x)[-1].bias
+                  for x in (factor, new_factor)):
+            b.data -= np.log(2)
+
+        return new_factor
 
     def remove_factor(self, n, remove_params=False):
         log(INFO, 'removing factor: %s', n)
