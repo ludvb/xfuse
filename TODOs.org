@@ -60,13 +60,24 @@
 * DONE [#B] compute DKL analytically if possible
   CLOSED: [2019-04-23 Tue 15:23]
 
-* TODO [#A] add support for drawing multiple monte carlo samples
+* DONE [#A] add support for drawing multiple monte carlo samples
+  CLOSED: [2019-07-09 Tue 13:57]
 
-* TODO [#A] make priors N(0,*1*)
+* DONE [#A] make priors N(0,*1*)
+  CLOSED: [2019-07-09 Tue 13:57]
 
 * DONE [#A] deal with cuda oom more gracefully
   CLOSED: [2019-04-23 Tue 17:29]
 
 * TODO plot spatial rmse fit
 
-* TODO [#B] refactoring: separate decoder for each modality
+* DONE [#B] refactoring: separate decoder for each modality
+  CLOSED: [2019-07-09 Tue 13:58]
+
+* TODO [#B] learn priors?
+
+* TODO [#C] log factor tree from RetractAndSplit expansion strategy?
+
+* TODO [#C] allow loading sessions over http
+
+* TODO [#A] Voronoi fill expression data in inference network
