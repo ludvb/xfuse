@@ -8,7 +8,7 @@ import torch as t
 
 from . import ST, FactorDefault
 from ....logging import DEBUG, log
-from ....session.session import _register_session_item, get_param_store
+from ....session.session import _register_session_item
 from ....session.item import SessionItem
 
 
