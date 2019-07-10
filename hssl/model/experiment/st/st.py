@@ -68,7 +68,8 @@ class ST(Image):
 
     def split_factor(self, factor: str):
         new_factor = self.add_factor(self.factors[factor])
-        log(INFO, 'splitting factor: %s -> %s', factor, new_factor)
+
+        log(INFO, 'copying factor: %s -> %s', factor, new_factor)
 
         name = _encode_factor_name(factor)
         new_name = _encode_factor_name(new_factor)
