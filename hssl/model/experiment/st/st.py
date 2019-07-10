@@ -10,6 +10,8 @@ import pyro as p
 from pyro.distributions import Delta, NegativeBinomial, Normal
 from pyro.contrib.autoname import scope
 
+from scipy.ndimage.morphology import distance_transform_edt
+
 import torch as t
 
 from ..image import Image
@@ -258,7 +260,7 @@ class ST(Image):
         expression_encoder = p.module(
             'expression_encoder',
             t.nn.Sequential(
-                t.nn.Linear(1 + num_genes, 100),
+                t.nn.Linear(num_genes, 100),
                 t.nn.LeakyReLU(0.2, inplace=True),
                 t.nn.BatchNorm1d(100),
                 t.nn.Linear(100, 100),
@@ -267,13 +269,21 @@ class ST(Image):
         ).to(image)
 
         def encode(data, label):
-            missing = t.tensor([1., *[0.] * data.shape[1]]).to(data)
-            data_with_missing = t.nn.functional.pad(data, (1, 0, 1, 0))
-            data_with_missing[0] = missing
-            encoded_data = expression_encoder(data_with_missing)
-            labelonehot = sparseonehot(label.flatten(), len(encoded_data))
-            expanded = t.sparse.mm(labelonehot.float(), encoded_data)
-            return expanded.t().reshape(-1, *label.shape)
+            encdat = expression_encoder(data)
+            missing = t.tensor([1., *[0.] * encdat.shape[1]]).to(encdat)
+            encdat_with_missing = t.nn.functional.pad(encdat, (1, 0, 1, 0))
+            encdat_with_missing[0] = missing
+            labelonehot = sparseonehot(
+                label.flatten(), len(encdat_with_missing))
+            expanded = t.sparse.mm(labelonehot.float(), encdat_with_missing)
+            expanded = expanded.reshape(*label.shape, -1)
+            d1, d2 = distance_transform_edt(
+                expanded[..., 0].detach().cpu(),
+                return_distances=False,
+                return_indices=True,
+            )
+            expanded[..., 1:] = expanded[d1, d2, 1:]
+            return expanded.permute(2, 0, 1)
 
         label = (
             t.nn.functional.interpolate(
