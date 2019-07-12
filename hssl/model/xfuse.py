@@ -14,7 +14,7 @@ class XFuse(t.nn.Module):
     def __init__(
             self,
             experiments: List[Experiment],
-            latent_size=192,
+            latent_size: int,
     ):
         super().__init__()
         self.latent_size = latent_size

@@ -106,6 +106,7 @@ def cli(verbose):
 @click.command()
 @click.argument('design-file', type=click.File('rb'))
 @click.option('--learning-rate', type=float, default=2e-4)
+@click.option('--latent-size', type=int, default=32)
 @click.option('--patch-size', type=int, default=512)
 @click.option('--batch-size', type=int, default=8)
 @click.option('--workers', type=int, default=0)
@@ -132,6 +133,7 @@ def train(
         save_path,
         session,
         learning_rate,
+        latent_size,
         batch_size,
         workers,
         seed,
@@ -204,7 +206,10 @@ def train(
             default_scale=count_data.mean().mean() / spot_size(dataset),
             factors=[FactorDefault(0., factor_baseline)],
         )
-        xfuse = XFuse([st_experiment]).to(DEVICE)
+        xfuse = XFuse(
+            experiments=[st_experiment],
+            latent_size=latent_size,
+        ).to(DEVICE)
         default_session = Session(
             model=xfuse,
             optimizer=p.optim.Adam({'lr': learning_rate}),
