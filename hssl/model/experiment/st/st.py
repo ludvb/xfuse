@@ -17,7 +17,7 @@ import torch as t
 from ..image import Image
 from ....logging import DEBUG, INFO, log
 from ....utility import center_crop, find_device, sparseonehot
-from ....session import get_param_store
+from ....session import get_optimizer, get_param_store
 
 
 class FactorDefault(NamedTuple):
@@ -104,9 +104,12 @@ class ST(Image):
 
         if remove_params:
             store = get_param_store()
+            optim = get_optimizer()
             pname = _encode_factor_name(n)
-            for param in [p for p in store.keys() if pname in p]:
-                del store[param]
+            for x in [p for p in store.keys() if pname in p]:
+                param = store[x].unconstrained()
+                del store[x]
+                del optim.optim_objs[param]
 
     def _get_scale_decoder(self, in_channels):
         decoder = t.nn.Sequential(
