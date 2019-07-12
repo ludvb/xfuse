@@ -88,7 +88,7 @@ class Image(Experiment):
                 # x1
                 t.nn.Conv2d(3, self.nc, 4, 2, 1),
                 t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm2d(64),
+                t.nn.BatchNorm2d(self.nc),
                 # x2
                 t.nn.Conv2d(self.nc, 2 * self.nc, 4, 2, 1),
                 t.nn.LeakyReLU(0.2, inplace=True),
