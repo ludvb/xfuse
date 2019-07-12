@@ -105,40 +105,40 @@ def cli(verbose):
 
 @click.command()
 @click.argument('design-file', type=click.File('rb'))
-@click.option('--learning-rate', type=float, default=2e-4)
-@click.option('--latent-size', type=int, default=32)
-@click.option('--patch-size', type=int, default=512)
 @click.option('--batch-size', type=int, default=8)
-@click.option('--workers', type=int, default=0)
-@click.option('--seed', type=int)
+@click.option('--checkpoint-interval', type=int)
 @click.option('--epochs', type=int)
+@click.option('--image', 'image_interval', type=int, default=1000)
+@click.option('--latent-size', type=int, default=32)
+@click.option('--learning-rate', type=float, default=2e-4)
+@click.option(
+    '-o',
+    '--save-path',
+    type=click.Path(resolve_path=True),
+    default=f'{__package__}-{dt.now().isoformat()}',
+)
+@click.option('--patch-size', type=int, default=512)
 @click.option(
     '--restore',
     'session',
     type=click.Path(exists=True, dir_okay=False, resolve_path=True),
 )
-@click.option(
-    '-o', '--save-path',
-    type=click.Path(resolve_path=True),
-    default=f'{__package__}-{dt.now().isoformat()}',
-)
-@click.option('--checkpoint-interval', type=int)
-@click.option('--image', 'image_interval', type=int, default=1000)
-@click.option('--epochs', type=int)
+@click.option('--seed', type=int)
+@click.option('--workers', type=int, default=0)
 @_with_save_path(lambda *args, **kwargs: kwargs['save_path'])
 @_with_logging
 def train(
         design_file,
+        batch_size,
+        checkpoint_interval,
+        epochs,
+        latent_size,
+        learning_rate,
         patch_size,
         save_path,
-        session,
-        learning_rate,
-        latent_size,
-        batch_size,
-        workers,
         seed,
-        epochs,
-        checkpoint_interval,
+        session,
+        workers,
         **kwargs,
 ):
     if seed is not None:
