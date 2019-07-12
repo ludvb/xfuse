@@ -9,7 +9,8 @@ from ...utility.misc import Unpool
 
 
 class Image(Experiment):
-    def __init__(self, nc=8):
+    def __init__(self, *args, nc=8, **kwargs):
+        super().__init__(*args, **kwargs)
         self.nc = nc
 
     @property
