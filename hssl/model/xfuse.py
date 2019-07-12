@@ -71,20 +71,22 @@ class XFuse(t.nn.Module):
             z_mu = p.module(
                 'z_mu',
                 t.nn.Sequential(
-                    t.nn.Conv2d(preencoded.shape[1], 256, 3, 1, 1),
+                    t.nn.Conv2d(
+                        preencoded.shape[1], self.latent_size, 5, 1, 2),
                     t.nn.LeakyReLU(0.2, inplace=True),
-                    t.nn.BatchNorm2d(256),
-                    t.nn.Conv2d(256, self.latent_size, 3, 1, 1),
+                    t.nn.BatchNorm2d(self.latent_size),
+                    t.nn.Conv2d(self.latent_size, self.latent_size, 5, 1, 2),
                 ),
                 update_module_params=True,
             ).to(preencoded)
             z_sd = p.module(
                 'z_sd',
                 t.nn.Sequential(
-                    t.nn.Conv2d(preencoded.shape[1], 256, 3, 1, 1),
+                    t.nn.Conv2d(
+                        preencoded.shape[1], self.latent_size, 5, 1, 2),
                     t.nn.LeakyReLU(0.2, inplace=True),
-                    t.nn.BatchNorm2d(256),
-                    t.nn.Conv2d(256, self.latent_size, 3, 1, 1),
+                    t.nn.BatchNorm2d(self.latent_size),
+                    t.nn.Conv2d(self.latent_size, self.latent_size, 5, 1, 2),
                     t.nn.Softplus(),
                 ),
                 update_module_params=True,

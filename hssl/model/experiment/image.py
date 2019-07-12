@@ -9,6 +9,9 @@ from ...utility.misc import Unpool
 
 
 class Image(Experiment):
+    def __init__(self, nc=8):
+        self.nc = nc
+
     @property
     def tag(self):
         return 'image'
@@ -17,26 +20,26 @@ class Image(Experiment):
         decoder = p.module(
             'img_decoder',
             t.nn.Sequential(
-                t.nn.Conv2d(z.shape[1], 512, 5, padding=5),
+                t.nn.Conv2d(z.shape[1], 16 * self.nc, 5, padding=5),
                 # x16
                 t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm2d(512),
-                Unpool(512, 256, 5),
+                t.nn.BatchNorm2d(16 * self.nc),
+                Unpool(16 * self.nc, 8 * self.nc, 5),
                 # x8
                 t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm2d(256),
-                Unpool(256, 128, 5),
+                t.nn.BatchNorm2d(8 * self.nc),
+                Unpool(8 * self.nc, 4 * self.nc, 5),
                 # x4
                 t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm2d(128),
-                Unpool(128, 64, 5),
+                t.nn.BatchNorm2d(4 * self.nc),
+                Unpool(4 * self.nc, 2 * self.nc, 5),
                 # x2
                 t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm2d(64),
-                Unpool(64, 32, 5),
+                t.nn.BatchNorm2d(2 * self.nc),
+                Unpool(2 * self.nc, self.nc, 5),
                 # x1
                 t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm2d(32),
+                t.nn.BatchNorm2d(self.nc),
             ),
             update_module_params=True,
         ).to(z)
@@ -46,10 +49,10 @@ class Image(Experiment):
         img_mu = p.module(
             'img_mu',
             t.nn.Sequential(
-                t.nn.Conv2d(32, 16, 3, 1, 1),
+                t.nn.Conv2d(self.nc, self.nc, 3, 1, 1),
                 t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm2d(16),
-                t.nn.Conv2d(16, 3, 3, 1, 1),
+                t.nn.BatchNorm2d(self.nc),
+                t.nn.Conv2d(self.nc, 3, 3, 1, 1),
                 t.nn.Tanh(),
             ),
             update_module_params=True,
@@ -57,10 +60,10 @@ class Image(Experiment):
         img_sd = p.module(
             'img_sd',
             t.nn.Sequential(
-                t.nn.Conv2d(32, 16, 3, 1, 1),
+                t.nn.Conv2d(self.nc, self.nc, 3, 1, 1),
                 t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm2d(16),
-                t.nn.Conv2d(16, 3, 3, 1, 1),
+                t.nn.BatchNorm2d(self.nc),
+                t.nn.Conv2d(self.nc, 3, 3, 1, 1),
                 t.nn.Softplus(),
             ),
             update_module_params=True,
@@ -82,21 +85,21 @@ class Image(Experiment):
             'img_encoder',
             t.nn.Sequential(
                 # x1
-                t.nn.Conv2d(3, 64, 4, 2, 1),
+                t.nn.Conv2d(3, self.nc, 4, 2, 1),
                 t.nn.LeakyReLU(0.2, inplace=True),
                 t.nn.BatchNorm2d(64),
                 # x2
-                t.nn.Conv2d(64, 128, 4, 2, 1),
+                t.nn.Conv2d(self.nc, 2 * self.nc, 4, 2, 1),
                 t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm2d(128),
+                t.nn.BatchNorm2d(2 * self.nc),
                 # x4
-                t.nn.Conv2d(128, 256, 4, 2, 1),
+                t.nn.Conv2d(2 * self.nc, 4 * self.nc, 4, 2, 1),
                 t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm2d(256),
+                t.nn.BatchNorm2d(4 * self.nc),
                 # x8
-                t.nn.Conv2d(256, 512, 4, 2, 1),
+                t.nn.Conv2d(4 * self.nc, 8 * self.nc, 4, 2, 1),
                 t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm2d(512),
+                t.nn.BatchNorm2d(8 * self.nc),
                 # x16
             ),
             update_module_params=True,
