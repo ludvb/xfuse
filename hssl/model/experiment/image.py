@@ -1,3 +1,7 @@
+from functools import reduce
+
+from operator import add
+
 import pyro as p
 from pyro.distributions import Normal
 
@@ -9,8 +13,9 @@ from ...utility.misc import Unpool
 
 
 class Image(Experiment):
-    def __init__(self, *args, nc=8, **kwargs):
+    def __init__(self, *args, depth=4, nc=8, **kwargs):
         super().__init__(*args, **kwargs)
+        self.depth = depth
         self.nc = nc
 
     @property
@@ -18,29 +23,21 @@ class Image(Experiment):
         return 'image'
 
     def _decode(self, z):
+        ncs = [
+            z.shape[1],
+            *[2 ** i * self.nc for i in reversed(range(self.depth))],
+        ]
         decoder = p.module(
             'img_decoder',
             t.nn.Sequential(
-                t.nn.Conv2d(z.shape[1], 16 * self.nc, 5, padding=5),
-                # x16
-                t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm2d(16 * self.nc),
-                Unpool(16 * self.nc, 8 * self.nc, 5),
-                # x8
-                t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm2d(8 * self.nc),
-                Unpool(8 * self.nc, 4 * self.nc, 5),
-                # x4
-                t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm2d(4 * self.nc),
-                Unpool(4 * self.nc, 2 * self.nc, 5),
-                # x2
-                t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm2d(2 * self.nc),
-                Unpool(2 * self.nc, self.nc, 5),
-                # x1
-                t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm2d(self.nc),
+                *reduce(add, [
+                    [
+                        Unpool(in_nc, out_nc, 5),
+                        t.nn.LeakyReLU(0.2, inplace=True),
+                        t.nn.BatchNorm2d(out_nc),
+                    ]
+                    for in_nc, out_nc in zip(ncs, ncs[1:])
+                ]),
             ),
             update_module_params=True,
         ).to(z)
@@ -82,26 +79,27 @@ class Image(Experiment):
             return self._sample_image(x, decoded)
 
     def guide(self, x):
+        ncs = [
+            3,
+            *[2 ** i * self.nc for i in range(1, self.depth + 1)],
+        ]
         encoder = p.module(
             'img_encoder',
             t.nn.Sequential(
-                # x1
-                t.nn.Conv2d(3, self.nc, 4, 2, 1),
+                *reduce(add, [
+                    [
+                        t.nn.Conv2d(in_nc, out_nc, 4, 2, 1),
+                        t.nn.LeakyReLU(0.2, inplace=True),
+                        t.nn.BatchNorm2d(out_nc),
+                    ]
+                    for in_nc, out_nc in zip(ncs, ncs[1:])
+                ]),
+                t.nn.Conv2d(ncs[-1], ncs[-1], 7, 1, 3),
                 t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm2d(self.nc),
-                # x2
-                t.nn.Conv2d(self.nc, 2 * self.nc, 4, 2, 1),
+                t.nn.BatchNorm2d(ncs[-1]),
+                t.nn.Conv2d(ncs[-1], ncs[-1], 7, 1, 3),
                 t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm2d(2 * self.nc),
-                # x4
-                t.nn.Conv2d(2 * self.nc, 4 * self.nc, 4, 2, 1),
-                t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm2d(4 * self.nc),
-                # x8
-                t.nn.Conv2d(4 * self.nc, 8 * self.nc, 4, 2, 1),
-                t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm2d(8 * self.nc),
-                # x16
+                t.nn.BatchNorm2d(ncs[-1]),
             ),
             update_module_params=True,
         ).to(x['image'])
