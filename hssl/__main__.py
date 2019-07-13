@@ -40,6 +40,7 @@ from .logging import (
 from .model import XFuse
 from .model.experiment.st import (
     ST,
+    ExtraBaselines,
     FactorDefault,
     FactorPurger,
     purge_factors,
@@ -234,7 +235,13 @@ def train(
             Checkpointer(frequency=checkpoint_interval),
             FactorPurger(
                 dataloader,
-                frequency=100,
+                frequency=lambda e: (
+                    e % 100 == 0
+                    and (
+                        epochs is None
+                        or e <= epochs - 100
+                    )
+                ),
                 baseline=factor_baseline,
             ),
         ]
@@ -247,7 +254,8 @@ def train(
 
             run_training(dataloader, epochs)
 
-        purge_factors(get_model(), dataloader, num_samples=10)
+        with Session(factor_expansion_strategy=ExtraBaselines(0)):
+            purge_factors(get_model(), dataloader, num_samples=10)
 
         with Session(panic=Unset):
             save_session(f'final')

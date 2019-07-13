@@ -1,6 +1,6 @@
 from copy import deepcopy
 
-from typing import Any, Iterable, Optional
+from typing import Any, Callable, Iterable, Optional, Union
 
 import numpy as np
 
@@ -89,11 +89,14 @@ class FactorPurger(Messenger):
     def __init__(
             self,
             data: Iterable[Any],
-            frequency: int = 1,
+            frequency: Union[int, Callable[[int], bool]] = 1,
             **kwargs: Any,
     ):
         self._data = data
-        self._freq = frequency
+        self._predicate = (
+            frequency if callable(frequency)
+            else lambda epoch: epoch % frequency == 0
+        )
         self._kwargs = kwargs
 
     def _handle(self, **msg) -> None:
@@ -103,6 +106,6 @@ class FactorPurger(Messenger):
         return False
 
     def _pyro_post_epoch(self, msg) -> None:
-        if msg['kwargs']['epoch'] % self._freq == 0:
+        if self._predicate(msg['kwargs']['epoch']):
             with Session(pyro_stack=[]):
                 purge_factors(self._model, self._data, **self._kwargs)
