@@ -243,7 +243,7 @@ def train(
 
         purge_factors(get_model(), dataloader, num_samples=10)
 
-        with Session(log_file=Unset, panic=Unset, save_path=Unset):
+        with Session(panic=Unset):
             save_session(f'final')
 
 
