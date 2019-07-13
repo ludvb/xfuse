@@ -51,7 +51,8 @@ class ExtraBaselines(ExpansionStrategy):
 
         for _ in range(self.extra_factors - len(noncontributing_factors)):
             experiment.add_factor(FactorDefault(scale, default))
-        for n in noncontributing_factors[:-self.extra_factors]:
+        for n in noncontributing_factors[
+                :len(noncontributing_factors) - self.extra_factors]:
             experiment.remove_factor(n, remove_params=False)
 
 
