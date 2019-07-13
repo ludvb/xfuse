@@ -1,5 +1,7 @@
 from logging import StreamHandler
 
+import os
+
 from typing import Optional
 
 from .session_item import SessionItem
@@ -20,6 +22,7 @@ def _setter(path: Optional[str]):
         _FILE_STREAM = None
     if path is not None:
         log(DEBUG, 'opening log file stream: %s', path)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
         _FILE_STREAM = open(path, 'a')
         _LOG_HANDLER = StreamHandler(_FILE_STREAM)
         _LOG_HANDLER.setFormatter(Formatter(fancy_formatting=False))

@@ -9,6 +9,7 @@ from ..logging import DEBUG, ERROR, LOGGER, WARNING, log
 
 __all__ = [
     'Session',
+    'Unset',
     'get_session',
 ]
 

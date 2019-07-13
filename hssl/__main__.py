@@ -36,7 +36,6 @@ from .logging import (
     INFO,
     WARNING,
     log,
-    set_level,
 )
 from .model import XFuse
 from .model.experiment.st import (
@@ -47,60 +46,56 @@ from .model.experiment.st import (
 )
 from .session import (
     Session,
+    Unset,
+    get_default_device,
     get_global_step,
     get_model,
     get_save_path,
 )
-from .train import train as _train
+from .train import train as run_training
 from .utility import (
     compose,
     design_matrix_from,
     read_data,
     set_rng_seed,
+    with_,
 )
 from .utility.file import unique_prefix
 from .utility.session import load_session, save_session
 
 
-DEVICE = t.device('cuda' if t.cuda.is_available() else 'cpu')
+_DEFAULT_SESSION = Session()
 
 
-def _with_save_path(path):
-    def _decorator(f):
-        @wraps(f)
-        def _wrapper(*args, **kwargs):
-            _path = path(*args, **kwargs) if callable(path) else path
-            if os.path.exists(_path):
-                log(WARNING, 'save path %s already exists', _path)
-            else:
-                os.makedirs(_path)
-            with Session(save_path=_path):
-                f(*args, **kwargs)
-        return _wrapper
-    return _decorator
-
-
-def _with_logging(f):
+def _init(f):
     @wraps(f)
-    def _wrapper(*args, **kwargs):
-        save_path = get_save_path()
-        log_path = unique_prefix(os.path.join(save_path, 'log'))
-        with Session(log_file=log_path, log_level=-100):
-            log(INFO, 'this is %s %s', __package__, __version__)
-            log(DEBUG, 'invoked by %s', ' '.join(sys.argv))
-            f(*args, **kwargs)
-    return _wrapper
+    def _wrapped(*args, **kwargs):
+        log(INFO, 'this is %s %s', __package__, __version__)
+        log(DEBUG, 'invoked by %s', ' '.join(sys.argv))
+        return f(*args, **kwargs)
+    return _wrapped
 
 
 @click.group()
+@click.option('--save-path', type=str)
+@click.option('--session', type=click.Path(resolve_path=True))
 @click.option('-v', '--verbose', is_flag=True)
 @click.version_option()
-def cli(verbose):
-    # TODO: this has no effect; needs to be integrated with Session
+def cli(save_path, session, verbose):
+    if session is not None:
+        for k, v in load_session(session):
+            setattr(_DEFAULT_SESSION, k, v)
+
+    if save_path is not None:
+        _DEFAULT_SESSION.save_path = save_path
+    elif isinstance(_DEFAULT_SESSION.save_path, Unset):
+        _DEFAULT_SESSION.save_path = f'{__package__}-{dt.now().isoformat()}'
+
     if verbose:
-        set_level(DEBUG)
-    else:
-        set_level(INFO)
+        _DEFAULT_SESSION.log_level = -999
+
+    _DEFAULT_SESSION.log_file = unique_prefix(os.path.join(
+        _DEFAULT_SESSION.save_path, 'log'))
 
 
 @click.command()
@@ -111,22 +106,11 @@ def cli(verbose):
 @click.option('--image', 'image_interval', type=int, default=1000)
 @click.option('--latent-size', type=int, default=32)
 @click.option('--learning-rate', type=float, default=2e-4)
-@click.option(
-    '-o',
-    '--save-path',
-    type=click.Path(resolve_path=True),
-    default=f'{__package__}-{dt.now().isoformat()}',
-)
 @click.option('--patch-size', type=int, default=512)
-@click.option(
-    '--restore',
-    'session',
-    type=click.Path(exists=True, dir_okay=False, resolve_path=True),
-)
 @click.option('--seed', type=int)
 @click.option('--workers', type=int, default=0)
-@_with_save_path(lambda *args, **kwargs: kwargs['save_path'])
-@_with_logging
+@with_(_DEFAULT_SESSION)
+@_init
 def train(
         design_file,
         batch_size,
@@ -135,9 +119,7 @@ def train(
         latent_size,
         learning_rate,
         patch_size,
-        save_path,
         seed,
-        session,
         workers,
         **kwargs,
 ):
@@ -198,9 +180,7 @@ def train(
 
     factor_baseline = t.as_tensor(count_data.mean(0).values).log()
 
-    if session is not None:
-        default_session = load_session(session)
-    else:
+    if get_model() is None:
         st_experiment = ST(
             n=len(dataset),
             default_scale=count_data.mean().mean() / spot_size(dataset),
@@ -209,14 +189,17 @@ def train(
         xfuse = XFuse(
             experiments=[st_experiment],
             latent_size=latent_size,
-        ).to(DEVICE)
+        ).to(get_default_device())
         default_session = Session(
             model=xfuse,
             optimizer=p.optim.Adam({'lr': learning_rate}),
         )
+    else:
+        default_session = Session()
 
     def _panic(session, err_type, err, tb):
-        save_session(f'session-exception')
+        with Session(panic=Unset):
+            save_session(f'exception')
 
     with default_session, Session(panic=_panic):
         def _every(n):
@@ -226,7 +209,7 @@ def train(
                 return False
             return _predicate
 
-        writer = SummaryWriter(os.path.join(save_path, 'stats'))
+        writer = SummaryWriter(os.path.join(get_save_path(), 'stats'))
 
         stats_handlers = [
             stats.ELBO(writer, _every(1)),
@@ -256,7 +239,7 @@ def train(
             for stats_handler in stats_handlers:
                 stack.enter_context(stats_handler)
 
-            _train(dataloader, epochs)
+            run_training(dataloader, epochs)
 
         purge_factors(
             get_model(),
@@ -265,7 +248,8 @@ def train(
             num_samples=10,
         )
 
-    save_session(f'session-final')
+        with Session(log_file=Unset, panic=Unset, save_path=Unset):
+            save_session(f'final')
 
 
 cli.add_command(train)
@@ -289,8 +273,6 @@ cli.add_command(train)
     type=click.Path(resolve_path=True),
     default=f'{__package__}-{dt.now().isoformat()}',
 )
-@_with_save_path(lambda *args, **kwargs: kwargs['save_path'])
-@_with_logging
 def analyze(**_):
     pass
 

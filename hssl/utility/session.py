@@ -24,7 +24,8 @@ __all__ = [
 
 
 def save_session(filename_prefix: str) -> None:
-    path = unique_prefix(os.path.join(get_save_path(), filename_prefix))
+    path = unique_prefix(os.path.join(
+        get_save_path(), f'{filename_prefix}.session'))
     os.makedirs(os.path.dirname(path), exist_ok=True)
 
     def _can_pickle(name, x):

@@ -31,6 +31,7 @@ __all__ = [
     'find_device',
     'sparseonehot',
     'to_device',
+    'with_',
 ]
 
 
@@ -273,3 +274,13 @@ def to_device(x, device=None):
         return [to_device(y, device) for y in x]
     if isinstance(x, dict):
         return {k: to_device(v, device) for k, v in x.items()}
+
+
+def with_(ctx):
+    def _decorator(f):
+        @wraps(f)
+        def _wrapped(*args, **kwargs):
+            with ctx:
+                return f(*args, **kwargs)
+        return _wrapped
+    return _decorator
