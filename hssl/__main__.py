@@ -241,12 +241,7 @@ def train(
 
             run_training(dataloader, epochs)
 
-        purge_factors(
-            get_model(),
-            dataloader,
-            extra_factors=0,
-            num_samples=10,
-        )
+        purge_factors(get_model(), dataloader, num_samples=10)
 
         with Session(log_file=Unset, panic=Unset, save_path=Unset):
             save_session(f'final')
