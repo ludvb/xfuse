@@ -108,11 +108,28 @@ class RetractAndSplit(ExpansionStrategy):
             contributing_factors: List[str],
             noncontributing_factors: List[str],
     ) -> None:
-        a = set(contributing_factors)
-        b = set(noncontributing_factors)
+        contrib = set(contributing_factors)
+        noncontrib = set(noncontributing_factors)
 
         def _set_contributing(x: Leaf):
-            x.contributing = x.name in a
+            x.contributing = x.name in contrib
+
+        def _drop_nonexistant_branches(root: Node) -> Optional[Node]:
+            if isinstance(root, Split):
+                a = _drop_nonexistant_branches(root.a)
+                b = _drop_nonexistant_branches(root.b)
+                if a and b:
+                    return root
+                if a and not b:
+                    return a
+                if b and not a:
+                    return b
+                return None
+            if isinstance(root, Leaf):
+                if root.name in set.union(contrib, noncontrib):
+                    return root
+                return None
+            raise NotImplementedError()
 
         def _drop_noncontributing_branches(root: Node) -> Optional[Node]:
             if isinstance(root, Split):
@@ -165,6 +182,14 @@ class RetractAndSplit(ExpansionStrategy):
             for tree in self._root_nodes:
                 log(DEBUG, '  %s', _show(tree))
 
+        self._root_nodes = set([
+            tree for tree in map(
+                    _drop_nonexistant_branches,
+                    self._root_nodes,
+            )
+            if tree is not None
+        ])
+
         for tree in self._root_nodes:
             _map_modify(tree, _set_contributing)
 
@@ -180,17 +205,17 @@ class RetractAndSplit(ExpansionStrategy):
 
         _log_trees('trees after retraction / before splitting')
 
-        c = reduce(
-            lambda a, x: a.union(x),
-            map(set, (x.get_nodes() for x in self._root_nodes)),
+        forest = reduce(
+            lambda a, x: set.union(a, x),
+            (x.get_nodes() for x in self._root_nodes),
             set(),
         )
-        for x in a:
-            if x not in c:
+        for x in contrib:
+            if x not in forest:
                 log(DEBUG, 'adding new root node: %s', x)
                 self._root_nodes.add(Leaf(x, True))
-        for x in b:
-            if x not in c:
+        for x in noncontrib:
+            if x not in forest:
                 experiment.remove_factor(x, remove_params=True)
 
         self._root_nodes = set(
