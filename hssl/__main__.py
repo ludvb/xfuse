@@ -106,6 +106,8 @@ def cli(save_path, session, verbose):
 @click.option('--image', 'image_interval', type=int, default=1000)
 @click.option('--latent-size', type=int, default=32)
 @click.option('--learning-rate', type=float, default=2e-4)
+@click.option('--network-depth', type=int, default=4)
+@click.option('--network-width', type=int, default=8)
 @click.option('--patch-size', type=int, default=512)
 @click.option('--seed', type=int)
 @click.option('--workers', type=int, default=0)
@@ -118,6 +120,8 @@ def train(
         epochs,
         latent_size,
         learning_rate,
+        network_depth,
+        network_width,
         patch_size,
         seed,
         workers,
@@ -183,6 +187,8 @@ def train(
     if get_model() is None:
         st_experiment = ST(
             n=len(dataset),
+            depth=network_depth,
+            nc=network_width,
             default_scale=count_data.mean().mean() / spot_size(dataset),
             factors=[FactorDefault(0., factor_baseline)],
         )
