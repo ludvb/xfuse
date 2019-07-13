@@ -104,6 +104,7 @@ def cli(save_path, session, verbose):
 @click.option('--batch-size', type=int, default=8)
 @click.option('--checkpoint-interval', type=int)
 @click.option('--epochs', type=int)
+@click.option('--factor-eval-freq', type=int, default=100)
 @click.option('--image', 'image_interval', type=int, default=1000)
 @click.option('--latent-size', type=int, default=32)
 @click.option('--learning-rate', type=float, default=2e-4)
@@ -119,6 +120,7 @@ def train(
         batch_size,
         checkpoint_interval,
         epochs,
+        factor_eval_freq,
         latent_size,
         learning_rate,
         network_depth,
@@ -236,10 +238,10 @@ def train(
             FactorPurger(
                 dataloader,
                 frequency=lambda e: (
-                    e % 100 == 0
+                    e % factor_eval_freq == 0
                     and (
                         epochs is None
-                        or e <= epochs - 100
+                        or e <= epochs - factor_eval_freq
                     )
                 ),
                 baseline=factor_baseline,
