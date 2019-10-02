@@ -266,7 +266,6 @@ class ST(Image):
             t.nn.Sequential(
                 t.nn.Linear(num_genes, 100),
                 t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm1d(100),
                 t.nn.Linear(100, 100),
             ),
             update_module_params=True,
