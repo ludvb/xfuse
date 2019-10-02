@@ -285,7 +285,7 @@ class ST(Image):
                 return_distances=False,
                 return_indices=True,
             )
-            expanded[..., 1:] = expanded[d1, d2, 1:]
+            expanded = t.cat([expanded[..., :1], expanded[d1, d2, 1:]], -1)
             return expanded.permute(2, 0, 1)
 
         label = (
