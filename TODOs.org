@@ -82,3 +82,7 @@
 
 * DONE [#A] Voronoi fill expression data in inference network
   CLOSED: [2019-07-10 Wed 20:28]
+
+* TODO [#A] dynamic batch sizes
+
+* TODO embed tile in background if image is too small?
