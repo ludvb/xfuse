@@ -23,13 +23,16 @@ class Image(Experiment):
         return 'image'
 
     def _decode(self, z):
-        ncs = [
-            z.shape[1],
-            *[2 ** i * self.nc for i in reversed(range(self.depth))],
-        ]
+        ncs = [2 ** i * self.nc for i in reversed(range(self.depth + 1))]
         decoder = p.module(
             'img_decoder',
             t.nn.Sequential(
+                t.nn.Conv2d(z.shape[1], ncs[0], 5, padding=5),
+                t.nn.LeakyReLU(0.2, inplace=True),
+                t.nn.BatchNorm2d(ncs[0]),
+                t.nn.Conv2d(ncs[0], ncs[0], 7, padding=3),
+                t.nn.LeakyReLU(0.2, inplace=True),
+                t.nn.BatchNorm2d(ncs[0]),
                 *reduce(add, [
                     [
                         Unpool(in_nc, out_nc, 5),
