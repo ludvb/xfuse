@@ -1,6 +1,8 @@
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 
 from functools import reduce
+
+from inspect import isabstract, isclass
 
 from typing import Callable, List, Optional, Set
 
@@ -12,7 +14,7 @@ from ....session.session import _register_session_item
 from ....session.item import SessionItem
 
 
-class ExpansionStrategy:
+class ExpansionStrategy(ABC):
     @abstractmethod
     def __call__(
             self,
@@ -24,7 +26,7 @@ class ExpansionStrategy:
 
 
 class ExtraBaselines(ExpansionStrategy):
-    def __init__(self, extra_factors: int):
+    def __init__(self, extra_factors: int = 1):
         self.extra_factors = extra_factors
 
     def __call__(
@@ -237,3 +239,12 @@ _factor_expansion_strategy = SessionItem(
 
 _register_session_item(
     'factor_expansion_strategy', _factor_expansion_strategy)
+
+
+STRATEGIES = {
+    x.__name__: x
+    for x in locals().values()
+    if isclass(x)
+    if issubclass(x, ExpansionStrategy)
+    if not isabstract(x)
+}

@@ -6,7 +6,8 @@ from datetime import datetime as dt
 
 from functools import wraps
 
-from inspect import getargs
+import inspect
+from inspect import getargs, signature
 
 import itertools as it
 
@@ -44,6 +45,7 @@ from .model.experiment.st import (
     FactorDefault,
     FactorPurger,
     purge_factors,
+    STRATEGIES as expansion_strategies,
 )
 from .session import (
     Session,
@@ -104,6 +106,11 @@ def cli(save_path, session, verbose):
 @click.option('--batch-size', type=int, default=8)
 @click.option('--checkpoint-interval', type=int)
 @click.option('--epochs', type=int)
+@click.option(
+    '--expansion-strategy',
+    type=click.Choice([*expansion_strategies.keys()]),
+)
+@click.option('--expansion-strategy-arg', multiple=True)
 @click.option('--factor-eval-freq', type=int, default=100)
 @click.option('--image', 'image_interval', type=int, default=1000)
 @click.option('--latent-size', type=int, default=32)
@@ -120,6 +127,8 @@ def train(
         batch_size,
         checkpoint_interval,
         epochs,
+        expansion_strategy,
+        expansion_strategy_arg,
         factor_eval_freq,
         latent_size,
         learning_rate,
@@ -247,6 +256,20 @@ def train(
                 baseline=factor_baseline,
             ),
         ]
+
+        if expansion_strategy is not None:
+            expansion_strategy = expansion_strategies[expansion_strategy]
+            args = [
+                x
+                if p.annotation is inspect._empty else
+                p.annotation(x)
+                for p, x in zip(
+                    signature(expansion_strategy).parameters.values(),
+                    expansion_strategy_arg,
+                )
+            ]
+            contexts.append(Session(
+                factor_expansion_strategy=expansion_strategy(*args)))
 
         with ExitStack() as stack:
             for context in contexts:
