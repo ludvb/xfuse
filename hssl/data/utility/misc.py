@@ -17,7 +17,7 @@ __all__ = [
 
 def spot_size(dataset: Dataset):
     return np.median(np.concatenate([
-        np.bincount(d['label'].flatten())
+        np.bincount(d['label'].flatten())[1:]
         for d in dataset
     ]))
 
