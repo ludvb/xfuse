@@ -234,8 +234,7 @@ def _setter(x):
 
 
 _factor_expansion_strategy = SessionItem(
-    #setter=_setter, default=ExtraBaselines(extra_factors=2))
-    setter=_setter, default=RetractAndSplit())
+    setter=_setter, default=ExtraBaselines(extra_factors=1))
 
 _register_session_item(
     'factor_expansion_strategy', _factor_expansion_strategy)
