@@ -27,7 +27,6 @@ __all__ = [
     'compose',
     'zip_dicts',
     'set_rng_seed',
-    'collect_items',
     'center_crop',
     'read_data',
     'design_matrix_from',
@@ -77,16 +76,6 @@ def set_rng_seed(seed: int):
         'numpy rng seeded with %d',
         'torch rng seeded with %d',
     ]), seed, n_seed, t_seed)
-
-
-def collect_items(d):
-    d_ = {}
-    for k, v in d.items():
-        try:
-            d_[k] = v.item()
-        except (ValueError, AttributeError):
-            pass
-    return d_
 
 
 def center_crop(input, target_shape):
@@ -142,14 +131,15 @@ def read_data(
             f' {", ".join(parse_dict.keys())})'
         )
 
-    ks, vs = zip(*[(p, _load_file(p)) for p in paths])
+    ks, xs = zip(*[(p, _load_file(p)) for p in paths])
     data = (
         pd.concat(
-            vs,
+            xs,
             keys=ks,
             join='outer',
             axis=0,
             sort=False,
+            copy=False,
         )
         .fillna(0.)
     )

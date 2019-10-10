@@ -1,4 +1,4 @@
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 
 from typing import Callable, Optional
 
@@ -7,10 +7,10 @@ from pyro.poutine.messenger import Messenger
 from torch.utils.tensorboard.writer import SummaryWriter
 
 from ...logging import DEBUG, log
-from ...session import get_global_step
+from ...session import get_global_step  # pylint: disable=no-name-in-module
 
 
-class StatsHandler(Messenger):
+class StatsHandler(ABC, Messenger):
     def __init__(
             self,
             writer: SummaryWriter,
@@ -18,6 +18,8 @@ class StatsHandler(Messenger):
     ):
         from functools import wraps
         import inspect
+
+        super().__init__()
 
         if predicate is None:
             predicate = lambda **_: True
@@ -34,7 +36,7 @@ class StatsHandler(Messenger):
                         *args, global_step=int(get_global_step()), **kwargs)
                     if "global_step" in inspect.signature(method).parameters
                     else
-                    lambda *args, **kwargs: method(*args, **kwargs)
+                    method
                 ),
             )
 
@@ -49,10 +51,12 @@ class StatsHandler(Messenger):
             _add_writer_method(name, method)
 
     def __enter__(self, *args, **kwargs):
+        # pylint: disable=arguments-differ
         log(DEBUG, 'activating stats tracker: %s', type(self).__name__)
         super().__enter__(*args, **kwargs)
 
     def __exit__(self, *args, **kwargs):
+        # pylint: disable=arguments-differ
         log(DEBUG, 'deactivating stats tracker: %s', type(self).__name__)
         super().__exit__(*args, **kwargs)
 

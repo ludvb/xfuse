@@ -143,8 +143,10 @@ def train(
         patch_size,
         seed,
         workers,
-        **kwargs,
+        **_kwargs,
 ):
+    # pylint: disable=too-many-arguments
+
     if seed is not None:
         set_rng_seed(seed)
 
@@ -157,22 +159,22 @@ def train(
     design = pd.read_csv(design_file)
     design_dir = os.path.dirname(design_file.name)
 
-    def _path(p):
+    def _get_path(path):
         return (
-            p
-            if os.path.isabs(p) else
-            os.path.join(design_dir, p)
+            path
+            if os.path.isabs(path) else
+            os.path.join(design_dir, path)
         )
 
-    count_data = read_data(map(_path, design.data))
+    count_data = read_data(map(_get_path, design.data))
 
     design_matrix = design_matrix_from(design[[
         x for x in design.columns
         if x not in [
-                'name',
-                'image',
-                'labels',
-                'data',
+            'name',
+            'image',
+            'labels',
+            'data',
         ]
     ]])
 
