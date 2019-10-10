@@ -82,9 +82,9 @@ def _init(f):
 @click.group()
 @click.option('--save-path', type=str)
 @click.option('--session', type=click.Path(resolve_path=True))
-@click.option('-v', '--verbose', is_flag=True)
+@click.option('--debug', is_flag=True)
 @click.version_option()
-def cli(save_path, session, verbose):
+def cli(save_path, session, debug):
     if session is not None:
         for k, v in load_session(session):
             setattr(_DEFAULT_SESSION, k, v)
@@ -94,7 +94,11 @@ def cli(save_path, session, verbose):
     elif isinstance(_DEFAULT_SESSION.save_path, Unset):
         _DEFAULT_SESSION.save_path = f'{__package__}-{dt.now().isoformat()}'
 
-    if verbose:
+    if debug:
+        def _panic(_s, _err_type, _err, tb):
+            import ipdb
+            ipdb.post_mortem(tb)
+        _DEFAULT_SESSION.panic = _panic
         _DEFAULT_SESSION.log_level = -999
 
     _DEFAULT_SESSION.log_file = unique_prefix(os.path.join(
