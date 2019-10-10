@@ -85,4 +85,12 @@
 
 * TODO [#A] dynamic batch sizes
 
-* TODO embed tile in background if image is too small?
+* TODO [#B] embed tile in background if image is too small?
+
+* TODO [#C] add cli commands for data preprocessing (and generally improve the experience...)
+
+* TODO [#C] add usage guide
+
+* TODO [#A] "arbitrary precision" posteriors
+  - normalizing flows?
+  - hmc?
