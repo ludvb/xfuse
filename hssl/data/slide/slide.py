@@ -5,8 +5,6 @@ from torch.utils.data import Dataset
 
 import numpy as np
 
-import pandas as pd
-
 from pyvips import Image
 
 from scipy.ndimage.morphology import binary_fill_holes
@@ -15,13 +13,19 @@ from scipy.ndimage.morphology import binary_fill_holes
 class Slide(Dataset):
     def __init__(
             self,
-            data: pd.DataFrame,
+            data: t.Tensor,
             image: Image,
             label: Image,
     ):
         self.image = image
         self.label = label
-        self.data = t.tensor(data.values).float()
+        self.data = data
+
+        # FIXME: torch sparse tensors don't support indexing. this can be
+        # removed once https://github.com/pytorch/pytorch/pull/24937 has been
+        # merged
+        if self.data.layout is not t.strided:
+            self.data = self.data.to_dense()
 
         self.h, self.w = self.image.height, self.image.width
 

@@ -17,6 +17,8 @@ import sys
 
 import click
 
+import numpy as np
+
 import pandas as pd
 
 from pyvips import Image
@@ -177,15 +179,23 @@ def train(
     dataset = Dataset(
         [
             RandomSlide(
-                data=counts,
-                image=Image.new_from_file(_path(image)),
-                label=Image.new_from_file(_path(labels)),
+                data=t.sparse.FloatTensor(
+                    t.as_tensor(
+                        np.stack([counts.row, counts.col]), dtype=t.long),
+                    t.as_tensor(counts.data),
+                    counts.shape,
+                ),
+                image=Image.new_from_file(_get_path(image)),
+                label=Image.new_from_file(_get_path(labels)),
                 patch_size=patch_size,
             )
             for image, labels, counts in zip(
                 design.image,
                 design.labels,
-                (count_data.loc[x] for x in count_data.index.levels[0]),
+                (
+                    count_data.loc[x].sparse.to_coo()
+                    for x in count_data.index.levels[0]
+                ),
             )
         ],
         design_matrix,

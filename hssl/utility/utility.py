@@ -1,19 +1,26 @@
-from functools import wraps
+from functools import partial, wraps
 
 import itertools as it
+
+import re
 
 import signal
 
 from typing import List, Optional, Set, Tuple
 
+import h5py
+
 import numpy as np
 
 import pandas as pd
+
+import scipy.sparse as ss
 
 import torch as t
 
 from ..logging import INFO, log
 from ..session import get_default_device
+from ..utility.file import extension
 
 
 __all__ = [
@@ -97,9 +104,43 @@ def read_data(
         num_genes: int = None,
         genes: List[str] = None,
 ) -> pd.DataFrame:
-    def _load_file(p):
-        log(INFO, 'loading data file %s', p)
-        return pd.read_csv(p, index_col=0, dtype=float)
+    def _load_file(path: str) -> pd.DataFrame:
+        def _csv(sep):
+            return (
+                pd.read_csv(path, sep=sep, index_col=0)
+                .astype(pd.SparseDtype(np.float32, 0))
+            )
+
+        def _h5():
+            with h5py.File(path, 'r') as data:
+                spmatrix = ss.csr_matrix((
+                    data['matrix']['data'],
+                    data['matrix']['indices'],
+                    data['matrix']['indptr'],
+                ))
+                return pd.DataFrame.sparse.from_spmatrix(
+                    spmatrix.astype(np.float32),
+                    columns=data['matrix']['columns'],
+                    index=pd.Index(data['matrix']['index'], name='n'),
+                )
+
+        parse_dict = {
+            r'csv(:?\.(gz|bz2))$':  partial(_csv, sep=','),
+            r'tsv(:?\.(gz|bz2))$':  partial(_csv, sep='\t'),
+            r'hdf(:?5)$':           _h5,
+            r'he5$':                _h5,
+            r'h5$':                 _h5,
+        }
+
+        log(INFO, 'loading data file %s', path)
+        for pattern, parser in parse_dict.items():
+            if re.match(pattern, extension(path)) is not None:
+                return parser()
+        raise NotImplementedError(
+            f'no parser for file {path}'
+            f' (supported file extension patterns:'
+            f' {", ".join(parse_dict.keys())})'
+        )
 
     ks, vs = zip(*[(p, _load_file(p)) for p in paths])
     data = (
@@ -110,7 +151,7 @@ def read_data(
             axis=0,
             sort=False,
         )
-        .fillna(0)
+        .fillna(0.)
     )
 
     data = data.iloc[:, (data.sum(0) > 0).values]
