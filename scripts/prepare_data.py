@@ -69,10 +69,13 @@ def run(image, counts, spots):
             pd.DataFrame(
                 [[1, *np.repeat(0, counts.shape[1] - 1)]],
                 columns=counts.columns,
-            ),
+            )
+            .astype(pd.SparseDtype('float', 0)),
             counts,
         ]
     )
+    if counts.columns.duplicated().any():
+        counts = counts.sum(axis=1, level=0)
     label[np.invert(mask).astype(bool)] = 1
 
     return counts, image, label
@@ -156,11 +159,26 @@ def main():
     counts, image, label = run(image, counts, spots)
 
     print('writing counts...')
-    counts.to_csv(
-        os.path.join(output_directory, 'data.csv.gz'),
-        sep=',',
-        index=False,
-    )
+    with h5py.file(os.path.join(opts.output_directory, 'data.h5'), 'w') as f:
+        counts_reindexed = counts.set_index('n')
+        data = counts_reindexed.sparse.to_coo().tocsr()
+        f.create_dataset(
+            'matrix/data',
+            data.data.shape, float, data.data.astype(float))
+        f.create_dataset(
+            'matrix/indices',
+            data.indices.shape, data.indices.dtype, data.indices)
+        f.create_dataset(
+            'matrix/indptr',
+            data.indptr.shape, data.indptr.dtype, data.indptr)
+        f.create_dataset(
+            'matrix/columns',
+            counts_reindexed.columns.shape, h5py.string_dtype(),
+            counts_reindexed.columns.values)
+        f.create_dataset(
+            'matrix/index',
+            counts_reindexed.index.shape, int,
+            counts_reindexed.index.values.astype(int))
 
     print('writing image...')
     imwrite(
