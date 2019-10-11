@@ -1,4 +1,4 @@
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 
 import torch as t
 from torch.utils.data import Dataset
@@ -10,13 +10,8 @@ from pyvips import Image
 from scipy.ndimage.morphology import binary_fill_holes
 
 
-class Slide(Dataset):
-    def __init__(
-            self,
-            data: t.Tensor,
-            image: Image,
-            label: Image,
-    ):
+class Slide(ABC, Dataset):
+    def __init__(self, data: t.Tensor, image: Image, label: Image):
         self.image = image
         self.label = label
         self.data = data
@@ -29,7 +24,7 @@ class Slide(Dataset):
 
         self.h, self.w = self.image.height, self.image.width
 
-        assert(self.h == self.label.height and self.w == self.label.width)
+        assert self.h == self.label.height and self.w == self.label.width
 
     @abstractmethod
     def _get_patch(self, idx: int):
@@ -55,5 +50,5 @@ class Slide(Dataset):
             image=t.tensor(image / 255 * 2 - 1).permute(2, 0, 1).float(),
             label=t.tensor(label).long(),
             data=data,
-            type='ST',
+            type="ST",
         )

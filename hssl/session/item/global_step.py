@@ -10,7 +10,7 @@ class GlobalStep:
         return self
 
     def __str__(self):
-        return f'GlobalStep({str(self.value)})'
+        return f"GlobalStep({str(self.value)})"
 
     def __int__(self):
         return self.value

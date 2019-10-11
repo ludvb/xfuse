@@ -21,9 +21,9 @@ def _setter(path: Optional[str]):
         _FILE_STREAM.close()
         _FILE_STREAM = None
     if path is not None:
-        log(DEBUG, 'opening log file stream: %s', path)
+        log(DEBUG, "opening log file stream: %s", path)
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        _FILE_STREAM = open(path, 'a')
+        _FILE_STREAM = open(path, "a")
         _LOG_HANDLER = StreamHandler(_FILE_STREAM)
         _LOG_HANDLER.setFormatter(Formatter(fancy_formatting=False))
         LOGGER.addHandler(_LOG_HANDLER)

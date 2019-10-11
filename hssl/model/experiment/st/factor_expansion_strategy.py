@@ -17,10 +17,10 @@ from ....session.item import SessionItem
 class ExpansionStrategy(ABC):
     @abstractmethod
     def __call__(
-            self,
-            experiment: ST,
-            contributing_factors: List[str],
-            noncontributing_factors: List[str],
+        self,
+        experiment: ST,
+        contributing_factors: List[str],
+        noncontributing_factors: List[str],
     ) -> None:
         pass
 
@@ -30,10 +30,10 @@ class ExtraBaselines(ExpansionStrategy):
         self.extra_factors = extra_factors
 
     def __call__(
-            self,
-            experiment: ST,
-            contributing_factors: List[str],
-            noncontributing_factors: List[str],
+        self,
+        experiment: ST,
+        contributing_factors: List[str],
+        noncontributing_factors: List[str],
     ) -> None:
         defaults = [
             factor.profile
@@ -54,7 +54,8 @@ class ExtraBaselines(ExpansionStrategy):
         for _ in range(self.extra_factors - len(noncontributing_factors)):
             experiment.add_factor(FactorDefault(scale, default))
         for n in noncontributing_factors[
-                :len(noncontributing_factors) - self.extra_factors]:
+            : len(noncontributing_factors) - self.extra_factors
+        ]:
             experiment.remove_factor(n, remove_params=False)
 
 
@@ -95,9 +96,9 @@ def _map_modify(root: Node, fn: Callable[[Leaf], None]):
 
 def _show(root: Node) -> str:
     if isinstance(root, Split):
-        return f'({_show(root.a)}), ({_show(root.b)})'
+        return f"({_show(root.a)}), ({_show(root.b)})"
     if isinstance(root, Leaf):
-        return f'{root.name}: {root.contributing}'
+        return f"{root.name}: {root.contributing}"
     raise NotImplementedError()
 
 
@@ -106,10 +107,10 @@ class RetractAndSplit(ExpansionStrategy):
         self._root_nodes: Set[Node] = set()
 
     def __call__(
-            self,
-            experiment: ST,
-            contributing_factors: List[str],
-            noncontributing_factors: List[str],
+        self,
+        experiment: ST,
+        contributing_factors: List[str],
+        noncontributing_factors: List[str],
     ) -> None:
         contrib = set(contributing_factors)
         noncontrib = set(noncontributing_factors)
@@ -138,13 +139,10 @@ class RetractAndSplit(ExpansionStrategy):
             if isinstance(root, Split):
                 a = _drop_noncontributing_branches(root.a)
                 b = _drop_noncontributing_branches(root.b)
-                if (
-                        (a and b)
-                        or (
-                            isinstance(root.a, Leaf)
-                            and isinstance(root.b, Leaf)
-                            and (a or b)
-                        )
+                if (a and b) or (
+                    isinstance(root.a, Leaf)
+                    and isinstance(root.b, Leaf)
+                    and (a or b)
                 ):
                     return Split(a or root.a, b or root.b)
                 if a and not b:
@@ -161,10 +159,8 @@ class RetractAndSplit(ExpansionStrategy):
 
         def _extend_contributing_branches(root: Node) -> Node:
             if isinstance(root, Split):
-                if (
-                        (not isinstance(root.a, Leaf) or root.a.contributing)
-                        and
-                        (not isinstance(root.b, Leaf) or root.b.contributing)
+                if (not isinstance(root.a, Leaf) or root.a.contributing) and (
+                    not isinstance(root.b, Leaf) or root.b.contributing
                 ):
                     return Split(
                         _extend_contributing_branches(root.a),
@@ -174,39 +170,40 @@ class RetractAndSplit(ExpansionStrategy):
             if isinstance(root, Leaf):
                 if root.contributing:
                     return Split(
-                        root,
-                        Leaf(experiment.split_factor(root.name)),
+                        root, Leaf(experiment.split_factor(root.name))
                     )
                 return root
             raise NotImplementedError()
 
         def _log_trees(title: str):
-            log(DEBUG, '%s:', title)
+            log(DEBUG, "%s:", title)
             for tree in self._root_nodes:
-                log(DEBUG, '  %s', _show(tree))
+                log(DEBUG, "  %s", _show(tree))
 
-        self._root_nodes = set([
-            tree for tree in map(
-                    _drop_nonexistant_branches,
-                    self._root_nodes,
-            )
-            if tree is not None
-        ])
+        self._root_nodes = set(
+            [
+                tree
+                for tree in map(_drop_nonexistant_branches, self._root_nodes)
+                if tree is not None
+            ]
+        )
 
         for tree in self._root_nodes:
             _map_modify(tree, _set_contributing)
 
-        _log_trees('trees before retraction')
+        _log_trees("trees before retraction")
 
-        self._root_nodes = set([
-            tree for tree in map(
-                    _drop_noncontributing_branches,
-                    self._root_nodes,
-            )
-            if tree is not None
-        ])
+        self._root_nodes = set(
+            [
+                tree
+                for tree in map(
+                    _drop_noncontributing_branches, self._root_nodes
+                )
+                if tree is not None
+            ]
+        )
 
-        _log_trees('trees after retraction / before splitting')
+        _log_trees("trees after retraction / before splitting")
 
         forest = reduce(
             lambda a, x: set.union(a, x),
@@ -215,29 +212,29 @@ class RetractAndSplit(ExpansionStrategy):
         )
         for x in contrib:
             if x not in forest:
-                log(DEBUG, 'adding new root node: %s', x)
+                log(DEBUG, "adding new root node: %s", x)
                 self._root_nodes.add(Leaf(x, True))
         for x in noncontrib:
             if x not in forest:
                 experiment.remove_factor(x, remove_params=True)
 
         self._root_nodes = set(
-            map(_extend_contributing_branches, self._root_nodes),
+            map(_extend_contributing_branches, self._root_nodes)
         )
 
-        _log_trees('trees after splitting')
+        _log_trees("trees after splitting")
 
 
 def _setter(x):
     if not isinstance(x, ExpansionStrategy):
-        raise ValueError(f'{x} is not an expansion strategy')
+        raise ValueError(f"{x} is not an expansion strategy")
 
 
 _factor_expansion_strategy = SessionItem(
-    setter=_setter, default=ExtraBaselines(extra_factors=1))
+    setter=_setter, default=ExtraBaselines(extra_factors=1)
+)
 
-_register_session_item(
-    'factor_expansion_strategy', _factor_expansion_strategy)
+_register_session_item("factor_expansion_strategy", _factor_expansion_strategy)
 
 
 STRATEGIES = {

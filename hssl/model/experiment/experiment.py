@@ -13,7 +13,7 @@ class Experiment(t.nn.Module):
         try:
             return p.sample(name, *args, **kwargs)
         except RuntimeError:
-            return p.poutine.runtime._PYRO_STACK[-1].trace.nodes[name]['value']
+            return p.poutine.runtime._PYRO_STACK[-1].trace.nodes[name]["value"]
 
     @property
     @abstractmethod

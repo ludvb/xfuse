@@ -7,22 +7,19 @@ from .slide import Slide
 from ..utility import to_array
 
 
-__all__ = [
-    'FullSlide',
-]
+__all__ = ["FullSlide"]
 
 
 class FullSlide(Slide):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.image_augmentation = transforms.Compose([
-            transforms.ColorJitter(
-                brightness=0.05,
-                contrast=0.05,
-                saturation=0.05,
-                hue=0.05,
-            ),
-        ])
+        self.image_augmentation = transforms.Compose(
+            [
+                transforms.ColorJitter(
+                    brightness=0.05, contrast=0.05, saturation=0.05, hue=0.05
+                )
+            ]
+        )
 
     def __len__(self):
         return 1

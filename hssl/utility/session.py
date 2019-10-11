@@ -8,24 +8,18 @@ from _io import BufferedReader
 
 from .file import unique_prefix
 from ..logging import INFO, WARNING, log
-from ..session import (
-    Session,
-    get_save_path,
-    get_session,
-)
+from ..session import Session, get_save_path, get_session
 
 import torch as t
 
 
-__all__ = [
-    'load_session',
-    'save_session',
-]
+__all__ = ["load_session", "save_session"]
 
 
 def save_session(filename_prefix: str) -> None:
-    path = unique_prefix(os.path.join(
-        get_save_path(), f'{filename_prefix}.session'))
+    path = unique_prefix(
+        os.path.join(get_save_path(), f"{filename_prefix}.session")
+    )
     os.makedirs(os.path.dirname(path), exist_ok=True)
 
     def _can_pickle(name, x):
@@ -41,15 +35,14 @@ def save_session(filename_prefix: str) -> None:
             return False
         return True
 
-    session = Session(**{
-        k: v for k, v in iter(get_session())
-        if _can_pickle(k, v)
-    })
+    session = Session(
+        **{k: v for k, v in iter(get_session()) if _can_pickle(k, v)}
+    )
 
-    log(INFO, 'saving session to %s', path)
+    log(INFO, "saving session to %s", path)
     t.save(session, path)
 
 
 def load_session(file: Union[str, BufferedReader]) -> Session:
-    log(INFO, 'loading session from %s', str(file))
+    log(INFO, "loading session from %s", str(file))
     return t.load(file)

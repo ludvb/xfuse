@@ -19,10 +19,12 @@ class Checkpointer(Messenger):
         self._freq = frequency
 
     def _pyro_post_epoch(self, msg):
-        if msg['kwargs']['epoch'] % self._freq == 0:
+        if msg["kwargs"]["epoch"] % self._freq == 0:
             with Session(pyro_stack=[]):
-                save_session(os.path.join(
-                    get_save_path(),
-                    'checkpoints',
-                    f'{int(get_global_step()):08d}.pkl',
-                ))
+                save_session(
+                    os.path.join(
+                        get_save_path(),
+                        "checkpoints",
+                        f"{int(get_global_step()):08d}.pkl",
+                    )
+                )

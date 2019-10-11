@@ -1,19 +1,17 @@
 import torch as t
 
 
-__all__ = [
-    'Unpool',
-]
+__all__ = ["Unpool"]
 
 
 class Unpool(t.nn.Module):
     def __init__(
-            self,
-            in_channels,
-            out_channels=None,
-            kernel_size=3,
-            stride=2,
-            padding=None,
+        self,
+        in_channels,
+        out_channels=None,
+        kernel_size=3,
+        stride=2,
+        padding=None,
     ):
         super().__init__()
 
@@ -24,7 +22,8 @@ class Unpool(t.nn.Module):
             padding = kernel_size // 2
 
         self.conv = t.nn.Conv2d(
-            in_channels, out_channels, kernel_size, padding=padding)
+            in_channels, out_channels, kernel_size, padding=padding
+        )
         self.scale_factor = stride
 
     def forward(self, x):

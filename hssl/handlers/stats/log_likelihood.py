@@ -7,6 +7,5 @@ class LogLikelihood(StatsHandler):
 
     def _handle(self, fn, value, name, scale, **_):
         self.add_scalar(
-            f'loss/loglikelihood/{name}',
-            scale * fn.log_prob(value).sum(),
+            f"loss/loglikelihood/{name}", scale * fn.log_prob(value).sum()
         )

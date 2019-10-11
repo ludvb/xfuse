@@ -7,5 +7,5 @@ class ValueModifier(Messenger):
         self._modifier = modifier
 
     def _postprocess_message(self, msg):
-        if msg['name'] in self._sites and msg['value'] is not None:
-            msg['value'] = self._modifier(msg['value'])
+        if msg["name"] in self._sites and msg["value"] is not None:
+            msg["value"] = self._modifier(msg["value"])

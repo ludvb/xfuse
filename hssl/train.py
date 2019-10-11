@@ -17,26 +17,26 @@ from .utility import to_device
 
 
 def train(dataloader: DataLoader, epochs: Optional[int] = None):
-    @effectful(type='step')
+    @effectful(type="step")
     def _step(*, x):
         optim = get_optimizer()
         loss = p.infer.Trace_ELBO()
         model = get_model()
         return p.infer.SVI(model.model, model.guide, optim, loss).step(x)
 
-    @effectful(type='epoch')
+    @effectful(type="epoch")
     def _epoch(*, data, epoch):
         progress = tqdm(dataloader, dynamic_ncols=True)
         elbo = []
         for x in progress:
             elbo.append(_step(x=to_device(x)))
             progress.set_description(
-                f'epoch {epoch:05d} / mean ELBO {np.mean(elbo):.3e}')
+                f"epoch {epoch:05d} / mean ELBO {np.mean(elbo):.3e}"
+            )
             global_step = get_global_step()
             global_step += 1
 
     for epoch in it.takewhile(
-            lambda x: epochs is None or x <= epochs,
-            it.count(1),
+        lambda x: epochs is None or x <= epochs, it.count(1)
     ):
         _epoch(data=dataloader, epoch=epoch)

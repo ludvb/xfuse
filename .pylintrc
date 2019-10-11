@@ -227,7 +227,7 @@ contextmanager-decorators=contextlib.contextmanager
 # system, and so shouldn't trigger E1101 when accessed. Python regular
 # expressions are accepted.
 generated-members=
-  pyro\.distributions\..+,
+  pyro\.distributions\..+, distr\..+,
   pyro\.optim\..+,
   torch\..+
 

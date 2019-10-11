@@ -1,9 +1,7 @@
-from contextlib import ContextDecorator
-
 import logging
-from logging import ERROR, WARNING, INFO, DEBUG
-
 import sys
+from functools import wraps
+from logging import DEBUG, ERROR, INFO, WARNING
 
 
 class Formatter(logging.Formatter):
@@ -15,49 +13,50 @@ class Formatter(logging.Formatter):
         super().__init__(*args, **kwargs)
 
     def format(self, record):
-        return ''.join(filter(lambda x: x is not None, (
-            # pylint: disable=line-too-long
-            f'[{self.formatTime(record)}]',
-            ' ',
-            '\033[1m'  if self.fancy and record.levelno >= INFO                               else None,
-            '\033[91m' if self.fancy and record.levelno >= ERROR                              else None,
-            '\033[93m' if self.fancy and record.levelno >= WARNING and record.levelno < ERROR else None,
-            record.levelname.lower(),
-            '\033[0m'  if self.fancy else None,
-            (
-                f' ({record.filename}:{record.lineno})'
-                if record.levelno != INFO else None
-            ),
-            ': ',
-            record.getMessage(),
-        )))
+        if self.fancy:
+            if record.levelno >= ERROR:
+                style = "\033[1m\033[91m"
+            elif record.levelno >= WARNING:
+                style = "\033[1m\033[93m"
+            elif record.levelno >= INFO:
+                style = "\033[1m"
+            else:
+                style = ""
+            reset_style = "\033[0m"
+        else:
+            style = ""
+            reset_style = ""
+        if record.levelno in [DEBUG, WARNING, ERROR]:
+            where = f"({record.filename}:{record.lineno})"
+        else:
+            where = None
+        return " ".join(
+            x
+            for x in [
+                f"[{self.formatTime(record)}]",
+                "".join([style, record.levelname.lower(), reset_style]),
+                where,
+                ":",
+                record.getMessage(),
+            ]
+            if x
+        )
 
 
 HANDLER = logging.StreamHandler(sys.stderr)
 HANDLER.setFormatter(Formatter(fancy_formatting=sys.stderr.isatty()))
 
-logging.basicConfig(
-    handlers=[HANDLER],
-)
+logging.basicConfig(handlers=[HANDLER])
 
 LOGGER = logging.getLogger(__name__)
 
-log = LOGGER.log
+
+@wraps(LOGGER.log)
+def log(*args, **kwargs):
+    # pylint: disable=missing-function-docstring
+    return LOGGER.log(*args, **kwargs)
 
 
 def set_level(level: int):
-    """
-    Parameters
-    ----------
-    level : int
-        log level
-
-    Side effects
-    ------------
-    Sets the log level to `level`
-
-    Returns
-    -------
-    None
-    """
+    """Set logging level """
     LOGGER.setLevel(level)

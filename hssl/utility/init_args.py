@@ -10,8 +10,10 @@ def store_init_args(cls):
                 args=args,
                 kwargs={
                     **{
-                        p.name: p.default for p in
-                        list(signature(cls.__init__).parameters.values())[1:]
+                        p.name: p.default
+                        for p in list(
+                            signature(cls.__init__).parameters.values()
+                        )[1:]
                     },
                     **kwargs,
                 },
