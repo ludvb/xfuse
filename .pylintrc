@@ -138,7 +138,8 @@ disable=print-statement,
         xreadlines-attribute,
         deprecated-sys-function,
         exception-escape,
-        comprehension-escape
+        comprehension-escape,
+        bad-continuation  # https://github.com/PyCQA/pylint/issues/289
 
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option
@@ -226,6 +227,9 @@ contextmanager-decorators=contextlib.contextmanager
 # system, and so shouldn't trigger E1101 when accessed. Python regular
 # expressions are accepted.
 generated-members=
+  pyro\.distributions\..+,
+  pyro\.optim\..+,
+  torch\..+
 
 # Tells whether missing members accessed in mixin class should be ignored. A
 # mixin class is detected if its name ends with "mixin" (case insensitive).
@@ -380,12 +384,13 @@ function-naming-style=snake_case
 good-names=ex,
            i, j,
            k, ks,
-           x, xs,
-           y, ys,
-           z, zs,
+           x, xs, dx,
+           y, ys, dy,
+           z, zs, dz,
            a, as,
            b, bs,
            c, cs,
+           H, W,
            Run,
            _
 
