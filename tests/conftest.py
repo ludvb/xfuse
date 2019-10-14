@@ -4,6 +4,7 @@
 import itertools as it
 
 import numpy as np
+import pyro
 import pyro.distributions as distr
 import pytest
 from pyvips import Image
@@ -18,6 +19,7 @@ def pytest_configure(config):
 
 
 def pytest_runtest_setup(item):
+    pyro.clear_param_store()
     if item.get_closest_marker("fix_rng") is not None:
         torch.manual_seed(0)
 
