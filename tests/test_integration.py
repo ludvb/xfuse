@@ -1,8 +1,5 @@
 """Integration tests"""
 
-from contextlib import ExitStack
-from typing import Any, Dict, List, NamedTuple
-
 import pandas as pd
 import pyro.optim
 import pytest
@@ -19,6 +16,7 @@ from hssl.train import train
 from hssl.utility import design_matrix_from
 
 
+@pytest.mark.fix_rng
 @pytest.mark.slow
 def test_toydata(tmp_path, mocker, toydata):
     """Integration test on toy dataset"""
@@ -30,7 +28,7 @@ def test_toydata(tmp_path, mocker, toydata):
     st_experiment = ST(
         n=len(slide),
         depth=2,
-        nc=4,
+        num_channels=4,
         factors=[FactorDefault(0.0, None) for _ in range(3)],
     )
     xfuse = XFuse(experiments=[st_experiment], latent_size=16)
@@ -40,6 +38,6 @@ def test_toydata(tmp_path, mocker, toydata):
     with Session(model=xfuse, optimizer=pyro.optim.Adam({"lr": 0.01})), rmse:
         train(dataloader, 100)
     rmses = [x[1][1] for x in rmse.add_scalar.mock_calls]
-    assert rmses[0] > rmses[49]
-    assert rmses[49] > rmses[-1]
+    assert rmses[0] > rmses[19]
+    assert rmses[19] > rmses[-1]
     assert rmses[-1] < 10.0

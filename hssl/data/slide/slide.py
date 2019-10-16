@@ -1,17 +1,18 @@
 from abc import ABC, abstractmethod
 
-import torch as t
-from torch.utils.data import Dataset
-
 import numpy as np
-
+import torch
 from pyvips import Image
-
 from scipy.ndimage.morphology import binary_fill_holes
+from torch.utils.data import Dataset
 
 
 class Slide(ABC, Dataset):
-    def __init__(self, data: t.Tensor, image: Image, label: Image):
+    """
+    Abstract class yielding observations from a single sample (tissue slide)
+    """
+
+    def __init__(self, data: torch.Tensor, image: Image, label: Image):
         self.image = image
         self.label = label
         self.data = data
@@ -19,12 +20,12 @@ class Slide(ABC, Dataset):
         # FIXME: torch sparse tensors don't support indexing. this can be
         # removed once https://github.com/pytorch/pytorch/pull/24937 has been
         # merged
-        if self.data.layout is not t.strided:
+        if self.data.is_sparse:  # type: ignore
             self.data = self.data.to_dense()
 
-        self.h, self.w = self.image.height, self.image.width
+        self.H, self.W = self.image.height, self.image.width
 
-        assert self.h == self.label.height and self.w == self.label.width
+        assert self.H == self.label.height and self.W == self.label.width
 
     @abstractmethod
     def _get_patch(self, idx: int):
@@ -47,8 +48,8 @@ class Slide(ABC, Dataset):
         label = np.searchsorted(labels, label)
 
         return dict(
-            image=t.tensor(image / 255 * 2 - 1).permute(2, 0, 1).float(),
-            label=t.tensor(label).long(),
+            image=torch.tensor(image / 255 * 2 - 1).permute(2, 0, 1).float(),
+            label=torch.tensor(label).long(),
             data=data,
             type="ST",
         )

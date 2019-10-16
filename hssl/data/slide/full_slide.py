@@ -1,16 +1,18 @@
 import numpy as np
-
 from torchvision import transforms
 from torchvision.transforms.functional import to_pil_image
 
-from .slide import Slide
 from ..utility import to_array
-
+from .slide import Slide
 
 __all__ = ["FullSlide"]
 
 
 class FullSlide(Slide):
+    """A :class:`Slide` that yields the entire (uncropped) sample"""
+
+    # pylint: disable=too-few-public-methods
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.image_augmentation = transforms.Compose(

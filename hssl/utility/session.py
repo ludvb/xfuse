@@ -8,7 +8,7 @@ from _io import BufferedReader
 
 from .file import unique_prefix
 from ..logging import INFO, WARNING, log
-from ..session import Session, get_save_path, get_session
+from ..session import Session, get, get_session
 
 import torch as t
 
@@ -18,7 +18,7 @@ __all__ = ["load_session", "save_session"]
 
 def save_session(filename_prefix: str) -> None:
     path = unique_prefix(
-        os.path.join(get_save_path(), f"{filename_prefix}.session")
+        os.path.join(get("save_path"), f"{filename_prefix}.session")
     )
     os.makedirs(os.path.dirname(path), exist_ok=True)
 

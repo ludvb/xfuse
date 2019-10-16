@@ -7,8 +7,8 @@ import numpy as np
 import pyro
 import pyro.distributions as distr
 import pytest
-from pyvips import Image
 import torch
+from pyvips import Image
 
 
 def pytest_configure(config):

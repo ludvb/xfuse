@@ -27,3 +27,6 @@ class Experiment(t.nn.Module):
     @abstractmethod
     def guide(self, x):
         pass
+
+    def forward(self, x, z):
+        return self.model(x, z)

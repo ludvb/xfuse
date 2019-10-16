@@ -139,7 +139,8 @@ disable=print-statement,
         deprecated-sys-function,
         exception-escape,
         comprehension-escape,
-        bad-continuation  # https://github.com/PyCQA/pylint/issues/289
+        bad-continuation,  # https://github.com/PyCQA/pylint/issues/289
+        missing-module-docstring
 
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option
@@ -384,12 +385,20 @@ function-naming-style=snake_case
 good-names=ex,
            i, j,
            k, ks,
+           n, ns,
+           v, vs,
            x, xs, dx,
            y, ys, dy,
            z, zs, dz,
+           q, qs, dq,
+           p, ps, dp,
+           s, ss, ds,
+           t, ts, dt,
            a, as,
            b, bs,
            c, cs,
+           tb,
+           mu, sd,
            H, W,
            Run,
            _
@@ -444,8 +453,7 @@ variable-naming-style=snake_case
 # List of note tags to take in consideration, separated by a comma.
 notes=FIXME,
       XXX,
-      TODO,
-      NOTE
+      TODO
 
 
 [FORMAT]
@@ -510,7 +518,7 @@ valid-metaclass-classmethod-first-arg=cls
 [DESIGN]
 
 # Maximum number of arguments for function / method.
-max-args=5
+max-args=10
 
 # Maximum number of attributes for a class (see R0902).
 max-attributes=7

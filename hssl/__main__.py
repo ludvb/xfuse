@@ -1,57 +1,41 @@
 # pylint: disable=missing-docstring, invalid-name, too-many-instance-attributes
 
+import itertools as it
+import os
+import sys
 from contextlib import ExitStack
-
 from datetime import datetime as dt
-
 from functools import wraps
-
-import inspect
 from inspect import getargs, signature
 
-import itertools as it
-
-import os
-
-import sys
-
 import click
-
+import ipdb
 import numpy as np
-
 import pandas as pd
-
+import pyro
+import torch
 from pyvips import Image
-
-import pyro as p
-import pyro.optim
-
-import torch as t
 from torch.utils.tensorboard.writer import SummaryWriter
 
 from . import __version__
+from .analyze import Sample
+from .analyze import dge as _dge
+from .analyze import impute as _impute
 from .data import Dataset
 from .data.slide import RandomSlide
 from .data.utility import make_dataloader, spot_size
 from .handlers import Checkpointer, stats
 from .logging import DEBUG, INFO, WARNING, log
 from .model import XFuse
+from .model.experiment.st import ST
+from .model.experiment.st import STRATEGIES as expansion_strategies
 from .model.experiment.st import (
-    ST,
     ExtraBaselines,
     FactorDefault,
     FactorPurger,
     purge_factors,
-    STRATEGIES as expansion_strategies,
 )
-from .session import (
-    Session,
-    Unset,
-    get_default_device,
-    get_global_step,
-    get_model,
-    get_save_path,
-)
+from .session import Session, Unset, get
 from .train import train as run_training
 from .utility import (
     compose,
@@ -62,7 +46,6 @@ from .utility import (
 )
 from .utility.file import unique_prefix
 from .utility.session import load_session, save_session
-
 
 _DEFAULT_SESSION = Session()
 
@@ -95,8 +78,6 @@ def cli(save_path, session, debug):
     if debug:
 
         def _panic(_s, _err_type, _err, tb):
-            import ipdb
-
             ipdb.post_mortem(tb)
 
         _DEFAULT_SESSION.panic = _panic
@@ -144,7 +125,7 @@ def train(
     workers,
     **_kwargs,
 ):
-    # pylint: disable=too-many-arguments
+    # pylint: disable=too-many-arguments, too-many-locals
 
     if seed is not None:
         set_rng_seed(seed)
@@ -178,11 +159,11 @@ def train(
     dataset = Dataset(
         [
             RandomSlide(
-                data=t.sparse.FloatTensor(
-                    t.as_tensor(
-                        np.stack([counts.row, counts.col]), dtype=t.long
+                data=torch.sparse.FloatTensor(
+                    torch.as_tensor(
+                        np.stack([counts.row, counts.col]), dtype=torch.long
                     ),
-                    t.as_tensor(counts.data),
+                    torch.as_tensor(counts.data),
                     counts.shape,
                 ),
                 image=Image.new_from_file(_get_path(image)),
@@ -205,40 +186,40 @@ def train(
         dataset, batch_size=batch_size, num_workers=workers, shuffle=True
     )
 
-    factor_baseline = t.as_tensor(count_data.mean(0).values).log()
+    factor_baseline = torch.as_tensor(count_data.mean(0).values).log()
 
-    if get_model() is None:
+    if get("model") is None:
         st_experiment = ST(
             n=len(dataset),
             depth=network_depth,
-            nc=network_width,
+            num_channels=network_width,
             default_scale=count_data.mean().mean() / spot_size(dataset),
             factors=[FactorDefault(0.0, factor_baseline)],
         )
         xfuse = XFuse(experiments=[st_experiment], latent_size=latent_size).to(
-            get_default_device()
+            get("default_device")
         )
         default_session = Session(
-            model=xfuse, optimizer=p.optim.Adam({"lr": learning_rate})
+            model=xfuse, optimizer=pyro.optim.Adam({"lr": learning_rate})
         )
     else:
         default_session = Session()
 
-    def _panic(session, err_type, err, tb):
+    def _panic(_session, _err_type, _err, _tb):
         with Session(panic=Unset):
             save_session(f"exception")
 
     with default_session, Session(panic=_panic):
 
         def _every(n):
-            def _predicate(**msg):
-                if int(get_global_step()) % n == 0:
+            def _predicate(**_msg):
+                if int(get("global_step")) % n == 0:
                     return True
                 return False
 
             return _predicate
 
-        writer = SummaryWriter(os.path.join(get_save_path(), "stats"))
+        writer = SummaryWriter(os.path.join(get("save_path"), "stats"))
 
         stats_handlers = [
             stats.ELBO(writer, _every(1)),
@@ -268,7 +249,7 @@ def train(
         if expansion_strategy is not None:
             expansion_strategy = expansion_strategies[expansion_strategy]
             args = [
-                x if p.annotation is inspect._empty else p.annotation(x)
+                p.annotation(x) if callable(p.annotation) else x
                 for p, x in zip(
                     signature(expansion_strategy).parameters.values(),
                     expansion_strategy_arg,
@@ -287,7 +268,7 @@ def train(
             run_training(dataloader, epochs)
 
         with Session(factor_expansion_strategy=ExtraBaselines(0)):
-            purge_factors(get_model(), dataloader, num_samples=10)
+            purge_factors(get("model"), dataloader, num_samples=10)
 
         with Session(panic=Unset):
             save_session(f"final")
@@ -316,13 +297,8 @@ def analyze(**_):
 
 
 @analyze.resultcallback()
-def _run_analysis(analyses, design_file, state_file, output):
-    state = load_state(state_file.name)
-    to_device(state, DEVICE)
-
-    t.no_grad()
-    state.histonet.eval()
-    state.std.eval()
+def _run_analysis(analyses, design_file, _state_file, output):
+    torch.no_grad()
 
     design = pd.read_csv(design_file)
     design_dir = os.path.dirname(design_file.name)
@@ -330,8 +306,8 @@ def _run_analysis(analyses, design_file, state_file, output):
     def _path(p):
         return p if os.path.isabs(p) else os.path.join(design_dir, p)
 
-    data = read_data(map(_path, design.data), genes=state.std.genes)
-    design_matrix = design_matrix_from(design, state.std._covariates)
+    data = read_data(map(_path, design.data))  # genes=state.std.genes)
+    design_matrix = design_matrix_from(design)  # , state.std._covariates)
     samples = [
         Sample(name=name, image=image, label=label, data=data, effects=effects)
         for name, image, label, data, effects in it.zip_longest(
@@ -353,14 +329,14 @@ def _run_analysis(analyses, design_file, state_file, output):
 
     for name, analysis in analyses:
         log(INFO, "performing analysis: %s", name)
-        if getargs(analysis.__code__).args == ["state", "samples", "output"]:
-            analysis(state=state, samples=samples, output=output)
-        elif getargs(analysis.__code__).args == ["state", "sample", "output"]:
+        if getargs(analysis.__code__).args == ["samples", "output"]:
+            analysis(samples=samples, output=output)
+        elif getargs(analysis.__code__).args == ["sample", "output"]:
             for sample in samples:
                 log(INFO, "processing %s", sample.name)
                 output_prefix = os.path.join(output, sample.name)
                 os.makedirs(output_prefix, exist_ok=True)
-                analysis(state=state, sample=sample, output=output_prefix)
+                analysis(sample=sample, output=output_prefix)
         else:
             raise RuntimeError(
                 f'the signature of analysis "{name}" is not supported'
@@ -368,64 +344,6 @@ def _run_analysis(analyses, design_file, state_file, output):
 
 
 cli.add_command(analyze)
-
-
-@click.command()
-@click.argument("gene-list", nargs=-1)
-def genes(gene_list):
-    def _analysis(state, sample, output):
-        analyze_genes(
-            state.histonet,
-            state.std,
-            sample,
-            gene_list,
-            output_prefix=output,
-            device=DEVICE,
-        )
-
-    return "gene list", _analysis
-
-
-analyze.add_command(genes)
-
-
-@click.command()
-@click.argument("gene-list", nargs=-1)
-@click.option("--factor", type=int, multiple=True)
-@click.option("--truncate", type=int, default=25)
-@click.option("--regex/--no-regex", default=True)
-def gene_profiles(gene_list, factor, truncate, regex):
-    def _analysis(state, samples, output):
-        analyze_gene_profiles(
-            std=state.std,
-            genes=list(gene_list),
-            factors=factor if len(factor) > 0 else None,
-            truncate=truncate,
-            regex=regex,
-            output_prefix=output,
-        )
-
-    return "gene profiles", _analysis
-
-
-analyze.add_command(gene_profiles)
-
-
-@click.command()
-def default():
-    def _analysis(state, sample, output):
-        default_analysis(
-            state.histonet,
-            state.std,
-            sample,
-            output_prefix=output,
-            device=DEVICE,
-        )
-
-    return "default", _analysis
-
-
-analyze.add_command(default)
 
 
 @click.command()
@@ -441,7 +359,7 @@ def impute(regions_file):
     if "regions" not in regions.columns:
         raise ValueError('regions file must contain a "regions" column')
 
-    def _analysis(state, samples, output, **_):
+    def _analysis(samples, output, **_):
         nonlocal regions
 
         if "name" in regions.columns:
@@ -466,15 +384,13 @@ def impute(regions_file):
         ]
 
         for sample, region in zip(samples, regions):
-            means, samples, index = impute_counts(
-                state.histonet, state.std, sample, region, device=DEVICE
-            )
+            means, samples, index = _impute(sample, region)
             os.makedirs(os.path.join(output, sample.name))
             (
                 pd.DataFrame(
                     means.mean(0).numpy(),
                     index=pd.Index(index, name="n"),
-                    columns=state.std.genes,
+                    # columns=state.std.genes,
                 ).to_csv(os.path.join(output, sample.name, "imputed.csv.gz"))
             )
             (
@@ -483,7 +399,7 @@ def impute(regions_file):
                         pd.DataFrame(
                             s.numpy().astype(int),
                             index=pd.Index(index, name="n"),
-                            columns=state.std.genes,
+                            # columns=state.std.genes,
                         )
                         for s in samples
                     ],
@@ -513,7 +429,7 @@ def dge(regions_file, normalize, trials):
     if "regions" not in regions.columns:
         raise ValueError('regions file must contain a "regions" column')
 
-    def _analysis(state, samples, output, **_):
+    def _analysis(samples, output, **_):
         nonlocal regions
 
         if "name" in regions.columns:
@@ -537,15 +453,12 @@ def dge(regions_file, normalize, trials):
             for r in regions.regions
         ]
 
-        dge_analysis(
-            state.histonet,
-            state.std,
+        _dge(
             samples=samples,
             regions=regions,
             output=output,
             normalize=normalize,
             trials=trials,
-            device=DEVICE,
         )
 
     return "differential gene expression", _analysis
@@ -555,4 +468,4 @@ analyze.add_command(dge)
 
 
 if __name__ == "__main__":
-    cli()
+    cli()  # pylint: disable=no-value-for-parameter

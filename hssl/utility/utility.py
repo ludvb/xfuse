@@ -2,16 +2,16 @@ import itertools as it
 import re
 import signal
 from functools import partial, wraps
-from typing import Callable, Dict, List, Optional, Set, Tuple
+from typing import Callable, Dict, List, Optional, Set, Tuple, cast
 
 import h5py
 import numpy as np
 import pandas as pd
 import scipy.sparse as ss
-import torch as t
+import torch
 
 from ..logging import INFO, log
-from ..session import get_default_device
+from ..session import get
 from ..utility.file import extension
 
 __all__ = [
@@ -60,9 +60,9 @@ def set_rng_seed(seed: int):
     n_seed = random.choice(range(i32max + 1))
     t_seed = random.choice(range(i32max + 1))
     np.random.seed(n_seed)
-    t.manual_seed(t_seed)
-    t.backends.cudnn.deterministic = True
-    t.backends.cudnn.benchmark = False
+    torch.manual_seed(t_seed)
+    torch.backends.cudnn.deterministic = True  # type: ignore
+    torch.backends.cudnn.benchmark = False  # type: ignore
     log(
         INFO,
         " / ".join(
@@ -128,7 +128,7 @@ def read_data(
 
         log(INFO, "loading data file %s", path)
         for pattern, parser in parse_dict.items():
-            if re.match(pattern, extension(path)) is not None:
+            if re.match(pattern, extension(path)):  # type: ignore
                 return parser()
         raise NotImplementedError(
             f"no parser for file {path}"
@@ -216,20 +216,22 @@ def design_matrix_from(
     return pd.concat(vs, keys=ks)
 
 
-def argmax(x: t.Tensor):
-    return np.unravel_index(t.argmax(x), x.shape)
+def argmax(x: torch.Tensor):
+    return np.unravel_index(torch.argmax(x), x.shape)
 
 
 def integrate_loadings(
-    loadings: t.Tensor, label: t.Tensor, max_label: int = None
+    loadings: torch.Tensor,
+    label: torch.Tensor,
+    max_label: Optional[int] = None,
 ):
     if max_label is None:
-        max_label = t.max(label)
-    return t.einsum(
+        max_label = cast(int, torch.max(label).item())
+    return torch.einsum(
         "btxy,bxyi->it",
         loadings.exp(),
         (
-            t.eye(max_label + 1)
+            torch.eye(max_label + 1)
             .to(label)[label.flatten()]
             .reshape(*label.shape, -1)
             .float()
@@ -262,7 +264,7 @@ def chunks_of(n, xs):
 
 
 def find_device(x):
-    if isinstance(x, t.Tensor):
+    if isinstance(x, torch.Tensor):
         return x.device
     if isinstance(x, list):
         for y in x:
@@ -280,16 +282,18 @@ def find_device(x):
 def sparseonehot(labels, classes=None):
     if classes is None:
         classes = labels.max().item() + 1
-    idx = t.stack([t.arange(len(labels)).to(labels), labels])
-    return t.sparse.LongTensor(
-        idx, t.ones(idx.shape[1]).to(idx), t.Size([len(labels), classes])
+    idx = torch.stack([torch.arange(len(labels)).to(labels), labels])
+    return torch.sparse.LongTensor(
+        idx,
+        torch.ones(idx.shape[1]).to(idx),
+        torch.Size([len(labels), classes]),
     )
 
 
 def to_device(x, device=None):
     if device is None:
-        device = get_default_device()
-    if isinstance(x, t.Tensor):
+        device = get("default_device")
+    if isinstance(x, torch.Tensor):
         return x.to(device)
     if isinstance(x, list):
         return [to_device(y, device) for y in x]

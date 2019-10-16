@@ -1,23 +1,19 @@
-from copy import deepcopy
-
 import itertools as it
-
+from copy import deepcopy
 from typing import Dict, List, NamedTuple, Optional
 
 import numpy as np
-
 import pyro as p
-from pyro.distributions import Delta, NegativeBinomial, Normal
+import torch as t
 from pyro.contrib.autoname import scope
-
+from pyro.distributions import Delta  # pylint: disable=no-name-in-module
+from pyro.distributions import NegativeBinomial, Normal
 from scipy.ndimage.morphology import distance_transform_edt
 
-import torch as t
-
-from ..image import Image
 from ....logging import DEBUG, INFO, log
+from ....session import get
 from ....utility import center_crop, find_device, sparseonehot
-from ....session import get_optimizer, get_param_store
+from ..image import Image
 
 
 class FactorDefault(NamedTuple):
@@ -30,6 +26,8 @@ def _encode_factor_name(n: str):
 
 
 class ST(Image):
+    """Spatial Transcriptomics experiment"""
+
     @property
     def tag(self):
         return "ST"
@@ -74,7 +72,7 @@ class ST(Image):
         name = _encode_factor_name(factor)
         new_name = _encode_factor_name(new_factor)
 
-        store = get_param_store()
+        store = get("param_store")
 
         for pname in [p for p in store.keys() if name in p]:
             new_pname = pname.replace(name, new_name)
@@ -106,8 +104,8 @@ class ST(Image):
         self.__factors_counter = it.chain([n], self.__factors_counter)
 
         if remove_params:
-            store = get_param_store()
-            optim = get_optimizer()
+            store = get("param_store")
+            optim = get("optimizer")
             pname = _encode_factor_name(n)
             for x in [p for p in store.keys() if pname in p]:
                 param = store[x].unconstrained()

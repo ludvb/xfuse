@@ -1,10 +1,13 @@
-import torch as t
-
+import torch
 
 __all__ = ["Unpool"]
 
 
-class Unpool(t.nn.Module):
+class Unpool(torch.nn.Module):
+    """
+    A :class:`~torch.nn.Module` combining upsampling with a convolutional layer
+    """
+
     def __init__(
         self,
         in_channels,
@@ -21,12 +24,13 @@ class Unpool(t.nn.Module):
         if padding is None:
             padding = kernel_size // 2
 
-        self.conv = t.nn.Conv2d(
+        self.conv = torch.nn.Conv2d(
             in_channels, out_channels, kernel_size, padding=padding
         )
         self.scale_factor = stride
 
     def forward(self, x):
-        x = t.nn.functional.interpolate(x, scale_factor=self.scale_factor)
+        # pylint: disable=arguments-differ
+        x = torch.nn.functional.interpolate(x, scale_factor=self.scale_factor)
         x = self.conv(x)
         return x

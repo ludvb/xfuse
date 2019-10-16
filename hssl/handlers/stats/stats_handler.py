@@ -7,7 +7,7 @@ from pyro.poutine.messenger import Messenger
 from torch.utils.tensorboard.writer import SummaryWriter
 
 from ...logging import DEBUG, log
-from ...session import get_global_step  # pylint: disable=no-name-in-module
+from ...session import get
 
 
 class StatsHandler(ABC, Messenger):
@@ -33,7 +33,7 @@ class StatsHandler(ABC, Messenger):
                 name,
                 wraps(method)(
                     lambda *args, **kwargs: method(
-                        *args, global_step=int(get_global_step()), **kwargs
+                        *args, global_step=int(get("global_step")), **kwargs
                     )
                     if "global_step" in inspect.signature(method).parameters
                     else method

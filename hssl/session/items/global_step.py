@@ -1,4 +1,4 @@
-from .session_item import SessionItem
+from .. import SessionItem, register_session_item
 
 
 class GlobalStep:
@@ -16,4 +16,6 @@ class GlobalStep:
         return self.value
 
 
-global_step = SessionItem(setter=lambda _: None, default=GlobalStep())
+register_session_item(
+    "global_step", SessionItem(setter=lambda _: None, default=GlobalStep())
+)

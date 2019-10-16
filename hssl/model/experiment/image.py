@@ -1,29 +1,31 @@
 from functools import reduce
-
 from operator import add
 
 import pyro as p
+import torch as t
 from pyro.distributions import Normal
 
-import torch as t
-
-from . import Experiment
 from ...utility import center_crop
 from ...utility.misc import Unpool
+from . import Experiment
 
 
 class Image(Experiment):
-    def __init__(self, *args, depth=4, nc=8, **kwargs):
+    """Image experiment"""
+
+    def __init__(self, *args, depth=4, num_channels=8, **kwargs):
         super().__init__(*args, **kwargs)
         self.depth = depth
-        self.nc = nc
+        self.num_channels = num_channels
 
     @property
     def tag(self):
         return "image"
 
     def _decode(self, z):
-        ncs = [2 ** i * self.nc for i in reversed(range(self.depth + 1))]
+        ncs = [
+            2 ** i * self.num_channels for i in reversed(range(self.depth + 1))
+        ]
         decoder = p.module(
             "img_decoder",
             t.nn.Sequential(
@@ -53,10 +55,16 @@ class Image(Experiment):
         img_mu = p.module(
             "img_mu",
             t.nn.Sequential(
-                t.nn.Conv2d(self.nc, self.nc, 3, 1, 1),
+                t.nn.Conv2d(
+                    self.num_channels,
+                    self.num_channels,
+                    x["image"].shape[1],
+                    1,
+                    1,
+                ),
                 t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm2d(self.nc),
-                t.nn.Conv2d(self.nc, 3, 3, 1, 1),
+                t.nn.BatchNorm2d(self.num_channels),
+                t.nn.Conv2d(self.num_channels, x["image"].shape[1], 3, 1, 1),
                 t.nn.Tanh(),
             ),
             update_module_params=True,
@@ -64,10 +72,16 @@ class Image(Experiment):
         img_sd = p.module(
             "img_sd",
             t.nn.Sequential(
-                t.nn.Conv2d(self.nc, self.nc, 3, 1, 1),
+                t.nn.Conv2d(
+                    self.num_channels,
+                    self.num_channels,
+                    x["image"].shape[1],
+                    1,
+                    1,
+                ),
                 t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.BatchNorm2d(self.nc),
-                t.nn.Conv2d(self.nc, 3, 3, 1, 1),
+                t.nn.BatchNorm2d(self.num_channels),
+                t.nn.Conv2d(self.num_channels, x["image"].shape[1], 3, 1, 1),
                 t.nn.Softplus(),
             ),
             update_module_params=True,
@@ -85,7 +99,10 @@ class Image(Experiment):
             return self._sample_image(x, decoded)
 
     def guide(self, x):
-        ncs = [3, *[2 ** i * self.nc for i in range(1, self.depth + 1)]]
+        ncs = [
+            x["image"].shape[1],
+            *[2 ** i * self.num_channels for i in range(1, self.depth + 1)],
+        ]
         encoder = p.module(
             "img_encoder",
             t.nn.Sequential(

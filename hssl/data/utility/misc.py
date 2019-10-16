@@ -1,26 +1,31 @@
 import itertools as it
+from typing import Any
 
 import numpy as np
+from torch.utils.data import DataLoader
+from torch.utils.data.dataloader import default_collate  # type: ignore
 
-import torch as t
-from torch.utils.data.dataloader import default_collate
-
+from ...session import get
 from ..dataset import Dataset
-from ...session import get_global_step
-
 
 __all__ = ["make_dataloader", "spot_size"]
 
 
-def spot_size(dataset: Dataset):
+def spot_size(dataset: Dataset) -> np.float64:
+    r"""Computes the median spot size in the :class:`Dataset`"""
     return np.median(
         np.concatenate(
-            [np.bincount(d["label"].flatten())[1:] for d in dataset]
+            [
+                np.bincount(d["label"].flatten())[1:]
+                for d in dataset  # type: ignore
+            ]
         )
     )
 
 
-def make_dataloader(*args, **kwargs):
+def make_dataloader(dataset: Dataset, **kwargs: Any) -> DataLoader:
+    r"""Creates a :class:`~torch.utils.data.DataLoader` for `dataset`"""
+
     def _collate(xs):
         def _remove_key(v):
             v.pop("type")
@@ -42,9 +47,9 @@ def make_dataloader(*args, **kwargs):
         }
 
     def _worker_init(n):
-        np.random.seed(np.random.get_state()[1][0] + get_global_step())
+        np.random.seed(np.random.get_state()[1][0] + get("global_step"))
         np.random.seed(np.random.randint(np.iinfo(np.int32).max) + n)
 
-    return t.utils.data.DataLoader(
-        *args, collate_fn=_collate, worker_init_fn=_worker_init, **kwargs
+    return DataLoader(
+        dataset, collate_fn=_collate, worker_init_fn=_worker_init, **kwargs
     )

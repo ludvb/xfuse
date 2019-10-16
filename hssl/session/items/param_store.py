@@ -1,7 +1,6 @@
 import pyro as p
 
-from .session_item import SessionItem
-
+from .. import SessionItem, register_session_item
 
 _DEFAULT_STORE = p.poutine.runtime._PYRO_PARAM_STORE
 
@@ -14,4 +13,6 @@ def _setter(store):
     )
 
 
-param_store = SessionItem(setter=_setter, default=_DEFAULT_STORE)
+register_session_item(
+    "param_store", SessionItem(setter=_setter, default=_DEFAULT_STORE)
+)

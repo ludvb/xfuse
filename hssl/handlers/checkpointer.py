@@ -6,7 +6,7 @@ from pyro.poutine.messenger import Messenger
 
 from . import Noop
 from ..utility.session import save_session
-from ..session import Session, get_global_step, get_save_path
+from ..session import Session, get
 
 
 class Checkpointer(Messenger):
@@ -23,8 +23,8 @@ class Checkpointer(Messenger):
             with Session(pyro_stack=[]):
                 save_session(
                     os.path.join(
-                        get_save_path(),
+                        get("save_path"),
                         "checkpoints",
-                        f"{int(get_global_step()):08d}.pkl",
+                        f"{int(get('global_step')):08d}.pkl",
                     )
                 )

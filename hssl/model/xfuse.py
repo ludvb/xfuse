@@ -1,4 +1,4 @@
-from typing import List
+from typing import Dict, List
 
 import pyro as p
 from pyro.distributions import Delta, Normal
@@ -15,7 +15,7 @@ class XFuse(t.nn.Module):
         super().__init__()
         self.latent_size = latent_size
 
-        self.__experiment_store = {}
+        self.__experiment_store: Dict[str, Experiment] = {}
         for experiment in experiments:
             self._register_experiment(experiment)
 

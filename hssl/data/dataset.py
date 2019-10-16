@@ -1,19 +1,17 @@
 from typing import List
 
 import numpy as np
-
 import pandas as pd
-
-import torch as t
-import torch.utils.data
+import torch
 
 from .slide import Slide
-
 
 __all__ = ["Dataset"]
 
 
-class Dataset(t.utils.data.Dataset):
+class Dataset(torch.utils.data.Dataset):
+    """Dataset consisting of multiple instances of :class:`Slide`"""
+
     def __init__(self, slides: List[Slide], design: pd.DataFrame):
         self.design = design
         self.slides = slides
@@ -34,5 +32,5 @@ class Dataset(t.utils.data.Dataset):
             **self.slides[slide].__getitem__(
                 self.observations["idx"].iloc[idx]
             ),
-            effects=t.tensor(self.design[slide].values),
+            effects=torch.tensor(self.design[slide].values),
         )

@@ -1,12 +1,9 @@
-from logging import StreamHandler
-
 import os
-
+from logging import StreamHandler
 from typing import Optional
 
-from .session_item import SessionItem
-from ...logging import DEBUG, Formatter, LOGGER, log
-
+from ...logging import DEBUG, LOGGER, Formatter, log
+from .. import SessionItem, register_session_item
 
 _LOG_HANDLER = None
 _FILE_STREAM = None
@@ -29,4 +26,4 @@ def _setter(path: Optional[str]):
         LOGGER.addHandler(_LOG_HANDLER)
 
 
-log_file = SessionItem(setter=_setter, default=None)
+register_session_item("log_file", SessionItem(setter=_setter, default=None))

@@ -5,7 +5,7 @@ from .. import Noop
 from ...logging import WARNING, log
 from ...model.experiment.st import ST
 from ...utility.visualization import reduce_last_dimension
-from ...session import get_model
+from ...session import get
 
 
 __all__ = [
@@ -19,7 +19,7 @@ __all__ = [
 class FactorActivation(StatsHandler):
     def __new__(cls, *args, **kwargs):
         try:
-            st_experiment: ST = get_model()._get_experiment("ST")
+            st_experiment: ST = get("model")._get_experiment("ST")
         except (AttributeError, KeyError):
             log(
                 WARNING,

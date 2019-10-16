@@ -1,24 +1,18 @@
 from copy import deepcopy
-
-from typing import Any, Callable, Iterable, Optional, Union
+from typing import Any, Callable, Iterable, Optional, Union, cast
 
 import numpy as np
-
 import pyro as p
+import torch as t
 from pyro.poutine.messenger import Messenger
 
-import torch as t
-
-from ... import XFuse
-from ...utility import compare
 from ....handlers import Noop
 from ....logging import INFO, WARNING, log
-from ....session.session import (
-    Session,
-    get_factor_expansion_strategy,
-    get_model,
-)
+from ....session.session import Session, get
 from ....utility import to_device
+from ... import XFuse
+from ...utility import compare
+from . import ST
 
 
 def purge_factors(
@@ -37,11 +31,10 @@ def purge_factors(
         return reduced_xfuse
 
     with Session(log_level=WARNING):
+        st_experiment = cast(ST, xfuse._get_experiment("ST"))
+        factors = st_experiment.factors
         reduced_models, ns = zip(
-            *[
-                (_xfuse_without(n).model, n)
-                for n in xfuse._get_experiment("ST").factors
-            ]
+            *[(_xfuse_without(n).model, n) for n in factors]
         )
 
         def _eval_on(x):
@@ -72,14 +65,14 @@ def purge_factors(
         ", ".join(noncontrib) if noncontrib != [] else "-",
     )
 
-    expand_factors = get_factor_expansion_strategy()
+    expand_factors = get("factor_expansion_strategy")
     expand_factors(xfuse._get_experiment("ST"), contrib, noncontrib)
 
 
 class FactorPurger(Messenger):
     def __new__(cls, *args, **kwargs):
         try:
-            xfuse = get_model()
+            xfuse = get("model")
             _ = xfuse._get_experiment("ST")
         except (AttributeError, KeyError):
             log(
@@ -102,7 +95,7 @@ class FactorPurger(Messenger):
         self._predicate = (
             frequency
             if callable(frequency)
-            else lambda epoch: epoch % frequency == 0
+            else lambda epoch: epoch % cast(int, frequency) == 0
         )
         self._kwargs = kwargs
 

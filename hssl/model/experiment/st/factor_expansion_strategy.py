@@ -10,8 +10,8 @@ import torch as t
 
 from . import ST, FactorDefault
 from ....logging import DEBUG, log
-from ....session.session import _register_session_item
-from ....session.item import SessionItem
+from ....session import register_session_item
+from ....session import SessionItem
 
 
 class ExpansionStrategy(ABC):
@@ -205,7 +205,7 @@ class RetractAndSplit(ExpansionStrategy):
 
         _log_trees("trees after retraction / before splitting")
 
-        forest = reduce(
+        forest: Set[str] = reduce(
             lambda a, x: set.union(a, x),
             (x.get_nodes() for x in self._root_nodes),
             set(),
@@ -234,7 +234,7 @@ _factor_expansion_strategy = SessionItem(
     setter=_setter, default=ExtraBaselines(extra_factors=1)
 )
 
-_register_session_item("factor_expansion_strategy", _factor_expansion_strategy)
+register_session_item("factor_expansion_strategy", _factor_expansion_strategy)
 
 
 STRATEGIES = {

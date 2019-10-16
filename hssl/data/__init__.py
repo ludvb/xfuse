@@ -1,3 +1,4 @@
-from . import slide
-from . import utility
-from .dataset import *
+from . import slide, utility
+from .dataset import Dataset
+
+__all__ = ["Dataset", "slide", "utility"]

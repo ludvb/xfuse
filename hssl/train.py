@@ -1,39 +1,36 @@
 import itertools as it
-
 from typing import Optional
 
 import numpy as np
-
-import pyro as p
-import pyro.optim
+import pyro
 from pyro.poutine.runtime import effectful
-
 from torch.utils.data import DataLoader
-
 from tqdm import tqdm
 
-from .session import get_global_step, get_model, get_optimizer
+from .session import get
 from .utility import to_device
 
 
 def train(dataloader: DataLoader, epochs: Optional[int] = None):
+    """Trains the session model"""
+
     @effectful(type="step")
     def _step(*, x):
-        optim = get_optimizer()
-        loss = p.infer.Trace_ELBO()
-        model = get_model()
-        return p.infer.SVI(model.model, model.guide, optim, loss).step(x)
+        optim = get("optimizer")
+        loss = pyro.infer.Trace_ELBO()
+        model = get("model")
+        return pyro.infer.SVI(model.model, model.guide, optim, loss).step(x)
 
     @effectful(type="epoch")
     def _epoch(*, data, epoch):
-        progress = tqdm(dataloader, dynamic_ncols=True)
+        progress = tqdm(data, dynamic_ncols=True)
         elbo = []
         for x in progress:
             elbo.append(_step(x=to_device(x)))
             progress.set_description(
                 f"epoch {epoch:05d} / mean ELBO {np.mean(elbo):.3e}"
             )
-            global_step = get_global_step()
+            global_step = get("global_step")
             global_step += 1
 
     for epoch in it.takewhile(
