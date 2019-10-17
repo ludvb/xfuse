@@ -51,11 +51,11 @@ class Slide(ABC, Dataset):
             np.invert(binary_fill_holes(np.isin(label, self._zero_data)))
         ] = 0
 
-        labels = [*sorted(np.unique(label))]
-        data = self._data[[x - 1 for x in labels if x > 0]]
+        labels = np.sort(np.unique(label[label != 0]))
+        data = self._data[(labels - 1).tolist()]
         if data.shape[0] == 0:
             return self.__getitem__((idx + 1) % len(self))
-        label = np.searchsorted(labels, label)
+        label = np.searchsorted([0, *labels], label)
 
         return dict(
             image=torch.tensor(image / 255 * 2 - 1).permute(2, 0, 1).float(),
