@@ -1,2 +1,1 @@
-from .image import *
-from .misc import *
+from . import misc

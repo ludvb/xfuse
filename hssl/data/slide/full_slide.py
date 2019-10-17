@@ -2,7 +2,6 @@ import numpy as np
 from torchvision import transforms
 from torchvision.transforms.functional import to_pil_image
 
-from ..utility import to_array
 from .slide import Slide
 
 __all__ = ["FullSlide"]
@@ -27,8 +26,8 @@ class FullSlide(Slide):
         return 1
 
     def _get_patch(self, idx):
-        image = to_pil_image(to_array(self.image))
-        label = to_pil_image(to_array(self.label))
+        image = to_pil_image(self.image.to_array())
+        label = to_pil_image(self.label.to_array())
 
         image = self.image_augmentation(image)
 

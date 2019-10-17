@@ -2,9 +2,10 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 import torch
-from pyvips import Image
 from scipy.ndimage.morphology import binary_fill_holes
 from torch.utils.data import Dataset
+
+from ..image import Image
 
 
 class Slide(ABC, Dataset):
@@ -29,10 +30,12 @@ class Slide(ABC, Dataset):
 
     @property
     def image(self):
+        """Getter for the slide image"""
         return self._image
 
     @property
     def label(self):
+        """Getter for the label image of the slide"""
         return self._label
 
     @abstractmethod

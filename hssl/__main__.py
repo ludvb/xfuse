@@ -14,7 +14,6 @@ import numpy as np
 import pandas as pd
 import pyro
 import torch
-from pyvips import Image
 from torch.utils.tensorboard.writer import SummaryWriter
 
 from . import __version__
@@ -23,7 +22,8 @@ from .analyze import dge as _dge
 from .analyze import impute as _impute
 from .data import Dataset
 from .data.slide import RandomSlide
-from .data.utility import make_dataloader, spot_size
+from .data.utility.misc import make_dataloader, spot_size
+from .data.image import Image, LazyImage, PreloadedImage
 from .handlers import Checkpointer, stats
 from .logging import DEBUG, INFO, WARNING, log
 from .model import XFuse
@@ -100,6 +100,7 @@ def cli(save_path, session, debug):
 @click.option("--factor-eval-freq", type=int, default=100)
 @click.option("--image", "image_interval", type=int, default=1000)
 @click.option("--latent-size", type=int, default=32)
+@click.option("--lazy/--non-lazy", default=False)
 @click.option("--learning-rate", type=float, default=2e-4)
 @click.option("--network-depth", type=int, default=4)
 @click.option("--network-width", type=int, default=8)
@@ -117,6 +118,7 @@ def train(
     expansion_strategy_arg,
     factor_eval_freq,
     latent_size,
+    lazy,
     learning_rate,
     network_depth,
     network_width,
@@ -156,6 +158,11 @@ def train(
         ]
     )
 
+    def _load_image(filename: str) -> Image:
+        if lazy:
+            return LazyImage.from_file(_get_path(filename))
+        return PreloadedImage.from_file(_get_path(filename))
+
     dataset = Dataset(
         [
             RandomSlide(
@@ -166,8 +173,8 @@ def train(
                     torch.as_tensor(counts.data),
                     counts.shape,
                 ),
-                image=Image.new_from_file(_get_path(image)),
-                label=Image.new_from_file(_get_path(labels)),
+                image=_load_image(image),
+                label=_load_image(labels),
                 patch_size=patch_size,
             )
             for image, labels, counts in zip(
@@ -316,9 +323,9 @@ def _run_analysis(analyses, design_file, _state_file, output):
                 if "name" in design.columns
                 else [f"sample_{i + 1}" for i in range(design.shape[0])]
             ),
-            map(compose(Image.new_from_file, _path), design.image),
+            map(compose(LazyImage.from_file, _path), design.image),
             (
-                map(compose(Image.new_from_file, _path), design.labels)
+                map(compose(LazyImage.from_file, _path), design.labels)
                 if "labels" in design.columns
                 else []
             ),
@@ -379,7 +386,7 @@ def impute(regions_file):
                 )
 
         regions = [
-            Image.new_from_file(os.path.join(regions_dir, r))
+            LazyImage.from_file(os.path.join(regions_dir, r))
             for r in regions.regions
         ]
 
@@ -449,7 +456,7 @@ def dge(regions_file, normalize, trials):
                 )
 
         regions = [
-            Image.new_from_file(os.path.join(regions_dir, r))
+            LazyImage.from_file(os.path.join(regions_dir, r))
             for r in regions.regions
         ]
 

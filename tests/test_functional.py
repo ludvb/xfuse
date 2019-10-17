@@ -6,7 +6,11 @@ import pytest
 
 
 @pytest.mark.parametrize(
-    "arguments", [["--patch-size=32", "--batch-size=1", "--epochs=1"]]
+    "arguments",
+    [
+        ["--patch-size=32", "--batch-size=1", "--epochs=1", "--lazy"],
+        ["--patch-size=32", "--batch-size=1", "--epochs=1", "--non-lazy"],
+    ],
 )
 def test_train_exit_status(shared_datadir, script_runner, tmp_path, arguments):
     """Test CLI invocation"""

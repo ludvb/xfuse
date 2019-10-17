@@ -7,7 +7,6 @@ from torchvision.transforms.functional import (
 )
 
 from ...utility import center_crop
-from ..utility import to_array
 from .slide import Slide
 
 __all__ = ["RandomSlide"]
@@ -78,12 +77,8 @@ class RandomSlide(Slide):
             np.random.randint(a - b + 1)
             for a, b in zip((self.W, self.H), (xaug, yaug))
         ]
-        image = to_pil_image(
-            to_array(self.image.extract_area(x, y, xaug, yaug))
-        )
-        label = to_pil_image(
-            to_array(self.label.extract_area(x, y, xaug, yaug))
-        )
+        image = to_pil_image(self.image.extract(x, y, xaug, yaug).to_array())
+        label = to_pil_image(self.label.extract(x, y, xaug, yaug).to_array())
 
         rotation = np.random.uniform(-180, 180)
         shear = np.random.uniform(-self._max_shear, self._max_shear)
@@ -96,8 +91,8 @@ class RandomSlide(Slide):
         image = np.array(image)
         label = np.array(label)
 
-        image = center_crop(image, (self._patch_x, self._patch_y))
-        label = center_crop(label, (self._patch_x, self._patch_y))
+        image = center_crop(image, (self._patch_y, self._patch_x))
+        label = center_crop(label, (self._patch_y, self._patch_x))
 
         if np.random.rand() < 0.5:
             image = image[::-1]

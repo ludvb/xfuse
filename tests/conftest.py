@@ -8,7 +8,8 @@ import pyro
 import pyro.distributions as distr
 import pytest
 import torch
-from pyvips import Image
+
+from hssl.data.image import PreloadedImage
 
 
 def pytest_configure(config):
@@ -64,7 +65,7 @@ def toydata():
         distr.Normal(0.0, 1.0).expand([num_genes, num_factors]).sample().exp()
     )
 
-    label = np.zeros(activity.shape[:2]).astype(int)
+    label = np.zeros(activity.shape[:2]).astype(np.uint8)
     counts = [torch.zeros(num_genes)]
     for i, (y, x) in enumerate(
         it.product(
@@ -92,22 +93,9 @@ def toydata():
     image = 255 * (
         (activity - activity.min()) / (activity.max() - activity.min())
     )
-    image = image.round().byte()
-    image = Image.new_from_memory(
-        image.cpu().numpy().data,
-        image.shape[1],
-        image.shape[0],
-        num_factors,
-        "uchar",
-    )
+    image = image.round().byte().cpu().numpy()
+    image = PreloadedImage(image)
 
-    label = Image.new_from_memory(
-        # pylint: disable=unsubscriptable-object
-        label.astype(np.uint8).data,
-        label.shape[1],
-        label.shape[0],
-        1,
-        "uchar",
-    )
+    label = PreloadedImage(label)
 
     return torch.stack(counts).float().to_sparse(), image, label
