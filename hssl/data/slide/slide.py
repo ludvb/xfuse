@@ -16,13 +16,24 @@ class Slide(ABC, Dataset):
         if data.is_sparse:  # type: ignore
             data = data.to_dense()
 
-        self.image = image
-        self.label = label
-        self.data = data
+        self._image = image
+        self._label = label
+        self._data = data
+        self._zero_data = np.concatenate(
+            [np.array([0]), np.where(data.sum(1) == 0)[0] + 1]
+        )
 
-        self.H, self.W = self.image.height, self.image.width
+        self.H, self.W = self._image.height, self._image.width
 
-        assert self.H == self.label.height and self.W == self.label.width
+        assert self.H == self._label.height and self.W == self._label.width
+
+    @property
+    def image(self):
+        return self._image
+
+    @property
+    def label(self):
+        return self._label
 
     @abstractmethod
     def _get_patch(self, idx: int):
@@ -36,10 +47,12 @@ class Slide(ABC, Dataset):
         image, label = self._get_patch(idx)
 
         # remove partially visible labels
-        label[np.invert(binary_fill_holes(label == 0))] = 0
+        label[
+            np.invert(binary_fill_holes(np.isin(label, self._zero_data)))
+        ] = 0
 
         labels = [*sorted(np.unique(label))]
-        data = self.data[[x - 1 for x in labels if x > 0]]
+        data = self._data[[x - 1 for x in labels if x > 0]]
         if data.shape[0] == 0:
             return self.__getitem__((idx + 1) % len(self))
         label = np.searchsorted(labels, label)
