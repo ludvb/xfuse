@@ -110,4 +110,4 @@ def toydata():
         "uchar",
     )
 
-    return torch.stack(counts).float(), image, label
+    return torch.stack(counts).float().to_sparse(), image, label

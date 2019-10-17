@@ -13,15 +13,12 @@ class Slide(ABC, Dataset):
     """
 
     def __init__(self, data: torch.Tensor, image: Image, label: Image):
+        if data.is_sparse:  # type: ignore
+            data = data.to_dense()
+
         self.image = image
         self.label = label
         self.data = data
-
-        # FIXME: torch sparse tensors don't support indexing. this can be
-        # removed once https://github.com/pytorch/pytorch/pull/24937 has been
-        # merged
-        if self.data.is_sparse:  # type: ignore
-            self.data = self.data.to_dense()
 
         self.H, self.W = self.image.height, self.image.width
 
