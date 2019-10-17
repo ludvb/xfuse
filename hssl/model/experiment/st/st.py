@@ -286,17 +286,17 @@ class ST(Image):
                 ),
             )
 
-        image = super().guide(x)
-
         expression_encoder = p.module(
             "expression_encoder",
             t.nn.Sequential(
-                t.nn.Linear(num_genes, 100),
+                t.nn.Linear(num_genes, 256),
                 t.nn.LeakyReLU(0.2, inplace=True),
-                t.nn.Linear(100, 100),
+                t.nn.Linear(256, 256),
+                t.nn.LeakyReLU(0.2, inplace=True),
+                t.nn.Linear(256, 16),
             ),
             update_module_params=True,
-        ).to(image)
+        ).to(x["image"])
 
         def encode(data, label):
             encdat = expression_encoder(data)
@@ -316,15 +316,10 @@ class ST(Image):
             expanded = t.cat([expanded[..., :1], expanded[d1, d2, 1:]], -1)
             return expanded.permute(2, 0, 1)
 
-        label = (
-            t.nn.functional.interpolate(
-                x["label"].float().unsqueeze(1), image.shape[-2:]
-            )
-            .squeeze(1)
-            .long()
-        )
         expression = t.stack(
-            [encode(data, label) for data, label in zip(x["data"], label)]
+            [encode(data, label) for data, label in zip(x["data"], x["label"])]
         )
+        amended_x = x.copy()
+        amended_x["image"] = t.cat([x["image"], expression], dim=1)
 
-        return t.cat([image, expression], dim=1)
+        return super().guide(amended_x)
