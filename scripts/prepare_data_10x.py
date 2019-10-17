@@ -28,6 +28,8 @@ def run(
     image = imread(image_file)
     if zoom_factor is not None:
         image = zoom(image, (zoom_factor, zoom_factor, 1.0), order=0)
+    else:
+        zoom_factor = 1.0
 
     with h5py.File(counts_file, "r") as data:
         counts = csr_matrix(
@@ -57,7 +59,9 @@ def run(
         spots = list(
             spots.apply(
                 lambda x: Spot(
-                    x=x["x"] * SCALE, y=x["y"] * SCALE, r=R * SCALE
+                    x=x["x"] * SCALE * zoom_factor,
+                    y=x["y"] * SCALE * zoom_factor,
+                    r=R * SCALE * zoom_factor,
                 ),
                 1,
             )
@@ -90,7 +94,9 @@ def main():
 
     opts = parser.parse_args()
 
-    counts, image, label = run(opts.image, opts.counts, opts.spots)
+    counts, image, label = run(
+        opts.image, opts.counts, opts.spots, opts.zoom, opts.min_counts
+    )
 
     os.makedirs(opts.output_directory, exist_ok=True)
 
