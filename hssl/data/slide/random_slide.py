@@ -1,6 +1,10 @@
 import numpy as np
 from torchvision import transforms
-from torchvision.transforms.functional import affine, to_pil_image
+from torchvision.transforms.functional import (
+    _get_inverse_affine_matrix,
+    affine,
+    to_pil_image,
+)
 
 from ...utility import center_crop
 from ..utility import to_array
@@ -16,7 +20,9 @@ class RandomSlide(Slide):
 
     # pylint: disable=too-few-public-methods
 
-    def __init__(self, *args, patch_size: int = 512, **kwargs):
+    def __init__(
+        self, *args, patch_size: int = 512, max_shear: float = 10, **kwargs
+    ):
         super().__init__(*args, **kwargs)
         self.image_augmentation = transforms.Compose(
             [
@@ -25,33 +31,62 @@ class RandomSlide(Slide):
                 )
             ]
         )
-        self.patch = patch_size
-        if any(d < self._xpatch for d in (self.W, self.H)):
+        self._max_shear = max_shear
+        self._patch_x = self._patch_y = patch_size
+        if any(a < b for a, b in zip((self.W, self.H), self._aug_patch)):
             raise ValueError(
-                "image is too small for patch size "
-                f"(needs to be at least {self._xpatch} px in each dimension)"
+                "image is too small for patch size"
+                + " (needs to be at least "
+                + "x".join(map(str, self._aug_patch))
+                + " px)"
             )
 
     @property
-    def _xpatch(self):
-        return int(np.ceil(self.patch * np.sqrt(2)))
+    def _aug_patch(self):
+        transform = np.concatenate(
+            [
+                np.array(
+                    _get_inverse_affine_matrix(
+                        (0.5, 0.5), 45.0, (0, 0), 1.0, self._max_shear
+                    )
+                ).reshape(2, -1),
+                np.array([[0.0, 0.0, 1.0]]),
+            ]
+        )
+        corners = np.array(
+            [
+                [0.0, 0.0, 1.0],
+                [0.0, 1.0, 1.0],
+                [1.0, 0.0, 1.0],
+                [1.0, 1.0, 1.0],
+            ]
+        )
+        inv_corners = transform @ np.transpose(corners)
+        xmax, ymax = inv_corners[:2].max(1)
+        xmin, ymin = inv_corners[:2].min(1)
+        xaug = int(np.ceil((xmax - xmin) * self._patch_x))
+        yaug = int(np.ceil((ymax - ymin) * self._patch_y))
+        return xaug, yaug
 
     def __len__(self):
-        return int(np.ceil(self.W * self.H / (self.patch ** 2)))
+        xaug, yaug = self._aug_patch
+        return int(np.ceil(self.W / xaug * self.H / yaug))
 
     def _get_patch(self, idx):
-        y, x = [
-            np.random.randint(s - self._xpatch + 1) for s in (self.H, self.W)
+        xaug, yaug = self._aug_patch
+        x, y = [
+            np.random.randint(a - b + 1)
+            for a, b in zip((self.W, self.H), (xaug, yaug))
         ]
         image = to_pil_image(
-            to_array(self.image.extract_area(x, y, self._xpatch, self._xpatch))
+            to_array(self.image.extract_area(x, y, xaug, yaug))
         )
         label = to_pil_image(
-            to_array(self.label.extract_area(x, y, self._xpatch, self._xpatch))
+            to_array(self.label.extract_area(x, y, xaug, yaug))
         )
 
         rotation = np.random.uniform(-180, 180)
-        shear = 0  # np.random.uniform(-10, 10)
+        shear = np.random.uniform(-self._max_shear, self._max_shear)
 
         image = affine(image, rotation, (0, 0), 1, shear)
         label = affine(label, rotation, (0, 0), 1, shear)
@@ -61,8 +96,8 @@ class RandomSlide(Slide):
         image = np.array(image)
         label = np.array(label)
 
-        image = center_crop(image, (self.patch, self.patch))
-        label = center_crop(label, (self.patch, self.patch))
+        image = center_crop(image, (self._patch_x, self._patch_y))
+        label = center_crop(label, (self._patch_x, self._patch_y))
 
         if np.random.rand() < 0.5:
             image = image[::-1]
