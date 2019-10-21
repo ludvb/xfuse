@@ -9,7 +9,7 @@ from ..image import Image
 
 
 class Slide(ABC, Dataset):
-    """
+    r"""
     Abstract class yielding observations from a single sample (tissue slide)
     """
 
@@ -30,12 +30,12 @@ class Slide(ABC, Dataset):
 
     @property
     def image(self):
-        """Getter for the slide image"""
+        r"""Getter for the slide image"""
         return self._image
 
     @property
     def label(self):
-        """Getter for the label image of the slide"""
+        r"""Getter for the label image of the slide"""
         return self._label
 
     @abstractmethod
@@ -61,8 +61,10 @@ class Slide(ABC, Dataset):
         label = np.searchsorted([0, *labels], label)
 
         return dict(
-            image=torch.tensor(image / 255 * 2 - 1).permute(2, 0, 1).float(),
-            label=torch.tensor(label).long(),
+            image=(
+                torch.as_tensor(image / 255 * 2 - 1).permute(2, 0, 1).float()
+            ),
+            label=torch.as_tensor(label).long(),
             data=data,
             type="ST",
         )

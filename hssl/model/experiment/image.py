@@ -3,7 +3,7 @@ from operator import add
 
 import pyro as p
 import torch as t
-from pyro.distributions import Normal
+from pyro.distributions import Normal  # pylint: disable=no-name-in-module
 
 from ...utility import center_crop
 from ...utility.misc import Unpool
@@ -11,7 +11,7 @@ from . import Experiment
 
 
 class Image(Experiment):
-    """Image experiment"""
+    r"""Image experiment"""
 
     def __init__(self, *args, depth=4, num_channels=8, **kwargs):
         super().__init__(*args, **kwargs)

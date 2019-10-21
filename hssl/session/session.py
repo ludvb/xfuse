@@ -7,11 +7,15 @@ __all__ = ["Session", "Unset", "get_session", "get", "register_session_item"]
 
 
 class Unset:
+    r"""Marker for unset :class:`Session` items"""
+
     def __str__(self):
         return "UNSET"
 
 
 class Session:
+    r"""Session context manager"""
+
     def __init__(self, **kwargs):
         for name in _SESSION_STORE:
             try:
@@ -29,7 +33,7 @@ class Session:
         _SESSION_STACK.append(self)
         for session in _SESSION_STACK:
             session._level += 1
-        apply_session(get_session())
+        _apply_session(get_session())
 
     def __exit__(self, err_type, err, tb):
         if err_type is not None:
@@ -52,7 +56,7 @@ class Session:
                 session._level -= 1
             assert self._level == -1
         assert self == _SESSION_STACK.pop()
-        apply_session(get_session())
+        _apply_session(get_session())
 
     def __str__(self):
         return (
@@ -70,12 +74,13 @@ _SESSION_STACK: List[Session] = []
 _SESSION_STORE: Dict[str, SessionItem] = {}
 
 
-def apply_session(session: Session):
+def _apply_session(session: Session):
     for name, (setter, default) in _SESSION_STORE.items():
         setter(getattr(session, name, default))
 
 
 def get(name: str) -> Any:
+    r"""Gets session item from the current context"""
     if name not in _SESSION_STORE:
         raise ValueError(f"{name} is not a session item")
 
@@ -91,10 +96,14 @@ def get(name: str) -> Any:
 
 
 def get_session():
+    r"""
+    Constructs a new :class:`Sessions` based on the current session context
+    """
     return Session(**{name: get(name) for name in _SESSION_STORE})
 
 
 def register_session_item(name: str, x: SessionItem) -> None:
+    r"""Registers new :class:`SessionItem`"""
     log(DEBUG, 'registering session item "%s"', name)
     _SESSION_STORE[name] = x
 

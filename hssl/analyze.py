@@ -125,10 +125,10 @@ def _visualize_batch(batch, normalize=False, **kwargs):
 
 
 def impute(sample, region):
-    """Imputation analysis"""
+    r"""Imputation analysis"""
     raise NotImplementedError()
 
 
 def dge(samples, regions, output, normalize, trials):
-    """Diffential gene expression analysis"""
+    r"""Diffential gene expression analysis"""
     raise NotImplementedError()

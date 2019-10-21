@@ -5,8 +5,7 @@ from logging import DEBUG, ERROR, INFO, WARNING
 
 
 class Formatter(logging.Formatter):
-    """ Custom log message formatter
-    """
+    r"""Custom log message formatter"""
 
     def __init__(self, *args, fancy_formatting=False, **kwargs):
         self.fancy = fancy_formatting
@@ -58,5 +57,5 @@ def log(*args, **kwargs):
 
 
 def set_level(level: int):
-    """Set logging level """
+    r"""Set logging level"""
     LOGGER.setLevel(level)

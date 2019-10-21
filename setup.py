@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
-""" hssl setup script
-"""
+r"""hssl setup script"""
 
 import os.path as osp
 from subprocess import run

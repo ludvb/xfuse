@@ -15,6 +15,10 @@ def reduce_last_dimension(
     n_components: int = 3,
     **kwargs,
 ) -> np.ndarray:
+    r"""
+    Performs dimensionality reduction on the last dimension of the input array
+    """
+
     if method != "pca":
         raise NotImplementedError()
 

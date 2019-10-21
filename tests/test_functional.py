@@ -1,4 +1,4 @@
-"""Functional tests"""
+r"""Functional tests"""
 
 import os
 
@@ -13,7 +13,7 @@ import pytest
     ],
 )
 def test_train_exit_status(shared_datadir, script_runner, tmp_path, arguments):
-    """Test CLI invocation"""
+    r"""Test CLI invocation"""
     save_path = tmp_path / "output_dir"
     arguments = [
         f"--save-path={save_path}",

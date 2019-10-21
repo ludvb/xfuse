@@ -10,41 +10,41 @@ __all__ = ["Image", "LazyImage", "PreloadedImage"]
 
 
 class Image(ABC):
-    """Abstract class for image data"""
+    r"""Abstract class for image data"""
 
     @property
     @abstractmethod
     def height(self) -> int:
-        """Image height"""
+        r"""Image height"""
 
     @property
     @abstractmethod
     def width(self) -> int:
-        """Image width"""
+        r"""Image width"""
 
     @property
     @abstractmethod
     def channels(self) -> int:
-        """Image channels"""
+        r"""Image channels"""
 
     @abstractmethod
     def extract(self, x: int, y: int, width: int, height: int) -> Image:
-        """Extract image region"""
+        r"""Extract image region"""
 
     @abstractmethod
     def to_array(self) -> np.ndarray:
-        """Convert the image to a :class:`numpy.ndarray`"""
+        r"""Convert the image to a :class:`numpy.ndarray`"""
 
 
 class LazyImage(Image):
-    """Image data that is read from disk when needed"""
+    r"""Image data that is read from disk when needed"""
 
     def __init__(self, image: pyvips.Image):
         self._image = image
 
     @staticmethod
     def from_file(image_file: str) -> LazyImage:
-        """Creates a :class:`LazyImage` from a file"""
+        r"""Creates a :class:`LazyImage` from a file"""
         return LazyImage(pyvips.Image.new_from_file(image_file))
 
     @property
@@ -84,7 +84,7 @@ class LazyImage(Image):
 
 
 class PreloadedImage(Image):
-    """Image data that is stored in RAM"""
+    r"""Image data that is stored in RAM"""
 
     def __init__(self, image: np.ndarray):
         if image.ndim not in [2, 3]:
@@ -95,7 +95,7 @@ class PreloadedImage(Image):
 
     @staticmethod
     def from_file(image_file: str) -> PreloadedImage:
-        """Creates a :class:`PreloadedImage` from a file"""
+        r"""Creates a :class:`PreloadedImage` from a file"""
         return PreloadedImage(np.array(imread(image_file)))
 
     @property

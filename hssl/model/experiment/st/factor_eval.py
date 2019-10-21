@@ -1,9 +1,8 @@
 from copy import deepcopy
-from typing import Any, Callable, Iterable, Optional, Union, cast
+from typing import Any, Callable, Iterable, NoReturn, Union, cast
 
 import numpy as np
 import pyro as p
-import torch as t
 from pyro.poutine.messenger import Messenger
 
 from ....handlers import Noop
@@ -15,23 +14,23 @@ from ...utility import compare
 from . import ST
 
 
-def purge_factors(
-    xfuse: XFuse,
-    data: Iterable[Any],
-    baseline: Optional[t.Tensor] = None,
-    **kwargs: Any,
-) -> None:
+def purge_factors(xfuse: XFuse, data: Iterable[Any], **kwargs: Any) -> None:
+    r"""
+    Purges superfluous factors and add new ones based on the
+    `factor_expansion_strategy` of the current :class:`Session`
+    """
+
     log(INFO, "evaluating factors")
 
     def _xfuse_without(n):
         reduced_xfuse = deepcopy(xfuse)
-        reduced_xfuse._XFuse__experiment_store["ST"].remove_factor(
+        reduced_xfuse.get_experiment("ST").remove_factor(
             n, remove_params=False
         )
         return reduced_xfuse
 
     with Session(log_level=WARNING):
-        st_experiment = cast(ST, xfuse._get_experiment("ST"))
+        st_experiment = cast(ST, xfuse.get_experiment("ST"))
         factors = st_experiment.factors
         reduced_models, ns = zip(
             *[(_xfuse_without(n).model, n) for n in factors]
@@ -66,14 +65,21 @@ def purge_factors(
     )
 
     expand_factors = get("factor_expansion_strategy")
-    expand_factors(xfuse._get_experiment("ST"), contrib, noncontrib)
+    expand_factors(xfuse.get_experiment("ST"), contrib, noncontrib)
 
 
 class FactorPurger(Messenger):
-    def __new__(cls, *args, **kwargs):
+    r"""
+    Runs :func:`purge_factors` at a fixed interval to purge superfluous factors
+    or add new ones
+    """
+
+    _model: XFuse
+
+    def __new__(cls, *_args, **_kwargs):
         try:
             xfuse = get("model")
-            _ = xfuse._get_experiment("ST")
+            _ = xfuse.get_experiment("ST")
         except (AttributeError, KeyError):
             log(
                 WARNING,
@@ -91,6 +97,7 @@ class FactorPurger(Messenger):
         frequency: Union[int, Callable[[int], bool]] = 1,
         **kwargs: Any,
     ):
+        super().__init__()
         self._data = data
         self._predicate = (
             frequency
@@ -99,10 +106,12 @@ class FactorPurger(Messenger):
         )
         self._kwargs = kwargs
 
-    def _handle(self, **msg) -> None:
+    def _handle(self, **_msg) -> NoReturn:
+        # pylint: disable=no-self-use
         raise RuntimeError("unreachable code path")
 
-    def _select_msg(self, **msg) -> bool:
+    def _select_msg(self, **_msg) -> bool:
+        # pylint: disable=no-self-use
         return False
 
     def _pyro_post_epoch(self, msg) -> None:

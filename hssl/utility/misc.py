@@ -4,7 +4,7 @@ __all__ = ["Unpool"]
 
 
 class Unpool(torch.nn.Module):
-    """
+    r"""
     A :class:`~torch.nn.Module` combining upsampling with a convolutional layer
     """
 

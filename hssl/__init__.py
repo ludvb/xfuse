@@ -1,4 +1,4 @@
-"""XFuse"""
+r"""XFuse"""
 
 from .__version__ import __version__
 

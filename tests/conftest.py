@@ -1,18 +1,18 @@
-""" Config file for tests
-"""
+r"""Config file for tests"""
 
 import itertools as it
 
 import numpy as np
 import pyro
 import pyro.distributions as distr
-import pytest
 import torch
 
+import pytest
 from hssl.data.image import PreloadedImage
 
 
 def pytest_configure(config):
+    # pylint: disable=missing-function-docstring
     config.addinivalue_line(
         "markers", "fix_rng: resets the RNG to a fixed value"
     )
@@ -20,18 +20,21 @@ def pytest_configure(config):
 
 
 def pytest_runtest_setup(item):
+    # pylint: disable=missing-function-docstring
     pyro.clear_param_store()
     if item.get_closest_marker("fix_rng") is not None:
         torch.manual_seed(0)
 
 
 def pytest_addoption(parser):
+    # pylint: disable=missing-function-docstring
     parser.addoption(
         "--quick", action="store_true", default=False, help="skip slow tests"
     )
 
 
 def pytest_collection_modifyitems(config, items):
+    # pylint: disable=missing-function-docstring
     if config.getoption("--quick"):
         for item in filter(lambda x: "slow" in x.keywords, items):
             item.add_marker(pytest.mark.skip(reason="skipping slow test"))
@@ -40,7 +43,7 @@ def pytest_collection_modifyitems(config, items):
 @pytest.fixture
 @pytest.mark.fix_rng
 def toydata():
-    """Produces toy dataset"""
+    r"""Produces toy dataset"""
     # pylint: disable=too-many-locals
 
     num_genes = 10

@@ -1,32 +1,27 @@
 from abc import abstractmethod
 
-import pyro as p
-
 import torch as t
 
 
 class Experiment(t.nn.Module):
-    def __init__(self, n: int):
-        self.n = n
+    r"""Abstract class defining the experiment type"""
 
-    def _sample_global(name, *args, **kwargs):
-        try:
-            return p.sample(name, *args, **kwargs)
-        except RuntimeError:
-            return p.poutine.runtime._PYRO_STACK[-1].trace.nodes[name]["value"]
+    def __init__(self, n: int):
+        super().__init__()
+        self.n = n
 
     @property
     @abstractmethod
     def tag(self):
-        pass
+        r"""Experiment name"""
 
     @abstractmethod
     def model(self, x, z):
-        pass
+        r"""Experiment model"""
 
     @abstractmethod
     def guide(self, x):
-        pass
+        r"""Experiment guide for :class:`pyro.infer.SVI`"""
 
-    def forward(self, x, z):
+    def forward(self, x, z):  # pylint: disable=arguments-differ
         return self.model(x, z)

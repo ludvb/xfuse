@@ -10,6 +10,7 @@ _FILE_STREAM = None
 
 
 def _setter(path: Optional[str]):
+    # pylint: disable=global-statement
     global _FILE_STREAM, _LOG_HANDLER
     if _LOG_HANDLER is not None:
         LOGGER.removeHandler(_LOG_HANDLER)

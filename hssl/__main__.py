@@ -44,7 +44,7 @@ from .utility import (
     set_rng_seed,
     with_,
 )
-from .utility.file import unique_prefix
+from .utility.file import first_unique_filename
 from .utility.session import load_session, save_session
 
 _DEFAULT_SESSION = Session()
@@ -83,7 +83,7 @@ def cli(save_path, session, debug):
         _DEFAULT_SESSION.panic = _panic
         _DEFAULT_SESSION.log_level = -999
 
-    _DEFAULT_SESSION.log_file = unique_prefix(
+    _DEFAULT_SESSION.log_file = first_unique_filename(
         os.path.join(_DEFAULT_SESSION.save_path, "log")
     )
 

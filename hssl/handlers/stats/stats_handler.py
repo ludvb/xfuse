@@ -1,5 +1,8 @@
 from abc import ABC, abstractmethod
 
+from functools import wraps
+import inspect
+
 from typing import Callable, Optional
 
 from pyro.poutine.messenger import Messenger
@@ -11,14 +14,13 @@ from ...session import get
 
 
 class StatsHandler(ABC, Messenger):
+    r"""Abstract class for stats trackers"""
+
     def __init__(
         self,
         writer: SummaryWriter,
         predicate: Optional[Callable[..., bool]] = None,
     ):
-        from functools import wraps
-        import inspect
-
         super().__init__()
 
         if predicate is None:

@@ -13,11 +13,9 @@ __all__ = ["RandomSlide"]
 
 
 class RandomSlide(Slide):
-    """
+    r"""
     A :class:`Slide` that yields randomly cropped patches of the sample
     """
-
-    # pylint: disable=too-few-public-methods
 
     def __init__(
         self, *args, patch_size: int = 512, max_shear: float = 10, **kwargs

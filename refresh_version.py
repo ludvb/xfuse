@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 
-""" refresh_version.py
-
-writes hssl/__version__ to correspond to the current git version
-"""
+r"""writes hssl/__version__ to correspond to the current git version"""
 
 import os.path as osp
 import re
@@ -46,8 +43,7 @@ with open(osp.join(osp.dirname(__file__), "hssl", "__version__.py"), "w") as f:
             map(
                 lambda x: x + "\n",
                 [
-                    '""" Generated automatically---don\'t edit!',
-                    '"""',
+                    'r"""Generated automatically---don\'t edit!"""',
                     "",
                     f'__version__ = "{VERSION:s}"',
                     '__diff__ = r"""' + DIFF.replace('"', '\\"') + '"""',

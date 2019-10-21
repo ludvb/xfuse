@@ -17,9 +17,13 @@ __all__ = [
 
 
 class FactorActivation(StatsHandler):
-    def __new__(cls, *args, **kwargs):
+    r"""Abstract class for factor activation trackers"""
+
+    _experiment: ST
+
+    def __new__(cls, *_args, **_kwargs):
         try:
-            st_experiment: ST = get("model")._get_experiment("ST")
+            st_experiment: ST = get("model").get_experiment("ST")
         except (AttributeError, KeyError):
             log(
                 WARNING,
@@ -32,6 +36,7 @@ class FactorActivation(StatsHandler):
         return instance
 
     def _select_msg(self, name, **_):
+        # pylint: disable=arguments-differ
         return name[-3:] == "rim"
 
     @abstractmethod
@@ -39,6 +44,7 @@ class FactorActivation(StatsHandler):
         pass
 
     def _handle(self, fn, **_):
+        # pylint: disable=arguments-differ
         for name, factor in zip(
             self._experiment.factors, fn.mean.permute(1, 0, 2, 3)
         ):
@@ -46,12 +52,23 @@ class FactorActivation(StatsHandler):
 
 
 class FactorActivationHistogram(FactorActivation):
+    r"""
+    Factor activation tracker, summarizing factor activities in a histogram
+    """
+
     def _handle_factor_activation(self, name, activation):
+        # pylint: disable=no-member
         self.add_histogram(f"activation/factor{name}", activation.flatten())
 
 
 class FactorActivationMaps(FactorActivation):
+    r"""
+    Factor activation tracker, summarizing factor activities in spatial
+    activation maps
+    """
+
     def _handle_factor_activation(self, name, activation):
+        # pylint: disable=no-member
         self.add_images(
             f"activation/maps/factor{name}",
             activation.unsqueeze(1),
@@ -60,15 +77,28 @@ class FactorActivationMaps(FactorActivation):
 
 
 class FactorActivationMean(FactorActivation):
+    r"""
+    Factor activation tracker, summarizing factor activity means
+    """
+
     def _handle_factor_activation(self, name, activation):
+        # pylint: disable=no-member
         self.add_scalar(f"activation/mean/factor{name}", activation.mean())
 
 
 class FactorActivationSummary(StatsHandler):
+    r"""
+    Factor activation tracker, summarizing factor activities in a spatial
+    activation map
+    """
+
     def _select_msg(self, name, value, **_):
+        # pylint: disable=arguments-differ
         return name[-3:] == "rim" and value.shape[1] >= 3
 
     def _handle(self, fn, **_):
+        # pylint: disable=arguments-differ
+        # pylint: disable=no-member
         self.add_images(
             "activation/summary",
             reduce_last_dimension(fn.mean.permute(0, 2, 3, 1)),

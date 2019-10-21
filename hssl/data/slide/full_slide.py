@@ -8,9 +8,7 @@ __all__ = ["FullSlide"]
 
 
 class FullSlide(Slide):
-    """A :class:`Slide` that yields the entire (uncropped) sample"""
-
-    # pylint: disable=too-few-public-methods
+    r"""A :class:`Slide` that yields the entire (uncropped) sample"""
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

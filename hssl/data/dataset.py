@@ -10,7 +10,7 @@ __all__ = ["Dataset"]
 
 
 class Dataset(torch.utils.data.Dataset):
-    """Dataset consisting of multiple instances of :class:`Slide`"""
+    r"""Dataset consisting of multiple instances of :class:`Slide`"""
 
     def __init__(self, slides: List[Slide], design: pd.DataFrame):
         self.design = design
@@ -32,5 +32,5 @@ class Dataset(torch.utils.data.Dataset):
             **self.slides[slide].__getitem__(
                 self.observations["idx"].iloc[idx]
             ),
-            effects=torch.tensor(self.design[slide].values),
+            effects=torch.as_tensor(self.design[slide].values),
         )

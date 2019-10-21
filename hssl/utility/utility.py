@@ -1,8 +1,18 @@
-import itertools as it
+import random
 import re
-import signal
 from functools import partial, wraps
-from typing import Callable, Dict, List, Optional, Set, Tuple, cast
+from typing import (
+    Any,
+    Callable,
+    ContextManager,
+    Dict,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    cast,
+    overload,
+)
 
 import h5py
 import numpy as np
@@ -16,15 +26,10 @@ from ..utility.file import extension
 
 __all__ = [
     "compose",
-    "zip_dicts",
     "set_rng_seed",
     "center_crop",
     "read_data",
     "design_matrix_from",
-    "argmax",
-    "integrate_loadings",
-    "with_interrupt_handler",
-    "chunks_of",
     "find_device",
     "sparseonehot",
     "to_device",
@@ -32,29 +37,21 @@ __all__ = [
 ]
 
 
-def compose(f, *gs):
+def compose(f: Callable[..., Any], *gs: Callable[..., Any]):
+    r"""Composes/threads given functions"""
     return (
+        # pylint: disable=no-value-for-parameter
         (lambda *args, **kwargs: f(compose(*gs)(*args, **kwargs)))
         if gs != ()
         else f
     )
 
 
-def zip_dicts(ds):
-    d0 = next(ds)
-    d = {k: [] for k in d0.keys()}
-    for d_ in it.chain([d0], ds):
-        for k, v in d_.items():
-            try:
-                d[k].append(v)
-            except AttributeError:
-                raise ValueError("dict keys are inconsistent")
-    return d
-
-
-def set_rng_seed(seed: int):
-    import random
-
+def set_rng_seed(seed: int) -> None:
+    r"""
+    Sets the seed of the :module:`random`, :module:`numpy`, and :module:`torch`
+    RNGs
+    """
     i32max = np.iinfo(np.int32).max
     random.seed(seed)
     n_seed = random.choice(range(i32max + 1))
@@ -78,14 +75,15 @@ def set_rng_seed(seed: int):
     )
 
 
-def center_crop(input, target_shape):
-    return input[
+def center_crop(x, target_shape):
+    r"""Crops `x` to the given `target_shape` from the center"""
+    return x[
         tuple(
             [
                 slice((a - b) // 2, (a - b) // 2 + b)
                 if b is not None
                 else slice(None)
-                for a, b in zip(input.shape, target_shape)
+                for a, b in zip(x.shape, target_shape)
             ]
         )
     ]
@@ -94,9 +92,11 @@ def center_crop(input, target_shape):
 def read_data(
     paths: List[str],
     filter_ambiguous: bool = True,
-    num_genes: int = None,
+    num_genes: Optional[int] = None,
     genes: List[str] = None,
 ) -> pd.DataFrame:
+    r"""Reads data from `paths` and produces the (concatenated) data table"""
+
     def _load_file(path: str) -> pd.DataFrame:
         def _csv(sep):
             return pd.read_csv(path, sep=sep, index_col=0).astype(
@@ -156,6 +156,7 @@ def read_data(
 
     if num_genes:
         if isinstance(num_genes, int):
+            # pylint: disable=invalid-unary-operand-type
             data = data[data.sum(0).sort_values()[-num_genes:].index]
         if isinstance(num_genes, list):
             data = data[num_genes]
@@ -167,13 +168,15 @@ def design_matrix_from(
     design: pd.DataFrame,
     covariates: Optional[List[Tuple[str, Set[str]]]] = None,
 ) -> pd.DataFrame:
+    r"""
+    Constructs the design matrix from the design specified in the design file
+    """
+
     if len(design.columns) == 0:
         return pd.DataFrame(np.zeros((0, len(design))))
 
     design = (
-        design[[x for x in sorted(design.columns)]]
-        .astype(str)
-        .astype("category")
+        design[list(sorted(design.columns))].astype(str).astype("category")
     )
 
     if covariates is not None:
@@ -216,81 +219,76 @@ def design_matrix_from(
     return pd.concat(vs, keys=ks)
 
 
-def argmax(x: torch.Tensor):
-    return np.unravel_index(torch.argmax(x), x.shape)
+def find_device(x: Any) -> torch.device:
+    r"""
+    Tries to find the :class:`torch.device` associated with the given object
+    """
 
-
-def integrate_loadings(
-    loadings: torch.Tensor,
-    label: torch.Tensor,
-    max_label: Optional[int] = None,
-):
-    if max_label is None:
-        max_label = cast(int, torch.max(label).item())
-    return torch.einsum(
-        "btxy,bxyi->it",
-        loadings.exp(),
-        (
-            torch.eye(max_label + 1)
-            .to(label)[label.flatten()]
-            .reshape(*label.shape, -1)
-            .float()
-        ),
-    )
-
-
-def with_interrupt_handler(handler):
-    def _decorator(func):
-        @wraps(func)
-        def _wrapper(*args, **kwargs):
-            previous_handler = signal.getsignal(signal.SIGINT)
-            signal.signal(signal.SIGINT, handler)
-            func(*args, **kwargs)
-            signal.signal(signal.SIGINT, previous_handler)
-
-        return _wrapper
-
-    return _decorator
-
-
-def chunks_of(n, xs):
-    class FillMarker:
+    class NoDevice(Exception):
+        # pylint: disable=missing-class-docstring
         pass
 
-    return map(
-        lambda xs: [*filter(lambda x: x is not FillMarker, xs)],
-        it.zip_longest(*[iter(xs)] * n, fillvalue=FillMarker),
-    )
-
-
-def find_device(x):
     if isinstance(x, torch.Tensor):
         return x.device
+
     if isinstance(x, list):
         for y in x:
-            device = find_device(y)
-            if device is not None:
-                return device
+            try:
+                return find_device(y)
+            except NoDevice:
+                pass
+
     if isinstance(x, dict):
         for y in x.values():
-            device = find_device(y)
-            if device is not None:
-                return device
-    return None
+            try:
+                return find_device(y)
+            except NoDevice:
+                pass
+
+    raise NoDevice(f"Failed to find a device associated with {x}")
 
 
-def sparseonehot(labels, classes=None):
-    if classes is None:
-        classes = labels.max().item() + 1
-    idx = torch.stack([torch.arange(len(labels)).to(labels), labels])
-    return torch.sparse.LongTensor(
+def sparseonehot(labels: torch.Tensor, num_classes: Optional[int] = None):
+    r"""One-hot encodes a label vectors into a sparse tensor"""
+    if num_classes is None:
+        num_classes = cast(int, labels.max().item()) + 1
+    idx = torch.stack([torch.arange(labels.shape[0]).to(labels), labels])
+    return torch.sparse.LongTensor(  # type: ignore
         idx,
         torch.ones(idx.shape[1]).to(idx),
-        torch.Size([len(labels), classes]),
+        torch.Size([labels.shape[0], num_classes]),
     )
+
+
+@overload
+def to_device(
+    x: torch.Tensor, device: Optional[torch.device] = None
+) -> torch.Tensor:
+    # pylint: disable=missing-function-docstring
+    ...
+
+
+@overload
+def to_device(
+    x: List[Any], device: Optional[torch.device] = None
+) -> List[Any]:
+    # pylint: disable=missing-function-docstring
+    ...
+
+
+@overload
+def to_device(
+    x: Dict[Any, Any], device: Optional[torch.device] = None
+) -> Dict[Any, Any]:
+    # pylint: disable=missing-function-docstring
+    ...
 
 
 def to_device(x, device=None):
+    r"""
+    Converts :class:`torch.Tensor` or a collection of :class:`torch.Tensor` to
+    the given :class:`torch.device`
+    """
     if device is None:
         device = get("default_device")
     if isinstance(x, torch.Tensor):
@@ -299,9 +297,15 @@ def to_device(x, device=None):
         return [to_device(y, device) for y in x]
     if isinstance(x, dict):
         return {k: to_device(v, device) for k, v in x.items()}
+    raise NotImplementedError()
 
 
-def with_(ctx):
+def with_(ctx: ContextManager) -> Callable[[Callable], Callable]:
+    r"""
+    Creates a decorator that runs the decorated function in the given context
+    manager
+    """
+
     def _decorator(f):
         @wraps(f)
         def _wrapped(*args, **kwargs):

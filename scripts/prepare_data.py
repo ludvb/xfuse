@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 
+# pylint: skip-file
+
 import os
 from collections import namedtuple
 

@@ -1,3 +1,5 @@
+# pylint: disable=protected-access
+
 import pyro.poutine as p
 
 from .. import SessionItem, register_session_item

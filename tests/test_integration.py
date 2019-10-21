@@ -1,4 +1,4 @@
-"""Integration tests"""
+r"""Integration tests"""
 
 import pandas as pd
 import pyro.optim
@@ -19,7 +19,7 @@ from hssl.utility import design_matrix_from
 @pytest.mark.fix_rng
 @pytest.mark.slow
 def test_toydata(tmp_path, mocker, toydata):
-    """Integration test on toy dataset"""
+    r"""Integration test on toy dataset"""
     counts, image, label = toydata
     design_matrix = design_matrix_from(pd.DataFrame({"sample": [1]}))
     slide = FullSlide(counts, image, label)
