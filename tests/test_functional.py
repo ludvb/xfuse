@@ -32,7 +32,7 @@ def test_train_exit_status(shared_datadir, script_runner, tmp_path, arguments):
 
 
 def test_restore_session(shared_datadir, script_runner, mocker, tmp_path):
-    """Test session restore"""
+    r"""Test session restore"""
     subcmd = [
         "train",
         str(shared_datadir / "test1" / "design.csv"),
@@ -48,7 +48,7 @@ def test_restore_session(shared_datadir, script_runner, mocker, tmp_path):
 
     def _mock_run_training(*_args, **_kwargs):
         with Session(panic=Unset):
-            assert get("global_step").value > 1
+            assert int(get("global_step")) > 1
             assert all(
                 (a == b).all()
                 for a, b in zip(params, get("param_store").values())

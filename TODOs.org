@@ -30,7 +30,8 @@
    factors are then convolved similar to std.
    the expression emission would in effect be an amortized std model, where the guide is also informed by histology.
 
-* TODO [#B] data augmentation
+* DONE [#B] data augmentation
+  CLOSED: [2019-10-18 Fri 11:15]
 
 * DONE [#B] multiple datasets
   CLOSED: [2019-04-01 Mon 17:43]
@@ -83,11 +84,20 @@
 * DONE [#A] Voronoi fill expression data in inference network
   CLOSED: [2019-07-10 Wed 20:28]
 
-* TODO [#A] dynamic batch sizes
+* TODO [#B] dynamic batch sizes
 
-* TODO [#B] embed tile in background if image is too small?
+* DONE [#B] embed tile in background if image is too small?
+  CLOSED: [2019-10-18 Fri 11:19]
 
-* TODO [#C] add cli commands for data preprocessing (and generally improve the experience...)
+  WONTFIX:
+  - Seems difficult to do without possibly introducing artifacts
+  - Makes more sense to let it be up to the user to adequately size the input image
+
+* TODO [#B] add cli commands for data preprocessing (and generally improve the experience...)
+
+  - Make it possible to process multiple samples at once
+  - Also create the entire "data directory" (including the design file)
+  - Perhaps introduce a config file instead of all the CLI arguments
 
 * TODO [#C] add usage guide
 
