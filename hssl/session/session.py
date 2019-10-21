@@ -44,7 +44,9 @@ class Session:
                     None,
                 )
                 log(ERROR, "session panic! %s", str(err))
-                get("panic")(get_session(), err_type, err, tb)
+                panic_handler = get("panic")
+                if panic_handler is not Unset:
+                    panic_handler(get_session(), err_type, err, tb)
         else:
             for session in _SESSION_STACK:
                 session._level -= 1
