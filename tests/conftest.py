@@ -3,12 +3,17 @@ r"""Config file for tests"""
 import itertools as it
 
 import numpy as np
+import pandas as pd
 import pyro
 import pyro.distributions as distr
 import torch
 
 import pytest
+from hssl.data import Dataset
 from hssl.data.image import PreloadedImage
+from hssl.data.slide.full_slide import FullSlide
+from hssl.data.utility.misc import make_dataloader
+from hssl.utility import design_matrix_from
 
 
 def pytest_configure(config):
@@ -101,4 +106,11 @@ def toydata():
 
     label = PreloadedImage(label)
 
-    return torch.stack(counts).float().to_sparse(), image, label
+    counts = torch.stack(counts).float().to_sparse()
+
+    design_matrix = design_matrix_from(pd.DataFrame({"sample": [1]}))
+    slide = FullSlide(counts, image, label)
+    dataset = Dataset([slide], design_matrix)
+    dataloader = make_dataloader(dataset)
+
+    return dataloader
