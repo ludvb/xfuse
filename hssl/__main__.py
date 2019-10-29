@@ -249,7 +249,6 @@ def train(
                     e % factor_eval_freq == 0
                     and (epochs is None or e <= epochs - factor_eval_freq)
                 ),
-                baseline=factor_baseline,
             ),
         ]
 
