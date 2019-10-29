@@ -122,7 +122,8 @@ class ST(Image):
             for x in [p for p in store.keys() if pname in p]:
                 param = store[x].unconstrained()
                 del store[x]
-                del optim.optim_objs[param]
+                if optim is not None:
+                    del optim.optim_objs[param]
 
     def _get_scale_decoder(self, in_channels):
         decoder = torch.nn.Sequential(
