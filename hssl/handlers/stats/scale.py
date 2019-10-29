@@ -4,9 +4,10 @@ from .stats_handler import StatsHandler
 class Scale(StatsHandler):
     r"""Scaling factor stats tracker"""
 
-    def _select_msg(self, name, **_):
+    def _select_msg(self, type, name, **_):
         # pylint: disable=arguments-differ
-        return name[-5:] == "scale"
+        # pylint: disable=redefined-builtin
+        return type == "sample" and name[-5:] == "scale"
 
     def _handle(self, fn, **_):
         # pylint: disable=arguments-differ

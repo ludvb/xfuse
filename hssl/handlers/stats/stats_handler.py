@@ -71,6 +71,6 @@ class StatsHandler(ABC, Messenger):
     def _select_msg(self, **msg) -> bool:
         pass
 
-    def _pyro_post_sample(self, msg):
+    def _postprocess_message(self, msg):
         if self._select_msg(**msg) and self.predicate(**msg):
             self._handle(**msg)

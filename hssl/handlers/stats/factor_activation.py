@@ -35,9 +35,10 @@ class FactorActivation(StatsHandler):
         instance._experiment = st_experiment
         return instance
 
-    def _select_msg(self, name, **_):
+    def _select_msg(self, type, name, **_):
         # pylint: disable=arguments-differ
-        return name[-3:] == "rim"
+        # pylint: disable=redefined-builtin
+        return type == "sample" and name[-3:] == "rim"
 
     @abstractmethod
     def _handle_factor_activation(self, name, activation):
@@ -92,9 +93,10 @@ class FactorActivationSummary(StatsHandler):
     activation map
     """
 
-    def _select_msg(self, name, value, **_):
+    def _select_msg(self, type, name, value, **_):
         # pylint: disable=arguments-differ
-        return name[-3:] == "rim" and value.shape[1] >= 3
+        # pylint: disable=redefined-builtin
+        return type == "sample" and name[-3:] == "rim" and value.shape[1] >= 3
 
     def _handle(self, fn, **_):
         # pylint: disable=arguments-differ
