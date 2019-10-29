@@ -16,7 +16,7 @@ from . import ST
 
 def purge_factors(xfuse: XFuse, data: Iterable[Any], **kwargs: Any) -> None:
     r"""
-    Purges superfluous factors and add new ones based on the
+    Purges superfluous factors and adds new ones based on the
     `factor_expansion_strategy` of the current :class:`Session`
     """
 
