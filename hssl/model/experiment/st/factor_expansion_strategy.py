@@ -143,27 +143,17 @@ class RetractAndSplit(ExpansionStrategy):
                 return None
             raise NotImplementedError()
 
-        def _drop_noncontributing_branches(root: _Node) -> Optional[_Node]:
+        def _retract_noncontributing_branches(root: _Node) -> _Node:
             if isinstance(root, _Split):
-                a = _drop_noncontributing_branches(root.a)
-                b = _drop_noncontributing_branches(root.b)
-                # pylint: disable=too-many-boolean-expressions
-                if (a and b) or (
-                    isinstance(root.a, _Leaf)
-                    and isinstance(root.b, _Leaf)
-                    and (a or b)
-                ):
-                    return _Split(a or root.a, b or root.b)
-                if a and not b:
-                    return a
-                if b and not a:
-                    return b
-                if not a and not b:
-                    return None
+                if isinstance(root.a, _Leaf) and isinstance(root.b, _Leaf):
+                    if not (root.a.contributing or root.b.contributing):
+                        return root.a
+                    return _Split(root.a, root.b)
+                a = _retract_noncontributing_branches(root.a)
+                b = _retract_noncontributing_branches(root.b)
+                return _Split(a, b)
             if isinstance(root, _Leaf):
-                if root.contributing:
-                    return root
-                return None
+                return root
             raise NotImplementedError()
 
         def _extend_contributing_branches(root: _Node) -> _Node:
@@ -202,8 +192,10 @@ class RetractAndSplit(ExpansionStrategy):
 
         self._root_nodes = {
             tree
-            for tree in map(_drop_noncontributing_branches, self._root_nodes)
-            if tree is not None
+            for tree in map(
+                _retract_noncontributing_branches, self._root_nodes
+            )
+            if not (isinstance(tree, _Leaf) and not tree.contributing)
         }
 
         _log_trees("trees after retraction / before splitting")
