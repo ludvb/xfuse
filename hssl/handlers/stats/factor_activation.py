@@ -1,5 +1,7 @@
 from abc import abstractmethod
 
+from torch.utils.data import DataLoader
+
 from .stats_handler import StatsHandler
 from .. import Noop
 from ...logging import WARNING, log

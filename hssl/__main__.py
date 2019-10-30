@@ -5,7 +5,7 @@ import os
 import sys
 from contextlib import ExitStack
 from datetime import datetime as dt
-from functools import wraps
+from functools import partial, wraps
 from inspect import getargs, signature
 
 import click
@@ -20,10 +20,10 @@ from . import __version__
 from .analyze import Sample
 from .analyze import dge as _dge
 from .analyze import impute as _impute
-from .data import Dataset
-from .data.slide import RandomSlide
-from .data.utility.misc import make_dataloader, spot_size
+from .data import Data, Dataset
 from .data.image import Image, LazyImage, PreloadedImage
+from .data.slide import RandomSlide, Slide, STSlide
+from .data.utility.misc import make_dataloader, spot_size
 from .handlers import Checkpointer, stats
 from .logging import DEBUG, INFO, WARNING, log
 from .model import XFuse
@@ -163,9 +163,9 @@ def train(
             return LazyImage.from_file(_get_path(filename))
         return PreloadedImage.from_file(_get_path(filename))
 
-    dataset = Dataset(
-        [
-            RandomSlide(
+    st_slides = [
+        Slide(
+            data=STSlide(
                 data=torch.sparse.FloatTensor(
                     torch.as_tensor(
                         np.stack([counts.row, counts.col]), dtype=torch.long
@@ -175,29 +175,27 @@ def train(
                 ),
                 image=_load_image(image),
                 label=_load_image(labels),
-                patch_size=patch_size,
-            )
-            for image, labels, counts in zip(
-                design.image,
-                design.labels,
-                (
-                    count_data.loc[x].sparse.to_coo()
-                    for x in count_data.index.levels[0]
-                ),
-            )
-        ],
-        design_matrix,
-    )
+            ),
+            iterator=partial(RandomSlide, patch_size=patch_size),
+        )
+        for image, labels, counts in zip(
+            design.image,
+            design.labels,
+            (
+                count_data.loc[x].sparse.to_coo()
+                for x in count_data.index.levels[0]
+            ),
+        )
+    ]
 
-    dataloader = make_dataloader(
-        dataset, batch_size=batch_size, num_workers=workers, shuffle=True
-    )
+    data = Data(slides=st_slides, design=design_matrix)
+    dataset = Dataset(data=data)
+    dataloader = make_dataloader(dataset, batch_size=batch_size)
 
     factor_baseline = torch.as_tensor(count_data.mean(0).values).log()
 
     if get("model") is None:
         st_experiment = ST(
-            n=len(dataset),
             depth=network_depth,
             num_channels=network_width,
             default_scale=count_data.mean().mean() / spot_size(dataset),
@@ -216,7 +214,7 @@ def train(
         with Session(panic=Unset):
             save_session(f"exception")
 
-    with default_session, Session(panic=_panic):
+    with default_session, Session(dataloader=dataloader, panic=_panic):
 
         def _every(n):
             def _predicate(**_msg):
@@ -244,11 +242,10 @@ def train(
         contexts = [
             Checkpointer(frequency=checkpoint_interval),
             FactorPurger(
-                dataloader,
                 frequency=lambda e: (
                     e % factor_eval_freq == 0
                     and (epochs is None or e <= epochs - factor_eval_freq)
-                ),
+                )
             ),
         ]
 
@@ -271,10 +268,10 @@ def train(
             for stats_handler in stats_handlers:
                 stack.enter_context(stats_handler)
 
-            run_training(dataloader, epochs)
+            run_training(epochs)
 
         with Session(factor_expansion_strategy=ExtraBaselines(0)):
-            purge_factors(get("model"), dataloader, num_samples=10)
+            purge_factors(get("model"), num_samples=10)
 
         with Session(panic=Unset):
             save_session(f"final")

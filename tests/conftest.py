@@ -9,9 +9,9 @@ import pyro.distributions as distr
 import torch
 
 import pytest
-from hssl.data import Dataset
+from hssl.data import Data, Dataset
 from hssl.data.image import PreloadedImage
-from hssl.data.slide.full_slide import FullSlide
+from hssl.data.slide import STSlide, FullSlide, Slide
 from hssl.data.utility.misc import make_dataloader
 from hssl.utility import design_matrix_from
 
@@ -109,8 +109,9 @@ def toydata():
     counts = torch.stack(counts).float().to_sparse()
 
     design_matrix = design_matrix_from(pd.DataFrame({"sample": [1]}))
-    slide = FullSlide(counts, image, label)
-    dataset = Dataset([slide], design_matrix)
+    slide = Slide(data=STSlide(counts, image, label), iterator=FullSlide)
+    data = Data(slides=[slide], design=design_matrix)
+    dataset = Dataset(data)
     dataloader = make_dataloader(dataset)
 
     return dataloader

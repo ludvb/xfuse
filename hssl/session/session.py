@@ -3,7 +3,14 @@ from typing import Any, Dict, List
 from ..logging import DEBUG, ERROR, LOGGER, WARNING, log
 from .session_item import SessionItem
 
-__all__ = ["Session", "Unset", "get_session", "get", "register_session_item"]
+__all__ = [
+    "Session",
+    "Unset",
+    "get_session",
+    "get",
+    "register_session_item",
+    "require",
+]
 
 
 class Unset:
@@ -80,7 +87,20 @@ def _apply_session(session: Session):
 
 
 def get(name: str) -> Any:
-    r"""Gets session item from the current context"""
+    r"""
+    Gets session item from the current context. Returns its default value if
+    unset.
+    """
+    try:
+        return require(name)
+    except RuntimeError:
+        return _SESSION_STORE[name].default
+
+
+def require(name: str) -> Any:
+    r"""
+    Gets session item from the current context. Raises `RuntimeError` if unset.
+    """
     if name not in _SESSION_STORE:
         raise ValueError(f"{name} is not a session item")
 
@@ -92,7 +112,7 @@ def get(name: str) -> Any:
         except AttributeError:
             log(WARNING, 'session object lacks attribute "%s"', name)
 
-    return _SESSION_STORE[name].default
+    raise RuntimeError(f"Session item {name} has not been set!")
 
 
 def get_session():

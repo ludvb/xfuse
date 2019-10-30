@@ -1,5 +1,5 @@
 from copy import deepcopy
-from typing import Any, Callable, Iterable, NoReturn, Union, cast
+from typing import Any, Callable, NoReturn, Union, cast
 
 import numpy as np
 import pyro as p
@@ -7,14 +7,14 @@ from pyro.poutine.messenger import Messenger
 
 from ....handlers import Noop
 from ....logging import INFO, WARNING, log
-from ....session.session import Session, get
+from ....session.session import Session, get, require
 from ....utility import to_device
 from ... import XFuse
 from ...utility import compare
 from . import ST
 
 
-def purge_factors(xfuse: XFuse, data: Iterable[Any], **kwargs: Any) -> None:
+def purge_factors(xfuse: XFuse, **kwargs: Any) -> None:
     r"""
     Purges superfluous factors and adds new ones based on the
     `factor_expansion_strategy` of the current :class:`Session`
@@ -46,7 +46,8 @@ def purge_factors(xfuse: XFuse, data: Iterable[Any], **kwargs: Any) -> None:
 
             return scores
 
-        scores = np.stack([_eval_on(to_device(x)) for x in data]).mean(0)
+        dataloader = require("dataloader")
+        scores = np.stack([_eval_on(to_device(x)) for x in dataloader]).mean(0)
 
     noncontrib = [
         n for res, n in reversed(sorted(zip(scores, ns))) if res >= 0
@@ -92,13 +93,9 @@ class FactorPurger(Messenger):
         return instance
 
     def __init__(
-        self,
-        data: Iterable[Any],
-        frequency: Union[int, Callable[[int], bool]] = 1,
-        **kwargs: Any,
+        self, frequency: Union[int, Callable[[int], bool]] = 1, **kwargs: Any
     ):
         super().__init__()
-        self._data = data
         self._predicate = (
             frequency
             if callable(frequency)
@@ -117,4 +114,4 @@ class FactorPurger(Messenger):
     def _pyro_post_epoch(self, msg) -> None:
         if self._predicate(msg["kwargs"]["epoch"]):
             with Session(pyro_stack=[]):
-                purge_factors(self._model, self._data, **self._kwargs)
+                purge_factors(self._model, **self._kwargs)

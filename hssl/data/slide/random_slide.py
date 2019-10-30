@@ -7,20 +7,20 @@ from torchvision.transforms.functional import (
 )
 
 from ...utility import center_crop
-from .slide import Slide
+from .slide import SlideIterator, STSlide
 
 __all__ = ["RandomSlide"]
 
 
-class RandomSlide(Slide):
+class RandomSlide(SlideIterator):
     r"""
-    A :class:`Slide` that yields randomly cropped patches of the sample
+    A :class:`SlideIterator` that yields randomly cropped patches of the sample
     """
 
     def __init__(
-        self, *args, patch_size: int = 512, max_shear: float = 10, **kwargs
+        self, slide: STSlide, patch_size: int = 512, max_shear: float = 10
     ):
-        super().__init__(*args, **kwargs)
+        self._slide = slide
         self.image_augmentation = transforms.Compose(
             [
                 transforms.ColorJitter(
@@ -30,7 +30,10 @@ class RandomSlide(Slide):
         )
         self._max_shear = max_shear
         self._patch_x = self._patch_y = patch_size
-        if any(a < b for a, b in zip((self.W, self.H), self._aug_patch)):
+        if any(
+            a < b
+            for a, b in zip((self._slide.W, self._slide.H), self._aug_patch)
+        ):
             raise ValueError(
                 "image is too small for patch size"
                 + " (needs to be at least "
@@ -67,16 +70,20 @@ class RandomSlide(Slide):
 
     def __len__(self):
         xaug, yaug = self._aug_patch
-        return int(np.ceil(self.W / xaug * self.H / yaug))
+        return int(np.ceil(self._slide.W / xaug * self._slide.H / yaug))
 
-    def _get_patch(self, idx):
+    def __getitem__(self, idx):
         xaug, yaug = self._aug_patch
         x, y = [
             np.random.randint(a - b + 1)
-            for a, b in zip((self.W, self.H), (xaug, yaug))
+            for a, b in zip((self._slide.W, self._slide.H), (xaug, yaug))
         ]
-        image = to_pil_image(self.image.extract(x, y, xaug, yaug).to_array())
-        label = to_pil_image(self.label.extract(x, y, xaug, yaug).to_array())
+        image = to_pil_image(
+            self._slide.image.extract(x, y, xaug, yaug).to_array()
+        )
+        label = to_pil_image(
+            self._slide.label.extract(x, y, xaug, yaug).to_array()
+        )
 
         rotation = np.random.uniform(-180, 180)
         shear = np.random.uniform(-self._max_shear, self._max_shear)
@@ -96,4 +103,4 @@ class RandomSlide(Slide):
             image = image[::-1]
             label = label[::-1]
 
-        return image, label
+        return self._slide.prepare_data(image, label)

@@ -1,17 +1,40 @@
-from abc import ABC, abstractmethod
+from abc import ABCMeta, abstractmethod
+from typing import NamedTuple
 
 import numpy as np
 import torch
 from scipy.ndimage.morphology import binary_fill_holes
-from torch.utils.data import Dataset
 
 from ..image import Image
 
 
-class Slide(ABC, Dataset):
-    r"""
-    Abstract class yielding observations from a single sample (tissue slide)
-    """
+class SlideIterator(metaclass=ABCMeta):
+    r"""Slide iterator"""
+
+    @abstractmethod
+    def __len__(self):
+        pass
+
+    @abstractmethod
+    def __getitem__(self, idx):
+        pass
+
+    def __iter__(self):
+        for idx in range(len(self)):
+            yield self.__getitem__(idx)
+
+
+class SlideData(metaclass=ABCMeta):
+    r"""Abstract class for different kinds of slide data"""
+
+    @property
+    @abstractmethod
+    def type(self) -> str:
+        r"""The type tag of this slide"""
+
+
+class STSlide(SlideData):
+    r""":class:`SlideData` for Spatial Transcriptomics slides"""
 
     def __init__(self, data: torch.Tensor, image: Image, label: Image):
         if data.is_sparse:  # type: ignore
@@ -29,6 +52,15 @@ class Slide(ABC, Dataset):
         assert self.H == self._label.height and self.W == self._label.width
 
     @property
+    def type(self) -> str:
+        return "ST"
+
+    @property
+    def data(self):
+        r"""Getter for the count data"""
+        return self._data
+
+    @property
     def image(self):
         r"""Getter for the slide image"""
         return self._image
@@ -38,16 +70,8 @@ class Slide(ABC, Dataset):
         r"""Getter for the label image of the slide"""
         return self._label
 
-    @abstractmethod
-    def _get_patch(self, idx: int):
-        pass
-
-    @abstractmethod
-    def __len__(self):
-        pass
-
-    def __getitem__(self, idx):
-        image, label = self._get_patch(idx)
+    def prepare_data(self, image, label):
+        r"""Prepare data from image and label patches"""
 
         # remove partially visible labels
         label[
@@ -56,8 +80,6 @@ class Slide(ABC, Dataset):
 
         labels = np.sort(np.unique(label[label != 0]))
         data = self._data[(labels - 1).tolist()]
-        if data.shape[0] == 0:
-            return self.__getitem__((idx + 1) % len(self))
         label = np.searchsorted([0, *labels], label)
 
         return dict(
@@ -66,5 +88,10 @@ class Slide(ABC, Dataset):
             ),
             label=torch.as_tensor(label).long(),
             data=data,
-            type="ST",
         )
+
+
+class Slide(NamedTuple):
+    r"""Data structure for tissue slide"""
+    data: SlideData
+    iterator: SlideIterator
