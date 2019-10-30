@@ -104,7 +104,7 @@ def cli(save_path, session, debug):
 @click.option("--learning-rate", type=float, default=2e-4)
 @click.option("--network-depth", type=int, default=4)
 @click.option("--network-width", type=int, default=8)
-@click.option("--patch-size", type=int, default=512)
+@click.option("--patch-size", type=float)
 @click.option("--seed", type=int)
 @click.option("--workers", type=int, default=0)
 @with_(_DEFAULT_SESSION)
@@ -176,7 +176,10 @@ def train(
                 image=_load_image(image),
                 label=_load_image(labels),
             ),
-            iterator=partial(RandomSlide, patch_size=patch_size),
+            iterator=partial(
+                RandomSlide,
+                patch_size=(patch_size, patch_size) if patch_size else None,
+            ),
         )
         for image, labels, counts in zip(
             design.image,

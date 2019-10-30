@@ -80,7 +80,7 @@ def center_crop(x, target_shape):
     return x[
         tuple(
             [
-                slice((a - b) // 2, (a - b) // 2 + b)
+                slice(round((a - b) / 2), round((a - b) / 2) + b)
                 if b is not None
                 else slice(None)
                 for a, b in zip(x.shape, target_shape)

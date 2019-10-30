@@ -11,7 +11,7 @@ from pyro.distributions import (  # pylint: disable=no-name-in-module
     NegativeBinomial,
     Normal,
 )
-from scipy.ndimage.morphology import distance_transform_edt
+from scipy.ndimage.morphology import binary_fill_holes, distance_transform_edt
 
 from ....logging import DEBUG, INFO, log
 from ....session import get
@@ -245,6 +245,18 @@ class ST(Image):
             with scope(prefix=self.tag):
                 image_distr = self._sample_image(x, decoded)
 
+                def _drop_partial_observations(data, label):
+                    zero_count_spots = 1 + torch.where(data.sum(1) == 0)[0]
+                    mask_partial = np.invert(
+                        binary_fill_holes(
+                            np.isin(label.cpu(), [0, *zero_count_spots.cpu()])
+                        )
+                    )
+                    label[mask_partial] = 0
+                    idxs, label = torch.unique(label, return_inverse=True)
+                    data = data[idxs[idxs != 0] - 1]
+                    return data, label
+
                 def _compute_sample_params(label, rim, rate_mg, logits_g):
                     labelonehot = sparseonehot(label.flatten())
                     rim = torch.sparse.mm(
@@ -256,17 +268,23 @@ class ST(Image):
                     rgs = rim[1:] @ rate_mg.exp()
                     return rgs, logits_g.expand(len(rgs), -1)
 
+                data, label = zip(
+                    *it.starmap(
+                        _drop_partial_observations, zip(x["data"], x["label"])
+                    )
+                )
+
                 rgs, logits_g = zip(
                     *it.starmap(
                         _compute_sample_params,
-                        zip(x["label"], rim, rate_mg, logits_g),
+                        zip(label, rim, rate_mg, logits_g),
                     )
                 )
 
                 expression_distr = NegativeBinomial(
                     total_count=torch.cat(rgs), logits=torch.cat(logits_g)
                 )
-                p.sample("xsg", expression_distr, obs=torch.cat(x["data"]))
+                p.sample("xsg", expression_distr, obs=torch.cat(data))
 
         return image_distr, expression_distr
 

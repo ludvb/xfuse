@@ -11,8 +11,9 @@ from hssl.session import Session, Unset, get
 @pytest.mark.parametrize(
     "arguments",
     [
-        ["--patch-size=32", "--batch-size=1", "--epochs=1", "--lazy"],
-        ["--patch-size=32", "--batch-size=1", "--epochs=1", "--non-lazy"],
+        ["--batch-size=2", "--epochs=1", "--non-lazy"],
+        ["--batch-size=2", "--epochs=1", "--lazy"],
+        ["--batch-size=2", "--epochs=1", "--non-lazy", "--patch-size=64"],
     ],
 )
 def test_train_exit_status(shared_datadir, script_runner, tmp_path, arguments):
@@ -36,7 +37,6 @@ def test_restore_session(shared_datadir, script_runner, mocker, tmp_path):
     subcmd = [
         "train",
         str(shared_datadir / "test1" / "design.csv"),
-        "--patch-size=32",
         "--batch-size=1",
         "--epochs=1",
     ]

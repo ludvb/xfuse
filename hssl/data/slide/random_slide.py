@@ -1,8 +1,10 @@
+from typing import Optional, Tuple
+
 import numpy as np
+from PIL import Image
 from torchvision import transforms
 from torchvision.transforms.functional import (
     _get_inverse_affine_matrix,
-    affine,
     to_pil_image,
 )
 
@@ -18,7 +20,12 @@ class RandomSlide(SlideIterator):
     """
 
     def __init__(
-        self, slide: STSlide, patch_size: int = 512, max_shear: float = 10
+        self,
+        slide: STSlide,
+        patch_size: Optional[Tuple[float, float]] = None,
+        max_rotation_jitter: float = 180.0,
+        max_scale_jitter: float = 0.05,
+        max_shear_jitter: float = 10.0,
     ):
         self._slide = slide
         self.image_augmentation = transforms.Compose(
@@ -28,77 +35,112 @@ class RandomSlide(SlideIterator):
                 )
             ]
         )
-        self._max_shear = max_shear
-        self._patch_x = self._patch_y = patch_size
-        if any(
-            a < b
-            for a, b in zip((self._slide.W, self._slide.H), self._aug_patch)
-        ):
-            raise ValueError(
-                "image is too small for patch size"
-                + " (needs to be at least "
-                + "x".join(map(str, self._aug_patch))
-                + " px)"
-            )
+        self._max_rotation_jitter = max_rotation_jitter
+        self._max_scale_jitter = max_scale_jitter
+        self._max_shear_jitter = max_shear_jitter
+        if patch_size is None:
+            patch_size = self._slide.W, self._slide.H
+        self._patch_w, self._patch_h = patch_size
 
-    @property
-    def _aug_patch(self):
+    @staticmethod
+    def _compute_extended_patch_size(
+        w: float, h: float, rotation: float, scale: float, shear: float
+    ) -> Tuple[float, float]:
         transform = np.concatenate(
             [
                 np.array(
                     _get_inverse_affine_matrix(
-                        (0.5, 0.5), 45.0, (0, 0), 1.0, self._max_shear
+                        center=(0.5, 0.5),
+                        angle=rotation,
+                        translate=(0, 0),
+                        scale=scale,
+                        shear=shear,
                     )
                 ).reshape(2, -1),
                 np.array([[0.0, 0.0, 1.0]]),
             ]
         )
-        corners = np.array(
-            [
-                [0.0, 0.0, 1.0],
-                [0.0, 1.0, 1.0],
-                [1.0, 0.0, 1.0],
-                [1.0, 1.0, 1.0],
-            ]
-        )
+        corners = np.array([[0, 0, 1], [0, h, 1], [w, 0, 1], [w, h, 1]])
         inv_corners = transform @ np.transpose(corners)
         xmax, ymax = inv_corners[:2].max(1)
         xmin, ymin = inv_corners[:2].min(1)
-        xaug = int(np.ceil((xmax - xmin) * self._patch_x))
-        yaug = int(np.ceil((ymax - ymin) * self._patch_y))
-        return xaug, yaug
+        return xmax - xmin, ymax - ymin
 
     def __len__(self):
-        xaug, yaug = self._aug_patch
-        return int(np.ceil(self._slide.W / xaug * self._slide.H / yaug))
+        return int(
+            np.ceil(
+                self._slide.W / self._patch_w * self._slide.H / self._patch_h
+            )
+        )
 
     def __getitem__(self, idx):
-        xaug, yaug = self._aug_patch
+        # pylint: disable=too-many-locals
+
+        # Sample a random transformation
+        rotation = np.random.uniform(
+            -self._max_rotation_jitter, self._max_rotation_jitter
+        )
+        scale = np.exp(
+            np.random.uniform(-self._max_scale_jitter, self._max_scale_jitter)
+        )
+        shear = np.random.uniform(
+            -self._max_shear_jitter, self._max_shear_jitter
+        )
+
+        # Compute the "extended" patch size. This is the size of the patch that
+        # we will first transform and then center crop to the final size.
+        extpatch_w, extpatch_h = self._compute_extended_patch_size(
+            w=self._patch_w,
+            h=self._patch_h,
+            rotation=rotation,
+            scale=scale,
+            shear=shear,
+        )
+
+        # The slide may not be large enough for the extended patch size. In
+        # this case, we will downscale the target patch size until the extended
+        # patch size fits.
+        adjmul = min(
+            1.0, self._slide.W / extpatch_w, self._slide.H / extpatch_h
+        )
+        extpatch_w = min(int(np.ceil(extpatch_w * adjmul)), self._slide.W)
+        extpatch_h = min(int(np.ceil(extpatch_h * adjmul)), self._slide.H)
+        patch_w = int(self._patch_w * adjmul)
+        patch_h = int(self._patch_h * adjmul)
+
+        # Extract the extended patch by sampling uniformly from the size of the
+        # slide
         x, y = [
             np.random.randint(a - b + 1)
-            for a, b in zip((self._slide.W, self._slide.H), (xaug, yaug))
+            for a, b in zip(
+                (self._slide.W, self._slide.H), (extpatch_w, extpatch_h)
+            )
         ]
         image = to_pil_image(
-            self._slide.image.extract(x, y, xaug, yaug).to_array()
+            self._slide.image.extract(x, y, extpatch_w, extpatch_h).to_array()
         )
         label = to_pil_image(
-            self._slide.label.extract(x, y, xaug, yaug).to_array()
+            self._slide.label.extract(x, y, extpatch_w, extpatch_h).to_array()
         )
 
-        rotation = np.random.uniform(-180, 180)
-        shear = np.random.uniform(-self._max_shear, self._max_shear)
-
-        image = affine(image, rotation, (0, 0), 1, shear)
-        label = affine(label, rotation, (0, 0), 1, shear)
-
+        # Apply augmentations
+        output_size = (max(extpatch_w, patch_w), max(extpatch_h, patch_h))
+        transformation = _get_inverse_affine_matrix(
+            center=(image.size[0] * 0.5, image.size[1] * 0.5),
+            angle=rotation,
+            translate=[(a - b) / 2 for a, b in zip(output_size, image.size)],
+            scale=scale,
+            shear=shear,
+        )
         image = self.image_augmentation(image)
-
-        image = np.array(image)
-        label = np.array(label)
-
-        image = center_crop(image, (self._patch_y, self._patch_x))
-        label = center_crop(label, (self._patch_y, self._patch_x))
-
+        image = np.array(
+            image.transform(output_size, Image.AFFINE, transformation)
+        )
+        image = center_crop(image, (patch_h, patch_w))
+        label = np.array(
+            label.transform(output_size, Image.AFFINE, transformation)
+        )
+        label = center_crop(label, (patch_h, patch_w))
         if np.random.rand() < 0.5:
             image = image[::-1]
             label = label[::-1]

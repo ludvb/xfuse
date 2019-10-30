@@ -2,10 +2,12 @@ import itertools as it
 from typing import Any
 
 import numpy as np
+import torch
 from torch.utils.data import DataLoader
 from torch.utils.data.dataloader import default_collate  # type: ignore
 
 from ...session import get
+from ...utility import center_crop
 from ..dataset import Dataset
 
 __all__ = ["make_dataloader", "spot_size"]
@@ -39,6 +41,24 @@ def make_dataloader(dataset: Dataset, **kwargs: Any) -> DataLoader:
             # will differ between samples. therefore, we return it as a list
             # instead.
             data = [y.pop("data") for y in ys]
+
+            # Crop image sizes to the minimum size over the batch
+            min_size = {}
+            for y in ys:
+                for k, v in y.items():
+                    if not isinstance(v, torch.Tensor):
+                        continue
+                    if k in min_size:
+                        min_size[k] = torch.min(
+                            min_size[k], torch.as_tensor(v.shape)
+                        )
+                    else:
+                        min_size[k] = torch.as_tensor(v.shape)
+            for y in ys:
+                for k, v in min_size.items():
+                    if k in y and isinstance(y[k], torch.Tensor):
+                        y[k] = center_crop(y[k], v.numpy().tolist())
+
             return {"data": data, **default_collate(ys)}
 
         return {

@@ -3,7 +3,6 @@ from typing import NamedTuple
 
 import numpy as np
 import torch
-from scipy.ndimage.morphology import binary_fill_holes
 
 from ..image import Image
 
@@ -43,12 +42,8 @@ class STSlide(SlideData):
         self._image = image
         self._label = label
         self._data = data
-        self._zero_data = np.concatenate(
-            [np.array([0]), np.where(data.sum(1) == 0)[0] + 1]
-        )
 
         self.H, self.W = self._image.height, self._image.width
-
         assert self.H == self._label.height and self.W == self._label.width
 
     @property
@@ -72,11 +67,6 @@ class STSlide(SlideData):
 
     def prepare_data(self, image, label):
         r"""Prepare data from image and label patches"""
-
-        # remove partially visible labels
-        label[
-            np.invert(binary_fill_holes(np.isin(label, self._zero_data)))
-        ] = 0
 
         labels = np.sort(np.unique(label[label != 0]))
         data = self._data[(labels - 1).tolist()]
