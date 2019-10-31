@@ -249,7 +249,8 @@ def train(
                 frequency=lambda e: (
                     e % factor_eval_freq == 0
                     and (epochs is None or e <= epochs - factor_eval_freq)
-                )
+                ),
+                num_samples=3,
             ),
         ]
 

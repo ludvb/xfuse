@@ -14,7 +14,7 @@ from ...utility import compare
 from . import ST
 
 
-def purge_factors(xfuse: XFuse, **kwargs: Any) -> None:
+def purge_factors(xfuse: XFuse, num_samples: int = 1) -> None:
     r"""
     Purges superfluous factors and adds new ones based on the
     `factor_expansion_strategy` of the current :class:`Session`
@@ -37,17 +37,18 @@ def purge_factors(xfuse: XFuse, **kwargs: Any) -> None:
         )
 
         def _eval_on(x):
-            guide = p.poutine.trace(xfuse.guide).get_trace(x)
+            def _sample_once():
+                guide = p.poutine.trace(xfuse.guide).get_trace(x)
+                full, *reduced = compare(
+                    x, guide, xfuse.model, *reduced_models
+                )
+                return [x - full for x in reduced]
 
-            full, *reduced = compare(
-                x, guide, xfuse.model, *reduced_models, **kwargs
-            )
-            scores = [x - full for x in reduced]
-
-            return scores
+            res = [_sample_once() for _ in range(num_samples)]
+            return np.mean(res, 0)
 
         dataloader = require("dataloader")
-        scores = np.stack([_eval_on(to_device(x)) for x in dataloader]).mean(0)
+        scores = np.mean([_eval_on(to_device(x)) for x in dataloader], 0)
 
     noncontrib = [
         n for res, n in reversed(sorted(zip(scores, ns))) if res >= 0
