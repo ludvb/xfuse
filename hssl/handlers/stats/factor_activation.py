@@ -109,7 +109,7 @@ class FactorActivationSummary(StatsHandler):
         # pylint: disable=arguments-differ
         # pylint: disable=no-member
         self.add_images(
-            "activation/summary",
+            "activation-summary/training-batch",
             reduce_last_dimension(fn.mean.permute(0, 2, 3, 1)),
             dataformats="NHWC",
         )
@@ -172,7 +172,7 @@ class FactorActivationFullSummary(StatsHandler):
                 )
                 # pylint: disable=no-member
                 self.add_image(
-                    f"activation/summary-sample{i}",
+                    f"activation-summary/sample{i}",
                     torch.as_tensor(reduced_factor_activation),
                     dataformats="HWC",
                 )
