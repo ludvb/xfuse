@@ -5,6 +5,7 @@ from typing import Dict, List, NamedTuple, Optional
 import numpy as np
 import pyro as p
 import torch
+import torch.distributions.constraints as constraints
 from pyro.contrib.autoname import scope
 from pyro.distributions import (  # pylint: disable=no-name-in-module
     Delta,
@@ -185,25 +186,21 @@ class ST(Image):
             rim = p.sample("rim", Delta(rim))
             rim = scale * rim
 
-            rate_mg = p.sample(
-                "rate_mg",
-                Delta(
-                    torch.stack(
-                        [
-                            p.sample(
-                                _encode_factor_name(n),
-                                (
-                                    # pylint: disable=not-callable
-                                    Normal(
-                                        torch.tensor(0.0).to(z), 1.0
-                                    ).expand([num_genes])
-                                ),
-                            )
-                            for n in self.factors
-                        ]
-                    )
-                ),
+            rate_mg_prior = Normal(
+                p.param(f"rate_mg_mu", torch.zeros(num_genes)).to(z),
+                p.param(
+                    f"rate_mg_sd",
+                    torch.ones(num_genes),
+                    constraint=constraints.positive,
+                ).to(z),
             )
+            rate_mg = torch.stack(
+                [
+                    p.sample(_encode_factor_name(n), rate_mg_prior)
+                    for n in self.factors
+                ]
+            )
+            rate_mg = p.sample("rate_mg", Delta(rate_mg))
         else:
             rim = p.sample(
                 "rim",
@@ -302,7 +299,7 @@ class ST(Image):
                     p.param(
                         f"{name}_sd",
                         1e-2 * torch.ones(dim),
-                        constraint=torch.distributions.constraints.positive,
+                        constraint=constraints.positive,
                     ).to(find_device(x)),
                 ),
             )
@@ -319,7 +316,7 @@ class ST(Image):
                     p.param(
                         f"{_encode_factor_name(n)}_sd",
                         1e-2 * torch.ones_like(factor.profile).float(),
-                        constraint=torch.distributions.constraints.positive,
+                        constraint=constraints.positive,
                     ).to(find_device(x)),
                 ),
             )
