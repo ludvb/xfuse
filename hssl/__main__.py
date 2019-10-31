@@ -235,6 +235,7 @@ def train(
             stats.FactorActivationMaps(writer, _every(100)),
             stats.FactorActivationMean(writer, _every(1)),
             stats.FactorActivationSummary(writer, _every(100)),
+            stats.FactorActivationFullSummary(writer, _every(1000)),
             stats.Image(writer, _every(100)),
             stats.Latent(writer, _every(100)),
             stats.LogLikelihood(writer, _every(1)),
