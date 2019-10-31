@@ -1,16 +1,15 @@
-from typing import Optional, Union
+from typing import Optional, Union, cast
 
 import numpy as np
-
-import torch as t
-
+import torch
+from sklearn.decomposition import PCA
 
 __all__ = ["reduce_last_dimension"]
 
 
 def reduce_last_dimension(
-    x: Union[t.Tensor, np.ndarray],
-    mask: Optional[Union[t.Tensor, np.ndarray]] = None,
+    x: Union[torch.Tensor, np.ndarray],
+    mask: Optional[Union[torch.Tensor, np.ndarray]] = None,
     method: str = "pca",
     n_components: int = 3,
     **kwargs,
@@ -23,13 +22,15 @@ def reduce_last_dimension(
         raise NotImplementedError()
 
     if mask is None:
-        mask = np.ones(x.shape[:-1], dtype=bool)
-    elif isinstance(mask, t.Tensor):
+        mask = np.ones(x.shape[:-1], dtype=np.bool)
+    elif isinstance(mask, torch.Tensor):
         mask = mask.detach().cpu().numpy().astype(bool)
+    mask = cast(np.ndarray, mask)
 
-    from sklearn.decomposition import PCA
+    if x.shape[-1] == 1 and n_components == 1:
+        return mask.astype(np.float32)[..., None]
 
-    if isinstance(x, t.Tensor):
+    if isinstance(x, torch.Tensor):
         x = x.detach().cpu().numpy()
 
     values = PCA(n_components=n_components, **kwargs).fit_transform(x[mask])
