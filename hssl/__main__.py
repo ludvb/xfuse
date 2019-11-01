@@ -214,7 +214,7 @@ def train(
         default_session = Session()
 
     def _panic(_session, _err_type, _err, _tb):
-        with Session(panic=Unset):
+        with Session(dataloader=Unset, panic=Unset, pyro_stack=[]):
             save_session(f"exception")
 
     with default_session, Session(dataloader=dataloader, panic=_panic):
@@ -278,7 +278,7 @@ def train(
         with Session(factor_expansion_strategy=ExtraBaselines(0)):
             purge_factors(get("model"), num_samples=10)
 
-        with Session(panic=Unset):
+        with Session(dataloader=Unset, panic=Unset, pyro_stack=[]):
             save_session(f"final")
 
 
