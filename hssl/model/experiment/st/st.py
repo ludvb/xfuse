@@ -48,7 +48,7 @@ class ST(Image):
         super().__init__(*args, **kwargs)
 
         self.__factors: Dict[str, FactorDefault] = {}
-        self.__factors_counter = map(str, it.count())
+        self.__factor_queue: List[str] = []
         for factor in factors:
             self.add_factor(factor)
 
@@ -67,7 +67,10 @@ class ST(Image):
         if factor is None:
             factor = FactorDefault(0.0, None)
 
-        new_factor = next(self.__factors_counter)
+        if self.__factor_queue != []:
+            new_factor = self.__factor_queue.pop()
+        else:
+            new_factor = f"{len(self.__factors) + 1:d}"
         assert new_factor not in self.__factors
 
         log(INFO, "adding factor: %s", new_factor)
@@ -114,7 +117,7 @@ class ST(Image):
                 f"attempted to remove factor {n}, which doesn't exist!"
             )
 
-        self.__factors_counter = it.chain([n], self.__factors_counter)
+        self.__factor_queue.append(n)
 
         if remove_params:
             store = get("param_store")
