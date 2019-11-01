@@ -334,28 +334,27 @@ class ST(Image):
         ).to(x["image"])
 
         def encode(data, label):
+            # Replace missing labels with closest neighbor
+            if 0 in label:
+                dim1, dim2 = distance_transform_edt(
+                    (label == 0).cpu(),
+                    return_distances=False,
+                    return_indices=True,
+                )
+                _, n_original = label.unique(return_counts=True)
+                label = label[dim1, dim2]
+                idxs, n_new = label.unique(return_counts=True)
+                scaling = torch.zeros(data.shape[0]).to(data)
+                scaling[idxs - 1] = n_original[1:].float() / n_new.float()
+                data = data * scaling.unsqueeze(1)
+            label = label - 1
+
+            # Expand labels into (encoded) expression vectors
             encdat = expression_encoder(data)
-            missing = (
-                # pylint: disable=not-callable
-                torch.tensor([1.0, *[0.0] * encdat.shape[1]]).to(encdat)
-            )
-            encdat_with_missing = torch.nn.functional.pad(encdat, (1, 0, 1, 0))
-            encdat_with_missing[0] = missing
-            labelonehot = sparseonehot(
-                label.flatten(), len(encdat_with_missing)
-            )
-            expanded = torch.sparse.mm(
-                labelonehot.float(), encdat_with_missing
-            )
+            labelonehot = sparseonehot(label.flatten(), len(encdat))
+            expanded = torch.sparse.mm(labelonehot.float(), encdat)
             expanded = expanded.reshape(*label.shape, -1)
-            dim1, dim2 = distance_transform_edt(
-                expanded[..., 0].detach().cpu(),
-                return_distances=False,
-                return_indices=True,
-            )
-            expanded = torch.cat(
-                [expanded[..., :1], expanded[dim1, dim2, 1:]], -1
-            )
+
             return expanded.permute(2, 0, 1)
 
         expression = torch.stack(
