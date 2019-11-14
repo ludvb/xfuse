@@ -11,6 +11,7 @@ import torch
 from .experiment import Experiment
 from ..logging import INFO, log
 from ..utility import find_device
+from ..utility.modules import get_module
 
 
 class XFuse(torch.nn.Module):
@@ -79,9 +80,9 @@ class XFuse(torch.nn.Module):
 
         def _go(experiment, x):
             preencoded = experiment.guide(x)
-            z_mu = p.module(
+            z_mu = get_module(
                 "z_mu",
-                torch.nn.Sequential(
+                lambda: torch.nn.Sequential(
                     torch.nn.Conv2d(
                         preencoded.shape[1], self.latent_size, 5, 1, 2
                     ),
@@ -91,11 +92,10 @@ class XFuse(torch.nn.Module):
                         self.latent_size, self.latent_size, 5, 1, 2
                     ),
                 ),
-                update_module_params=True,
             ).to(preencoded)
-            z_sd = p.module(
+            z_sd = get_module(
                 "z_sd",
-                torch.nn.Sequential(
+                lambda: torch.nn.Sequential(
                     torch.nn.Conv2d(
                         preencoded.shape[1], self.latent_size, 5, 1, 2
                     ),
@@ -106,7 +106,6 @@ class XFuse(torch.nn.Module):
                     ),
                     torch.nn.Softplus(),
                 ),
-                update_module_params=True,
             ).to(preencoded)
             with p.poutine.scale(scale=experiment.n / len(x)):
                 return p.sample(

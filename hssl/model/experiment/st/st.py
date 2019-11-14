@@ -17,6 +17,7 @@ from scipy.ndimage.morphology import binary_fill_holes, distance_transform_edt
 from ....logging import DEBUG, INFO, log
 from ....session import get
 from ....utility import center_crop, find_device, sparseonehot
+from ....utility.modules import get_module
 from ..image import Image
 
 
@@ -98,12 +99,6 @@ class ST(Image):
                 store._constraints[pname],  # pylint: disable=protected-access
             )
 
-        for b in (
-            self._get_factor_decoder(1, x)[-1].bias
-            for x in (factor, new_factor)
-        ):
-            b.data -= np.log(2)
-
         return new_factor
 
     def remove_factor(self, n, remove_params=False):
@@ -130,31 +125,35 @@ class ST(Image):
                     del optim.optim_objs[param]
 
     def _get_scale_decoder(self, in_channels):
-        decoder = torch.nn.Sequential(
-            torch.nn.Conv2d(in_channels, in_channels, 3, 1, 1),
-            torch.nn.LeakyReLU(0.2, inplace=True),
-            torch.nn.BatchNorm2d(in_channels),
-            torch.nn.Conv2d(in_channels, 1, 1, 1, 1),
-            torch.nn.Softplus(),
-        )
-        torch.nn.init.constant_(decoder[-2].weight, 0.0)
-        torch.nn.init.constant_(
-            decoder[-2].bias, np.log(np.exp(self.__default_scale) - 1)
-        )
-        return p.module("scale", decoder, update_module_params=True)
+        def _create_scale_decoder():
+            decoder = torch.nn.Sequential(
+                torch.nn.Conv2d(in_channels, in_channels, 3, 1, 1),
+                torch.nn.LeakyReLU(0.2, inplace=True),
+                torch.nn.BatchNorm2d(in_channels),
+                torch.nn.Conv2d(in_channels, 1, 1, 1, 1),
+                torch.nn.Softplus(),
+            )
+            torch.nn.init.constant_(decoder[-2].weight, 0.0)
+            torch.nn.init.constant_(
+                decoder[-2].bias, np.log(np.exp(self.__default_scale) - 1)
+            )
+            return decoder
+
+        return get_module("scale", _create_scale_decoder)
 
     def _get_factor_decoder(self, in_channels, n):
-        decoder = torch.nn.Sequential(
-            torch.nn.Conv2d(in_channels, in_channels, 3, 1, 1),
-            torch.nn.LeakyReLU(0.2, inplace=True),
-            torch.nn.BatchNorm2d(in_channels),
-            torch.nn.Conv2d(in_channels, 1, 1, 1, 1),
-        )
-        torch.nn.init.constant_(decoder[-1].weight, 0.0)
-        torch.nn.init.constant_(decoder[-1].bias, self.__factors[n][0])
-        return p.module(
-            _encode_factor_name(n), decoder, update_module_params=True
-        )
+        def _create_factor_decoder():
+            decoder = torch.nn.Sequential(
+                torch.nn.Conv2d(in_channels, in_channels, 3, 1, 1),
+                torch.nn.LeakyReLU(0.2, inplace=True),
+                torch.nn.BatchNorm2d(in_channels),
+                torch.nn.Conv2d(in_channels, 1, 1, 1, 1),
+            )
+            torch.nn.init.constant_(decoder[-1].weight, 0.0)
+            torch.nn.init.constant_(decoder[-1].bias, self.__factors[n][0])
+            return decoder
+
+        return get_module(_encode_factor_name(n), _create_factor_decoder)
 
     def model(self, x, z):
         # pylint: disable=too-many-locals
@@ -324,16 +323,15 @@ class ST(Image):
                 ),
             )
 
-        expression_encoder = p.module(
+        expression_encoder = get_module(
             "expression_encoder",
-            torch.nn.Sequential(
+            lambda: torch.nn.Sequential(
                 torch.nn.Linear(num_genes, 256),
                 torch.nn.LeakyReLU(0.2, inplace=True),
                 torch.nn.Linear(256, 256),
                 torch.nn.LeakyReLU(0.2, inplace=True),
                 torch.nn.Linear(256, 16),
             ),
-            update_module_params=True,
         ).to(x["image"])
 
         def encode(data, label):

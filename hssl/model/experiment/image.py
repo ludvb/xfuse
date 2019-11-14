@@ -7,6 +7,7 @@ from pyro.distributions import Normal  # pylint: disable=no-name-in-module
 
 from ...utility import center_crop
 from ...utility.misc import Unpool
+from ...utility.modules import get_module
 from . import Experiment
 
 
@@ -26,9 +27,9 @@ class Image(Experiment):
         ncs = [
             2 ** i * self.num_channels for i in reversed(range(self.depth + 1))
         ]
-        decoder = p.module(
+        decoder = get_module(
             "img_decoder",
-            t.nn.Sequential(
+            lambda: t.nn.Sequential(
                 t.nn.Conv2d(z.shape[1], ncs[0], 5, padding=5),
                 t.nn.LeakyReLU(0.2, inplace=True),
                 t.nn.BatchNorm2d(ncs[0]),
@@ -47,14 +48,13 @@ class Image(Experiment):
                     ],
                 ),
             ),
-            update_module_params=True,
         ).to(z)
         return decoder(z)
 
     def _sample_image(self, x, decoded):
-        img_mu = p.module(
+        img_mu = get_module(
             "img_mu",
-            t.nn.Sequential(
+            lambda: t.nn.Sequential(
                 t.nn.Conv2d(
                     self.num_channels,
                     self.num_channels,
@@ -67,11 +67,10 @@ class Image(Experiment):
                 t.nn.Conv2d(self.num_channels, x["image"].shape[1], 3, 1, 1),
                 t.nn.Tanh(),
             ),
-            update_module_params=True,
         ).to(decoded)
-        img_sd = p.module(
+        img_sd = get_module(
             "img_sd",
-            t.nn.Sequential(
+            lambda: t.nn.Sequential(
                 t.nn.Conv2d(
                     self.num_channels,
                     self.num_channels,
@@ -84,7 +83,6 @@ class Image(Experiment):
                 t.nn.Conv2d(self.num_channels, x["image"].shape[1], 3, 1, 1),
                 t.nn.Softplus(),
             ),
-            update_module_params=True,
         ).to(decoded)
         mu = center_crop(img_mu(decoded), [None, None, *x["image"].shape[-2:]])
         sd = center_crop(img_sd(decoded), [None, None, *x["image"].shape[-2:]])
@@ -103,9 +101,9 @@ class Image(Experiment):
             x["image"].shape[1],
             *[2 ** i * self.num_channels for i in range(1, self.depth + 1)],
         ]
-        encoder = p.module(
+        encoder = get_module(
             "img_encoder",
-            t.nn.Sequential(
+            lambda: t.nn.Sequential(
                 *reduce(
                     add,
                     [
@@ -124,6 +122,5 @@ class Image(Experiment):
                 t.nn.LeakyReLU(0.2, inplace=True),
                 t.nn.BatchNorm2d(ncs[-1]),
             ),
-            update_module_params=True,
         ).to(x["image"])
         return encoder(x["image"])

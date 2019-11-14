@@ -14,6 +14,7 @@ from hssl.data.image import PreloadedImage
 from hssl.data.slide import STSlide, FullSlide, Slide
 from hssl.data.utility.misc import make_dataloader
 from hssl.utility import design_matrix_from
+from hssl.utility.modules import clear_module_store
 
 
 def pytest_configure(config):
@@ -27,6 +28,7 @@ def pytest_configure(config):
 def pytest_runtest_setup(item):
     # pylint: disable=missing-function-docstring
     pyro.clear_param_store()
+    clear_module_store()
     if item.get_closest_marker("fix_rng") is not None:
         torch.manual_seed(0)
 
