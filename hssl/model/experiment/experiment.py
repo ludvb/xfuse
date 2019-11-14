@@ -20,17 +20,22 @@ class Experiment(t.nn.Module):
         return 0
 
     @property
+    def num_z(self):
+        r"""Number of independent tissue states"""
+        return 1
+
+    @property
     @abstractmethod
     def tag(self):
         r"""Experiment name"""
 
     @abstractmethod
-    def model(self, x, z):
+    def model(self, x, zs):
         r"""Experiment model"""
 
     @abstractmethod
     def guide(self, x):
         r"""Experiment guide for :class:`pyro.infer.SVI`"""
 
-    def forward(self, x, z):  # pylint: disable=arguments-differ
-        return self.model(x, z)
+    def forward(self, x, zs):  # pylint: disable=arguments-differ
+        return self.model(x, zs)

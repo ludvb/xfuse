@@ -23,7 +23,8 @@ class Image(Experiment):
     def tag(self):
         return "image"
 
-    def _decode(self, z):
+    def _decode(self, zs):
+        z = zs[0]
         ncs = [
             2 ** i * self.num_channels for i in reversed(range(self.depth + 1))
         ]
@@ -91,8 +92,8 @@ class Image(Experiment):
         p.sample("image", image_distr, obs=x["image"])
         return image_distr
 
-    def model(self, x, z):
-        decoded = self._decode(z)
+    def model(self, x, zs):
+        decoded = self._decode(zs)
         with p.poutine.scale(self.n / len(x["image"])):
             return self._sample_image(x, decoded)
 
@@ -123,4 +124,4 @@ class Image(Experiment):
                 t.nn.BatchNorm2d(ncs[-1]),
             ),
         ).to(x["image"])
-        return encoder(x["image"])
+        return [encoder(x["image"])]

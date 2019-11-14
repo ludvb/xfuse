@@ -1,10 +1,7 @@
 from typing import Dict, List
 
 import pyro as p
-from pyro.distributions import (  # pylint: disable=no-name-in-module
-    Delta,
-    Normal,
-)
+from pyro.distributions import Normal  # pylint: disable=no-name-in-module
 
 import torch
 
@@ -57,21 +54,23 @@ class XFuse(torch.nn.Module):
 
         def _go(experiment, x):
             with p.poutine.scale(scale=experiment.n / len(x)):
-                z = p.sample(
-                    f"z-{experiment.tag}",
-                    (
-                        # pylint: disable=not-callable
-                        Normal(torch.tensor(0.0, device=find_device(x)), 1.0)
-                        .expand([1, self.latent_size, 1, 1])
-                        .to_event(3)
-                    ),
-                )
-            return z, experiment.model(x, z)
+                zs = [
+                    p.sample(
+                        f"z-{experiment.tag}-{i}",
+                        (
+                            # pylint: disable=not-callable
+                            Normal(
+                                torch.tensor(0.0, device=find_device(x)), 1.0,
+                            )
+                            .expand([1, self.latent_size, 1, 1])
+                            .to_event(3)
+                        ),
+                    )
+                    for i in range(experiment.num_z)
+                ]
+            return experiment.model(x, zs)
 
-        results = {e: _go(self.get_experiment(e), x) for e, x in xs.items()}
-        z = p.sample("z", Delta(torch.cat([z for z, _ in results.values()])))
-        outputs = {e: output for e, (_, output) in results.items()}
-        return z, outputs
+        return {e: _go(self.get_experiment(e), x) for e, x in xs.items()}
 
     def guide(self, xs):
         r"""
@@ -79,45 +78,39 @@ class XFuse(torch.nn.Module):
         """
 
         def _go(experiment, x):
-            preencoded = experiment.guide(x)
-            z_mu = get_module(
-                "z_mu",
-                lambda: torch.nn.Sequential(
-                    torch.nn.Conv2d(
-                        preencoded.shape[1], self.latent_size, 5, 1, 2
+            def _sample(name, y):
+                z_mu = get_module(
+                    f"{name}-mu",
+                    lambda: torch.nn.Sequential(
+                        torch.nn.Conv2d(y.shape[1], self.latent_size, 5, 1, 2),
+                        torch.nn.LeakyReLU(0.2, inplace=True),
+                        torch.nn.BatchNorm2d(self.latent_size),
+                        torch.nn.Conv2d(
+                            self.latent_size, self.latent_size, 5, 1, 2
+                        ),
                     ),
-                    torch.nn.LeakyReLU(0.2, inplace=True),
-                    torch.nn.BatchNorm2d(self.latent_size),
-                    torch.nn.Conv2d(
-                        self.latent_size, self.latent_size, 5, 1, 2
+                ).to(y)
+                z_sd = get_module(
+                    f"{name}-sd",
+                    lambda: torch.nn.Sequential(
+                        torch.nn.Conv2d(y.shape[1], self.latent_size, 5, 1, 2),
+                        torch.nn.LeakyReLU(0.2, inplace=True),
+                        torch.nn.BatchNorm2d(self.latent_size),
+                        torch.nn.Conv2d(
+                            self.latent_size, self.latent_size, 5, 1, 2
+                        ),
+                        torch.nn.Softplus(),
                     ),
-                ),
-            ).to(preencoded)
-            z_sd = get_module(
-                "z_sd",
-                lambda: torch.nn.Sequential(
-                    torch.nn.Conv2d(
-                        preencoded.shape[1], self.latent_size, 5, 1, 2
-                    ),
-                    torch.nn.LeakyReLU(0.2, inplace=True),
-                    torch.nn.BatchNorm2d(self.latent_size),
-                    torch.nn.Conv2d(
-                        self.latent_size, self.latent_size, 5, 1, 2
-                    ),
-                    torch.nn.Softplus(),
-                ),
-            ).to(preencoded)
-            with p.poutine.scale(scale=experiment.n / len(x)):
-                return p.sample(
-                    f"z-{experiment.tag}",
-                    (Normal(z_mu(preencoded), z_sd(preencoded)).to_event(3)),
-                )
+                ).to(y)
+                with p.poutine.scale(scale=experiment.n / len(x)):
+                    return p.sample(
+                        name, Normal(z_mu(y), z_sd(y)).to_event(3),
+                    )
 
-        p.sample(
-            "z",
-            Delta(
-                torch.cat(
-                    [_go(self.get_experiment(e), x) for e, x in xs.items()], 0
-                )
-            ),
-        )
+            ys = experiment.guide(x)
+            zs = [
+                _sample(f"z-{experiment.tag}-{i}", y) for i, y in enumerate(ys)
+            ]
+            return zs
+
+        return {e: _go(self.get_experiment(e), x) for e, x in xs.items()}

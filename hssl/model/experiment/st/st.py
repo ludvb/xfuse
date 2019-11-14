@@ -155,11 +155,11 @@ class ST(Image):
 
         return get_module(_encode_factor_name(n), _create_factor_decoder)
 
-    def model(self, x, z):
+    def model(self, x, zs):
         # pylint: disable=too-many-locals
         num_genes = x["data"][0].shape[1]
 
-        decoded = self._decode(z)
+        decoded = self._decode(zs)
 
         scale = p.sample(
             "scale",
@@ -189,12 +189,12 @@ class ST(Image):
             rim = scale * rim
 
             rate_mg_prior = Normal(
-                p.param(f"rate_mg_mu", torch.zeros(num_genes)).to(z),
+                p.param(f"rate_mg_mu", torch.zeros(num_genes)).to(decoded),
                 p.param(
                     f"rate_mg_sd",
                     torch.ones(num_genes),
                     constraint=constraints.positive,
-                ).to(z),
+                ).to(decoded),
             )
             rate_mg = torch.stack(
                 [
@@ -221,7 +221,7 @@ class ST(Image):
             "rate_g_effects",
             (
                 # pylint: disable=not-callable
-                Normal(torch.tensor(0.0).to(z), 1).expand(
+                Normal(torch.tensor(0.0).to(decoded), 1).expand(
                     [effects.shape[1], num_genes]
                 )
             ),
@@ -230,7 +230,7 @@ class ST(Image):
             "logits_g_effects",
             (
                 # pylint: disable=not-callable
-                Normal(torch.tensor(0.0).to(z), 1).expand(
+                Normal(torch.tensor(0.0).to(decoded), 1).expand(
                     [effects.shape[1], num_genes]
                 )
             ),
