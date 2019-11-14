@@ -190,13 +190,18 @@ class RetractAndSplit(ExpansionStrategy):
 
         _log_trees("trees before retraction")
 
-        self._root_nodes = {
-            tree
-            for tree in map(
-                _retract_noncontributing_branches, self._root_nodes
-            )
-            if not (isinstance(tree, _Leaf) and not tree.contributing)
-        }
+        self._root_nodes = set(
+            map(_retract_noncontributing_branches, self._root_nodes)
+        )
+
+        # Remove non-contributing trees, keeping at least one
+        for contributing, tree in sorted(
+            (x.contributing if isinstance(x, _Leaf) else True, x)
+            for x in self._root_nodes
+        )[:-1]:
+            if contributing:
+                break
+            self._root_nodes.discard(tree)
 
         _log_trees("trees after retraction / before splitting")
 
