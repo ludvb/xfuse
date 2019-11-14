@@ -62,7 +62,7 @@ class XFuse(torch.nn.Module):
                     (
                         # pylint: disable=not-callable
                         Normal(torch.tensor(0.0, device=find_device(x)), 1.0)
-                        .expand([1, 1, 1, 1])
+                        .expand([1, self.latent_size, 1, 1])
                         .to_event(3)
                     ),
                 )
