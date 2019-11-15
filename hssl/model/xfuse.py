@@ -14,10 +14,8 @@ from ..utility.modules import get_module
 class XFuse(torch.nn.Module):
     r"""XFuse"""
 
-    def __init__(self, experiments: List[Experiment], latent_size: int):
+    def __init__(self, experiments: List[Experiment]):
         super().__init__()
-        self.latent_size = latent_size
-
         self.__experiment_store: Dict[str, Experiment] = {}
         for experiment in experiments:
             self.register_experiment(experiment)
@@ -62,7 +60,7 @@ class XFuse(torch.nn.Module):
                             Normal(
                                 torch.tensor(0.0, device=find_device(x)), 1.0,
                             )
-                            .expand([1, self.latent_size, 1, 1])
+                            .expand([1, 1, 1, 1])
                             .to_event(3)
                         ),
                     )
@@ -82,23 +80,19 @@ class XFuse(torch.nn.Module):
                 z_mu = get_module(
                     f"{name}-mu",
                     lambda: torch.nn.Sequential(
-                        torch.nn.Conv2d(y.shape[1], self.latent_size, 5, 1, 2),
+                        torch.nn.Conv2d(y.shape[1], y.shape[1], 5, 1, 2),
                         torch.nn.LeakyReLU(0.2, inplace=True),
-                        torch.nn.BatchNorm2d(self.latent_size),
-                        torch.nn.Conv2d(
-                            self.latent_size, self.latent_size, 5, 1, 2
-                        ),
+                        torch.nn.BatchNorm2d(y.shape[1]),
+                        torch.nn.Conv2d(y.shape[1], y.shape[1], 5, 1, 2),
                     ),
                 ).to(y)
                 z_sd = get_module(
                     f"{name}-sd",
                     lambda: torch.nn.Sequential(
-                        torch.nn.Conv2d(y.shape[1], self.latent_size, 5, 1, 2),
+                        torch.nn.Conv2d(y.shape[1], y.shape[1], 5, 1, 2),
                         torch.nn.LeakyReLU(0.2, inplace=True),
-                        torch.nn.BatchNorm2d(self.latent_size),
-                        torch.nn.Conv2d(
-                            self.latent_size, self.latent_size, 5, 1, 2
-                        ),
+                        torch.nn.BatchNorm2d(y.shape[1]),
+                        torch.nn.Conv2d(y.shape[1], y.shape[1], 5, 1, 2),
                         torch.nn.Softplus(),
                     ),
                 ).to(y)

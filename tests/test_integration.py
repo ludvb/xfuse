@@ -26,20 +26,20 @@ def test_toydata(tmp_path, mocker, toydata):
         num_channels=4,
         factors=[FactorDefault(0.0, None) for _ in range(3)],
     )
-    xfuse = XFuse(experiments=[st_experiment], latent_size=16)
+    xfuse = XFuse(experiments=[st_experiment])
     summary_writer = SummaryWriter(tmp_path)
     rmse = RMSE(summary_writer)
     rmse.add_scalar = mocker.MagicMock()
     with Session(
         model=xfuse,
-        optimizer=pyro.optim.Adam({"lr": 0.01}),
+        optimizer=pyro.optim.Adam({"lr": 0.001}),
         dataloader=toydata,
     ), rmse:
         train(100)
     rmses = [x[1][1] for x in rmse.add_scalar.mock_calls]
     assert rmses[0] > rmses[19]
     assert rmses[19] > rmses[-1]
-    assert rmses[-1] < 10.0
+    assert rmses[-1] < 20.0
 
 
 @pytest.fixture
@@ -50,10 +50,10 @@ def pretrained_toy_model(toydata):
         num_channels=4,
         factors=[FactorDefault(0.0, None) for _ in range(1)],
     )
-    xfuse = XFuse(experiments=[st_experiment], latent_size=16)
+    xfuse = XFuse(experiments=[st_experiment])
     with Session(
         model=xfuse,
-        optimizer=pyro.optim.Adam({"lr": 0.01}),
+        optimizer=pyro.optim.Adam({"lr": 0.001}),
         dataloader=toydata,
     ):
         train(100)
@@ -64,7 +64,7 @@ def pretrained_toy_model(toydata):
 @pytest.mark.parametrize(
     "expansion_strategies,compute_expected_factors",
     [
-        ((ExtraBaselines(5), ExtraBaselines(0)), lambda n: (n + 5, n)),
+        ((ExtraBaselines(5),), lambda n: (n + 5, n)),
         ((RetractAndSplit(),) * 2, lambda n: (2 * n, n)),
     ],
 )

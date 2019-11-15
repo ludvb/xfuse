@@ -99,11 +99,10 @@ def cli(save_path, session, debug):
 @click.option("--expansion-strategy-arg", multiple=True)
 @click.option("--factor-eval-freq", type=int, default=100)
 @click.option("--image", "image_interval", type=int, default=1000)
-@click.option("--latent-size", type=int, default=32)
 @click.option("--lazy/--non-lazy", default=False)
 @click.option("--learning-rate", type=float, default=2e-4)
-@click.option("--network-depth", type=int, default=4)
-@click.option("--network-width", type=int, default=8)
+@click.option("--network-depth", type=int, default=5)
+@click.option("--network-width", type=int, default=4)
 @click.option("--patch-size", type=float)
 @click.option("--seed", type=int)
 @click.option("--workers", type=int, default=0)
@@ -117,7 +116,6 @@ def train(
     expansion_strategy,
     expansion_strategy_arg,
     factor_eval_freq,
-    latent_size,
     lazy,
     learning_rate,
     network_depth,
@@ -204,11 +202,12 @@ def train(
             default_scale=count_data.mean().mean() / spot_size(dataset),
             factors=[FactorDefault(0.0, factor_baseline)],
         )
-        xfuse = XFuse(experiments=[st_experiment], latent_size=latent_size).to(
-            get("default_device")
-        )
+        xfuse = XFuse(experiments=[st_experiment]).to(get("default_device"))
         default_session = Session(
-            model=xfuse, optimizer=pyro.optim.Adam({"lr": learning_rate})
+            model=xfuse,
+            optimizer=pyro.optim.Adam(
+                {"lr": learning_rate, "weight_decay": 1e-5}
+            ),
         )
     else:
         default_session = Session()
