@@ -216,7 +216,13 @@ class ST(Image):
                 "rate_mg", Delta(torch.zeros(0, num_genes).to(decoded))
             )
 
-        effects = x["effects"].float()
+        effects = torch.cat(
+            [
+                torch.ones(x["effects"].shape[0], 1).to(x["effects"]),
+                x["effects"],
+            ],
+            1,
+        ).float()
         rate_g_effects = p.sample(
             "rate_g_effects",
             (
@@ -291,8 +297,8 @@ class ST(Image):
         num_genes = x["data"][0].shape[1]
 
         for name, dim in [
-            ("rate_g_effects", [x["effects"].shape[1], num_genes]),
-            ("logits_g_effects", [x["effects"].shape[1], num_genes]),
+            ("rate_g_effects", [1 + x["effects"].shape[1], num_genes]),
+            ("logits_g_effects", [1 + x["effects"].shape[1], num_genes]),
         ]:
             p.sample(
                 name,

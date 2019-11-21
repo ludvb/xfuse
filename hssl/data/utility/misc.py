@@ -19,7 +19,7 @@ def spot_size(dataset: Dataset) -> np.float64:
         np.concatenate(
             [
                 np.bincount(d["label"].flatten())[1:]
-                for d in dataset  # type: ignore
+                for d in it.islice(dataset, 1)  # type: ignore
             ]
         )
     )

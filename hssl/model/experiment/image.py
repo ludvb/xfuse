@@ -1,4 +1,3 @@
-print("HEJ")
 import numpy as np
 import pyro
 import torch

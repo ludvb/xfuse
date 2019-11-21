@@ -1,10 +1,10 @@
 from abc import ABCMeta, abstractmethod
-from typing import NamedTuple
+from typing import Callable, NamedTuple
 
+import h5py
 import numpy as np
 import torch
-
-from ..image import Image
+from scipy.sparse import csr_matrix
 
 
 class SlideIterator(metaclass=ABCMeta):
@@ -35,41 +35,41 @@ class SlideData(metaclass=ABCMeta):
 class STSlide(SlideData):
     r""":class:`SlideData` for Spatial Transcriptomics slides"""
 
-    def __init__(self, data: torch.Tensor, image: Image, label: Image):
-        if data.is_sparse:  # type: ignore
-            data = data.to_dense()
-
-        self._image = image
-        self._label = label
+    def __init__(self, data: h5py.File):
         self._data = data
-
-        self.H, self.W = self._image.height, self._image.width
-        assert self.H == self._label.height and self.W == self._label.width
+        self._counts = csr_matrix(
+            (
+                self._data["counts"]["data"],
+                self._data["counts"]["indices"],
+                self._data["counts"]["indptr"],
+            )
+        )
+        self.H, self.W, _ = self._data["image"].shape
 
     @property
     def type(self) -> str:
         return "ST"
 
     @property
-    def data(self):
+    def counts(self):
         r"""Getter for the count data"""
-        return self._data
+        return self._counts
 
     @property
     def image(self):
         r"""Getter for the slide image"""
-        return self._image
+        return self._data["image"]
 
     @property
     def label(self):
         r"""Getter for the label image of the slide"""
-        return self._label
+        return self._data["label"]
 
     def prepare_data(self, image, label):
         r"""Prepare data from image and label patches"""
 
         labels = np.sort(np.unique(label[label != 0]))
-        data = self._data[(labels - 1).tolist()]
+        data = self._counts[(labels - 1).tolist()]
         label = np.searchsorted([0, *labels], label)
 
         return dict(
@@ -77,11 +77,11 @@ class STSlide(SlideData):
                 torch.as_tensor(image / 255 * 2 - 1).permute(2, 0, 1).float()
             ),
             label=torch.as_tensor(label).long(),
-            data=data,
+            data=torch.as_tensor(data.todense()).float(),
         )
 
 
 class Slide(NamedTuple):
     r"""Data structure for tissue slide"""
     data: SlideData
-    iterator: SlideIterator
+    iterator: Callable[[SlideData], SlideIterator]

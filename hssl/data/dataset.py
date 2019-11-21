@@ -1,4 +1,4 @@
-from typing import List, NamedTuple
+from typing import Dict, NamedTuple
 
 import numpy as np
 import pandas as pd
@@ -12,7 +12,7 @@ __all__ = ["Data", "Dataset"]
 class Data(NamedTuple):
     r"""Dataset consisting of multiple instances of :class:`Slide`"""
 
-    slides: List[Slide]
+    slides: Dict[str, Slide]
     design: pd.DataFrame
 
 
@@ -24,21 +24,22 @@ class Dataset(torch.utils.data.Dataset):
 
     def __init__(self, data: Data):
         self._data = data
-        self._data_iterators = [
-            slide.iterator(slide.data) for slide in self.data.slides
-        ]
+        self._data_iterators = {
+            name: slide.iterator(slide.data)
+            for name, slide in self.data.slides.items()
+        }
         self.observations = pd.DataFrame(
             dict(
                 type=np.repeat(
-                    [x.data.type for x in self._data.slides],
-                    [len(x) for x in self._data_iterators],
+                    [x.data.type for x in self._data.slides.values()],
+                    [len(x) for x in self._data_iterators.values()],
                 ),
                 sample=np.repeat(
-                    range(len(self._data_iterators)),
-                    [len(x) for x in self._data_iterators],
+                    list(self._data_iterators.keys()),
+                    [len(x) for x in self._data_iterators.values()],
                 ),
                 idx=np.concatenate(
-                    [range(len(x)) for x in self._data_iterators]
+                    [range(len(x)) for x in self._data_iterators.values()]
                 ),
             )
         )

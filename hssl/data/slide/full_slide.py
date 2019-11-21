@@ -13,6 +13,6 @@ class FullSlide(SlideIterator):
         return 1
 
     def __getitem__(self, idx):
-        image = self._slide.image.to_array()
-        label = self._slide.label.to_array().squeeze()
+        image = self._slide.image[()]
+        label = self._slide.label[()]
         return self._slide.prepare_data(image, label)

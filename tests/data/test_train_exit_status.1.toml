@@ -1,0 +1,5 @@
+[optimization]
+epochs = 10
+
+[slides]
+[slides."./files/toydata.h5"]

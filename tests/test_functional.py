@@ -9,21 +9,15 @@ from hssl.session import Session, Unset, get
 
 
 @pytest.mark.parametrize(
-    "arguments",
-    [
-        ["--batch-size=2", "--epochs=1", "--non-lazy"],
-        ["--batch-size=2", "--epochs=1", "--lazy"],
-        ["--batch-size=2", "--epochs=1", "--non-lazy", "--patch-size=64"],
-    ],
+    "test_case", ["test_train_exit_status.1.toml"],
 )
-def test_train_exit_status(shared_datadir, script_runner, tmp_path, arguments):
+def test_train_exit_status(shared_datadir, script_runner, tmp_path, test_case):
     r"""Test CLI invocation"""
     save_path = tmp_path / "output_dir"
     arguments = [
+        "run",
         f"--save-path={save_path}",
-        "train",
-        str(shared_datadir / "test1" / "design.csv"),
-        *arguments,
+        str(shared_datadir / test_case),
     ]
     ret = script_runner.run("hssl", *arguments)
     assert ret.success
@@ -34,19 +28,18 @@ def test_train_exit_status(shared_datadir, script_runner, tmp_path, arguments):
 
 def test_restore_session(shared_datadir, script_runner, mocker, tmp_path):
     r"""Test session restore"""
-    subcmd = [
-        "train",
-        str(shared_datadir / "test1" / "design.csv"),
-        "--batch-size=1",
-        "--epochs=1",
-    ]
 
-    script_runner.run("hssl", f"--save-path={tmp_path}", *subcmd)
+    script_runner.run(
+        "hssl",
+        "run",
+        f"--save-path={tmp_path}",
+        str(shared_datadir / "test_restore_session.toml"),
+    )
 
     params = [*pyro.get_param_store().values()]
     pyro.clear_param_store()
 
-    def _mock_run_training(*_args, **_kwargs):
+    def _mock_run(*_args, **_kwargs):
         with Session(panic=Unset):
             assert int(get("global_step")) > 1
             assert all(
@@ -54,8 +47,12 @@ def test_restore_session(shared_datadir, script_runner, mocker, tmp_path):
                 for a, b in zip(params, get("param_store").values())
             )
 
-    mocker.patch("hssl.__main__.run_training", _mock_run_training)
+    mocker.patch("hssl.__main__._run", _mock_run)
 
-    assert script_runner.run(
-        "hssl", f"--session={tmp_path / 'final.session'}", *subcmd
-    ).success
+    ret = script_runner.run(
+        "hssl",
+        "run",
+        f"--save-path={tmp_path}",
+        str(shared_datadir / "test_restore_session.toml"),
+    )
+    assert ret.success

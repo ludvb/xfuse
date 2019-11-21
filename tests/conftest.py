@@ -2,6 +2,7 @@ r"""Config file for tests"""
 
 import itertools as it
 
+import h5py
 import numpy as np
 import pandas as pd
 import pyro
@@ -9,8 +10,8 @@ import pyro.distributions as distr
 import torch
 
 import pytest
+from hssl.convert.utility import write_data
 from hssl.data import Data, Dataset
-from hssl.data.image import PreloadedImage
 from hssl.data.slide import STSlide, FullSlide, Slide
 from hssl.data.utility.misc import make_dataloader
 from hssl.utility import design_matrix_from
@@ -49,7 +50,7 @@ def pytest_collection_modifyitems(config, items):
 
 @pytest.fixture
 @pytest.mark.fix_rng
-def toydata():
+def toydata(tmp_path):
     r"""Produces toy dataset"""
     # pylint: disable=too-many-locals
 
@@ -104,15 +105,19 @@ def toydata():
         (activity - activity.min()) / (activity.max() - activity.min())
     )
     image = image.round().byte().cpu().numpy()
-    image = PreloadedImage(image)
+    counts = torch.stack(counts)
+    counts = pd.DataFrame(
+        counts.cpu().numpy(),
+        index=pd.Index(list(range(counts.shape[0]))),
+        columns=[f"g{i + 1}" for i in range(counts.shape[1])],
+    )
 
-    label = PreloadedImage(label)
+    filepath = tmp_path / "data.h5"
+    write_data(counts, image, label, "ST", str(filepath))
 
-    counts = torch.stack(counts).float().to_sparse()
-
-    design_matrix = design_matrix_from(pd.DataFrame({"sample": [1]}))
-    slide = Slide(data=STSlide(counts, image, label), iterator=FullSlide)
-    data = Data(slides=[slide], design=design_matrix)
+    design_matrix = design_matrix_from({str(filepath): {"ID": 1}})
+    slide = Slide(data=STSlide(h5py.File(filepath, "r")), iterator=FullSlide)
+    data = Data(slides={str(filepath): slide}, design=design_matrix)
     dataset = Dataset(data)
     dataloader = make_dataloader(dataset)
 

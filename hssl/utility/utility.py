@@ -10,6 +10,7 @@ from typing import (
     Optional,
     Set,
     Tuple,
+    Union,
     cast,
     overload,
 )
@@ -20,7 +21,7 @@ import pandas as pd
 import scipy.sparse as ss
 import torch
 
-from ..logging import INFO, log
+from ..logging import INFO, WARNING, log
 from ..session import get
 from ..utility.file import extension
 
@@ -165,23 +166,35 @@ def read_data(
 
 
 def design_matrix_from(
-    design: pd.DataFrame,
+    design: Dict[str, Dict[str, Union[int, str]]],
     covariates: Optional[List[Tuple[str, Set[str]]]] = None,
 ) -> pd.DataFrame:
     r"""
     Constructs the design matrix from the design specified in the design file
     """
 
-    if len(design.columns) == 0:
-        return pd.DataFrame(np.zeros((0, len(design))))
-
-    design = (
-        design[list(sorted(design.columns))].astype(str).astype("category")
+    design_table = pd.concat(
+        [
+            pd.DataFrame({k: [v] for k, v in v.items()}, index=[k])
+            for k, v in design.items()
+        ],
+        sort=True,
     )
+    if len(design_table.columns) == 0:
+        return pd.DataFrame(
+            np.zeros((0, len(design_table))), columns=design_table.index,
+        )
+
+    design_table = design_table.astype("category")
+    for covariate in design_table:
+        if np.any(pd.isna(design_table[covariate])):
+            log(
+                WARNING, 'Design covariate "%s" has missing values.', covariate
+            )
 
     if covariates is not None:
         missing_covariates = [
-            x for x, _ in covariates if x not in design.columns
+            x for x, _ in covariates if x not in design_table.columns
         ]
         if missing_covariates != []:
             raise ValueError(
@@ -190,12 +203,14 @@ def design_matrix_from(
             )
 
         for covariate, values in covariates:
-            design[covariate].cat.set_categories(sorted(values), inplace=True)
-        design = design[[x for x, _ in covariates]]
+            design_table[covariate].cat.set_categories(
+                sorted(values), inplace=True
+            )
+        design_table = design_table[[x for x, _ in covariates]]
     else:
-        for covariate in design.columns:
-            design[covariate].cat.set_categories(
-                sorted(design[covariate].cat.categories), inplace=True
+        for covariate in design_table.columns:
+            design_table[covariate].cat.set_categories(
+                sorted(design_table[covariate].cat.categories), inplace=True
             )
 
     def _encode(covariate):
@@ -204,18 +219,17 @@ def design_matrix_from(
             'encoding design covariate "%s" with %d categories: %s',
             covariate.name,
             len(covariate.cat.categories),
-            ", ".join(covariate.cat.categories),
+            ", ".join(map(str, covariate.cat.categories)),
         )
+        oh_matrix = np.eye(len(covariate.cat.categories), dtype=int)[
+            :, covariate.cat.codes
+        ]
+        oh_matrix[:, covariate.cat.codes == -1] = 0
         return pd.DataFrame(
-            (
-                np.eye(len(covariate.cat.categories), dtype=int)[
-                    :, covariate.cat.codes
-                ]
-            ),
-            index=covariate.cat.categories,
+            oh_matrix, index=covariate.cat.categories, columns=covariate.index
         )
 
-    ks, vs = zip(*[(k, _encode(v)) for k, v in design.iteritems()])
+    ks, vs = zip(*[(k, _encode(v)) for k, v in design_table.iteritems()])
     return pd.concat(vs, keys=ks)
 
 

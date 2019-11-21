@@ -152,10 +152,10 @@ class FactorActivationFullSummary(StatsHandler):
         dataloader = make_dataloader(
             Dataset(
                 Data(
-                    slides=[
-                        Slide(data=x.data, iterator=FullSlide)
-                        for x in dataloader.dataset.data.slides
-                    ],
+                    slides={
+                        k: Slide(data=v.data, iterator=FullSlide)
+                        for k, v in dataloader.dataset.data.slides.items()
+                    },
                     design=dataloader.dataset.data.design,
                 )
             ),

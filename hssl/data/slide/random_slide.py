@@ -117,10 +117,10 @@ class RandomSlide(SlideIterator):
             )
         ]
         image = to_pil_image(
-            self._slide.image.extract(x, y, extpatch_w, extpatch_h).to_array()
+            self._slide.image[y : y + extpatch_h, x : x + extpatch_w]
         )
         label = to_pil_image(
-            self._slide.label.extract(x, y, extpatch_w, extpatch_h).to_array()
+            self._slide.label[y : y + extpatch_h, x : x + extpatch_w]
         )
 
         # Apply augmentations

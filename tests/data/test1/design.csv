@@ -1,2 +1,0 @@
-image,labels,data,annotation1,annotation2
-./image.tif,./label.tif,./data.h5,A,1
