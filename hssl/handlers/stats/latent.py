@@ -5,10 +5,10 @@ from ...utility.visualization import reduce_last_dimension
 class Latent(StatsHandler):
     r"""Latent state stats tracker"""
 
-    def _select_msg(self, type, name, **_):
+    def _select_msg(self, type, name, **msg):
         # pylint: disable=arguments-differ
         # pylint: disable=redefined-builtin
-        return type == "sample" and name == "z"
+        return type == "sample" and name == "z" and not msg["is_guide"]
 
     def _handle(self, fn, **_):
         # pylint: disable=arguments-differ

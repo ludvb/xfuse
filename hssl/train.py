@@ -1,6 +1,7 @@
 import itertools as it
 import os
 from contextlib import ExitStack
+from functools import reduce
 from typing import List
 
 import numpy as np
@@ -22,23 +23,6 @@ def train(epochs: int = -1):
     optim = require("optimizer")
     model = require("model")
     dataloader = require("dataloader")
-
-    @effectful(type="step")
-    def _step(*, x):
-        loss = pyro.infer.Trace_ELBO()
-        return pyro.infer.SVI(model.model, model.guide, optim, loss).step(x)
-
-    @effectful(type="epoch")
-    def _epoch(*, epoch):
-        progress = tqdm(dataloader, dynamic_ncols=True)
-        elbo = []
-        for x in progress:
-            elbo.append(_step(x=to_device(x)))
-            progress.set_description(
-                f"epoch {epoch:05d} / mean ELBO {np.mean(elbo):.3e}"
-            )
-            global_step = get("global_step")
-            global_step += 1
 
     messengers: List[Messenger] = [
         FactorPurger(
@@ -77,6 +61,23 @@ def train(epochs: int = -1):
                 stats.Scale(writer, _every(100)),
             ]
         )
+
+    @effectful(type="step")
+    def _step(*, x):
+        loss = pyro.infer.Trace_ELBO()
+        return pyro.infer.SVI(model.model, model.guide, optim, loss).step(x)
+
+    @effectful(type="epoch")
+    def _epoch(*, epoch):
+        progress = tqdm(dataloader, dynamic_ncols=True)
+        elbo = []
+        for x in progress:
+            elbo.append(_step(x=to_device(x)))
+            progress.set_description(
+                f"epoch {epoch:05d} / mean ELBO {np.mean(elbo):.3e}"
+            )
+            global_step = get("global_step")
+            global_step += 1
 
     with ExitStack() as stack:
         for messenger in messengers:

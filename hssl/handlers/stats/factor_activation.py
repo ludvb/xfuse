@@ -100,10 +100,15 @@ class FactorActivationSummary(StatsHandler):
     activation map
     """
 
-    def _select_msg(self, type, name, value, **_):
+    def _select_msg(self, type, name, value, **msg):
         # pylint: disable=arguments-differ
         # pylint: disable=redefined-builtin
-        return type == "sample" and name[-3:] == "rim" and value.shape[1] >= 3
+        return (
+            type == "sample"
+            and not msg["is_guide"]
+            and name[-3:] == "rim"
+            and value.shape[1] >= 3
+        )
 
     def _handle(self, fn, **_):
         # pylint: disable=arguments-differ

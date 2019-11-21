@@ -2,6 +2,7 @@ from typing import Dict, List
 
 import pyro as p
 from pyro.distributions import Normal  # pylint: disable=no-name-in-module
+from pyro.poutine.messenger import Messenger
 
 import torch
 
@@ -9,6 +10,16 @@ from .experiment import Experiment
 from ..logging import INFO, log
 from ..utility import find_device
 from ..utility.modules import get_module
+
+
+class ModelWrapper(Messenger):
+    def _process_message(self, msg):
+        msg["is_guide"] = False
+
+
+class GuideWrapper(Messenger):
+    def _process_message(self, msg):
+        msg["is_guide"] = True
 
 
 class XFuse(torch.nn.Module):
@@ -47,6 +58,7 @@ class XFuse(torch.nn.Module):
         # pylint: disable=redefined-builtin
         return self.model(*input)
 
+    @ModelWrapper()
     def model(self, xs):
         r"""Runs XFuse on the given data"""
 
@@ -70,6 +82,7 @@ class XFuse(torch.nn.Module):
 
         return {e: _go(self.get_experiment(e), x) for e, x in xs.items()}
 
+    @GuideWrapper()
     def guide(self, xs):
         r"""
         Runs the :class:`pyro.infer.SVI` `guide` for XFuse on the given data
