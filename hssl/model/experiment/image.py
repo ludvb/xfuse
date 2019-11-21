@@ -157,7 +157,7 @@ class Image(Experiment):
         mu = center_crop(img_mu(decoded), [None, None, *x["image"].shape[-2:]])
         sd = center_crop(img_sd(decoded), [None, None, *x["image"].shape[-2:]])
 
-        image_distr = Normal(mu, sd).to_event(3)
+        image_distr = Normal(mu, 1e-8 + sd).to_event(3)
         pyro.sample("image", image_distr, obs=x["image"])
         return image_distr
 

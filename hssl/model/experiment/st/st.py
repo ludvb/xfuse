@@ -190,7 +190,8 @@ class ST(Image):
 
             rate_mg_prior = Normal(
                 p.param(f"rate_mg_mu", torch.zeros(num_genes)).to(decoded),
-                p.param(
+                1e-8
+                + p.param(
                     f"rate_mg_sd",
                     torch.ones(num_genes),
                     constraint=constraints.positive,
@@ -304,7 +305,8 @@ class ST(Image):
                 name,
                 Normal(
                     p.param(f"{name}_mu", torch.zeros(dim)).to(find_device(x)),
-                    p.param(
+                    1e-8
+                    + p.param(
                         f"{name}_sd",
                         1e-2 * torch.ones(dim),
                         constraint=constraints.positive,
@@ -321,7 +323,8 @@ class ST(Image):
                     p.param(
                         f"{_encode_factor_name(n)}_mu", factor.profile.float()
                     ).to(find_device(x)),
-                    p.param(
+                    1e-8
+                    + p.param(
                         f"{_encode_factor_name(n)}_sd",
                         1e-2 * torch.ones_like(factor.profile).float(),
                         constraint=constraints.positive,

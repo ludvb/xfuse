@@ -98,7 +98,7 @@ class XFuse(torch.nn.Module):
                 ).to(y)
                 with p.poutine.scale(scale=experiment.n / len(x)):
                     return p.sample(
-                        name, Normal(z_mu(y), z_sd(y)).to_event(3),
+                        name, Normal(z_mu(y), 1e-8 + z_sd(y)).to_event(3),
                     )
 
             ys = experiment.guide(x)
