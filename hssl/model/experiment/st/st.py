@@ -264,39 +264,32 @@ class ST(Image):
             with scope(prefix=self.tag):
                 image_distr = self._sample_image(x, decoded)
 
-                def _drop_partial_observations(data, label):
+                def _compute_sample_params(
+                    data, label, rim, rate_mg, logits_g
+                ):
+                    nonmissing = label != 0
                     zero_count_spots = 1 + torch.where(data.sum(1) == 0)[0]
-                    mask_partial = np.invert(
-                        binary_fill_holes(
-                            np.isin(label.cpu(), [0, *zero_count_spots.cpu()])
-                        )
+                    nonpartial = binary_fill_holes(
+                        np.isin(label.cpu(), [0, *zero_count_spots.cpu()])
                     )
-                    label[mask_partial] = 0
+                    nonpartial = torch.as_tensor(nonpartial).to(nonmissing)
+                    mask = nonpartial & nonmissing
+
+                    rim = rim[:, mask]
+                    label = label[mask] - 1
                     idxs, label = torch.unique(label, return_inverse=True)
-                    data = data[idxs[idxs != 0] - 1]
-                    return data, label
+                    data = data[idxs]
 
-                def _compute_sample_params(label, rim, rate_mg, logits_g):
-                    labelonehot = sparseonehot(label.flatten())
-                    rim = torch.sparse.mm(
-                        labelonehot.t().float(),
-                        rim.permute(1, 2, 0).view(
-                            rim.shape[1] * rim.shape[2], rim.shape[0]
-                        ),
-                    )
-                    rgs = rim[1:] @ rate_mg.exp()
-                    return rgs, logits_g.expand(len(rgs), -1)
+                    labelonehot = sparseonehot(label)
+                    rim = torch.sparse.mm(labelonehot.t().float(), rim.t())
+                    rgs = rim @ rate_mg.exp()
 
-                data, label = zip(
-                    *it.starmap(
-                        _drop_partial_observations, zip(x["data"], x["label"])
-                    )
-                )
+                    return data, rgs, logits_g.expand(len(rgs), -1)
 
-                rgs, logits_g = zip(
+                data, rgs, logits_g = zip(
                     *it.starmap(
                         _compute_sample_params,
-                        zip(label, rim, rate_mg, logits_g),
+                        zip(x["data"], x["label"], rim, rate_mg, logits_g),
                     )
                 )
 
