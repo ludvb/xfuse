@@ -1,4 +1,5 @@
-from typing import Dict, NamedTuple
+from functools import reduce
+from typing import Dict, List, NamedTuple, Optional
 
 import numpy as np
 import pandas as pd
@@ -22,8 +23,20 @@ class Dataset(torch.utils.data.Dataset):
     instance
     """
 
-    def __init__(self, data: Data):
+    def __init__(self, data: Data, genes: Optional[List[str]] = None):
         self._data = data
+        if genes is None:
+            genes = list(
+                reduce(
+                    set.union,  # type: ignore
+                    (
+                        set(slide.data.genes)
+                        for slide in self.data.slides.values()
+                    ),
+                )
+            )
+        for slide in self.data.slides.values():
+            slide.data.genes = genes
         self._data_iterators = {
             name: slide.iterator(slide.data)
             for name, slide in self.data.slides.items()

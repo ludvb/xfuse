@@ -1,10 +1,12 @@
-from abc import ABCMeta, abstractmethod
-from typing import Callable, NamedTuple
+from __future__ import annotations
+
+from abc import ABCMeta, abstractmethod, abstractproperty
+from typing import Callable, List, NamedTuple
 
 import h5py
 import numpy as np
+import scipy.sparse
 import torch
-from scipy.sparse import csr_matrix
 
 
 class SlideIterator(metaclass=ABCMeta):
@@ -31,19 +33,31 @@ class SlideData(metaclass=ABCMeta):
     def type(self) -> str:
         r"""The type tag of this slide"""
 
+    @abstractproperty
+    def genes(self) -> List[str]:
+        r"""Genes returned from this dataset"""
+
+    @genes.setter
+    def genes(self, genes: List[str]) -> SlideData:
+        r"""Setter for which genes to return from this dataset"""
+
 
 class STSlide(SlideData):
     r""":class:`SlideData` for Spatial Transcriptomics slides"""
 
     def __init__(self, data: h5py.File):
         self._data = data
-        self._counts = csr_matrix(
+        self._counts = scipy.sparse.csr_matrix(
             (
                 self._data["counts"]["data"],
                 self._data["counts"]["indices"],
                 self._data["counts"]["indptr"],
             )
         )
+        self._counts = scipy.sparse.hstack(
+            [self._counts, np.zeros((self._counts.shape[0], 1))], format="csr"
+        )
+        self.genes = list(self._data["counts"]["columns"][()])
         self.H, self.W, _ = self._data["image"].shape
 
     @property
@@ -51,9 +65,25 @@ class STSlide(SlideData):
         return "ST"
 
     @property
+    def genes(self):
+        return list(self.__gene_list.copy())
+
+    @genes.setter
+    def genes(self, genes: List[str]) -> STSlide:
+        self.__gene_list = np.array(genes)
+        idxs = {
+            gene: i
+            for i, gene in enumerate(self._data["counts"]["columns"][()])
+        }
+        self.__gene_idxs = np.array(
+            [idxs[gene] if gene in idxs else -1 for gene in genes]
+        )
+        return self
+
+    @property
     def counts(self):
         r"""Getter for the count data"""
-        return self._counts
+        return self._counts[:, self.__gene_idxs]
 
     @property
     def image(self):
@@ -69,7 +99,7 @@ class STSlide(SlideData):
         r"""Prepare data from image and label patches"""
 
         labels = np.sort(np.unique(label[label != 0]))
-        data = self._counts[(labels - 1).tolist()]
+        data = self.counts[(labels - 1).tolist()]
         label = np.searchsorted([0, *labels], label)
 
         return dict(
