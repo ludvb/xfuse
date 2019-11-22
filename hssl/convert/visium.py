@@ -39,13 +39,6 @@ def run(
         columns=bc_matrix["matrix"]["features"]["name"][()].astype(str),
         index=pd.Index([*range(1, counts.shape[0] + 1)], name="n"),
     )
-    if counts.columns.duplicated().any():
-        log(
-            WARNING,
-            "Count matrix contains duplicated columns."
-            " Counts will be summed by column name.",
-        )
-        counts = counts.sum(axis=1, level=0)
 
     spots = list(
         tissue_positions.loc[

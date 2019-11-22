@@ -1,4 +1,5 @@
 from typing import List, NamedTuple, Tuple
+import os
 
 import h5py
 import numpy as np
@@ -106,7 +107,32 @@ def write_data(
     path: str = "data.h5",
 ) -> None:
     r"""Writes data to the format used by XFuse."""
+    if image.shape[:2] != label.shape[:2]:
+        raise RuntimeError(
+            f"Image shape ({image.shape[:2]}) is not equal to"
+            f" the shape of the label image ({label.shape[:2]})."
+        )
+
+    if np.max(image.shape[:2]) > 5000:
+        log(
+            WARNING,
+            "The image resolution is very large! 😱"
+            " XFuse typically works best on medium resolution images"
+            " (approximately 1000x1000 px)."
+            " If you experience performance issues, please consider reducing"
+            " the resolution.",
+        )
+
+    if counts.columns.duplicated().any():
+        log(
+            WARNING,
+            "Count matrix contains duplicated columns."
+            " Counts will be summed by column name.",
+        )
+        counts = counts.sum(axis=1, level=0)
+
     log(DEBUG, "writing data to %s", path)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
     with h5py.File(path, "w") as data_file:
         data = (
             counts.astype(pd.SparseDtype("float", 0.0)).sparse.to_coo().tocsr()
