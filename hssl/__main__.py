@@ -68,9 +68,13 @@ cli.add_command(_convert)
 @click.option("--bc-matrix", type=click.File("rb"), required=True)
 @click.option("--tissue-positions", type=click.File("rb"), required=True)
 @click.option("--scale-factors", type=click.File("rb"), required=True)
-@click.option("--output-file", type=click.Path(), default="slide.h5")
+@click.option(
+    "--output-file",
+    type=click.Path(exists=False, writable=True),
+    required=True,
+)
 def visium(image, bc_matrix, tissue_positions, scale_factors, output_file):
-    r"""Converts 10X Visium data to the format used by xfuse."""
+    r"""Converts 10X Visium data"""
     scale_factors = json.load(scale_factors)
     spot_radius = scale_factors["spot_diameter_fullres"] / 2
     spot_radius = spot_radius * scale_factors["tissue_hires_scalef"]
@@ -86,6 +90,32 @@ def visium(image, bc_matrix, tissue_positions, scale_factors, output_file):
 
 
 _convert.add_command(visium)
+
+
+@click.command()
+@click.option("--counts", type=click.File("rb"), required=True)
+@click.option("--image", type=click.File("rb"), required=True)
+@click.option("--spots", type=click.File("rb"))
+@click.option("--scale-factor", type=float)
+@click.option(
+    "--output-file",
+    type=click.Path(exists=False, writable=True),
+    required=True,
+)
+def st(counts, image, spots, scale_factor, output_file):
+    r"""Converts Spatial Transcriptomics ("ST") data"""
+    if spots is not None:
+        spots_data = pd.read_csv(spots, sep="\t")
+    else:
+        spots_data = None
+    counts_data = pd.read_csv(counts, sep="\t", index_col=0)
+    image_data = imread(image)
+    convert.st.run(
+        counts_data, image_data, spots_data, output_file, scale_factor
+    )
+
+
+_convert.add_command(st)
 
 
 @click.command()

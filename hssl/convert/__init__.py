@@ -1,2 +1,2 @@
-from . import spatialtranscriptomics
+from . import st
 from . import visium
