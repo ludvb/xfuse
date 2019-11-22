@@ -64,7 +64,7 @@ def run(
 
     optimizer = get("optimizer")
     if optimizer is None:
-        optimizer = pyro.optim.Adam(
+        optimizer = pyro.optim.ClippedAdam(
             {"lr": learning_rate, "weight_decay": 1e-5}
         )
 
