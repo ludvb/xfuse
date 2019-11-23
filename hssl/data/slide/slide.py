@@ -52,7 +52,11 @@ class STSlide(SlideData):
                 self._data["counts"]["data"],
                 self._data["counts"]["indices"],
                 self._data["counts"]["indptr"],
-            )
+            ),
+            shape=(
+                len(self._data["counts"]["index"]),
+                len(self._data["counts"]["columns"]),
+            ),
         )
         self._counts = scipy.sparse.hstack(
             [self._counts, np.zeros((self._counts.shape[0], 1))], format="csr"
