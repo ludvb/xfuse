@@ -35,7 +35,7 @@ class StatsHandler(ABC, Messenger):
                 name,
                 wraps(method)(
                     lambda *args, **kwargs: method(
-                        *args, global_step=int(get("global_step")), **kwargs
+                        *args, global_step=get("training_data").step, **kwargs
                     )
                     if "global_step" in inspect.signature(method).parameters
                     else method

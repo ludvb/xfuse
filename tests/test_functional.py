@@ -41,7 +41,7 @@ def test_restore_session(shared_datadir, script_runner, mocker, tmp_path):
 
     def _mock_run(*_args, **_kwargs):
         with Session(panic=Unset):
-            assert int(get("global_step")) > 1
+            assert get("training_data").step > 1
             assert all(
                 (a == b).all()
                 for a, b in zip(params, get("param_store").values())

@@ -1,18 +1,17 @@
 import itertools as it
 import os
 from contextlib import ExitStack
-from functools import reduce
 from typing import List
 
 import numpy as np
-from torch.utils.tensorboard.writer import SummaryWriter
-from tqdm import tqdm
-
 import pyro
 from pyro.poutine.messenger import Messenger
 from pyro.poutine.runtime import effectful
+from torch.utils.tensorboard.writer import SummaryWriter
+from tqdm import tqdm
 
 from .handlers import Checkpointer, stats
+from .logging import DEBUG, log
 from .model.experiment.st import FactorPurger
 from .session import get, require
 from .utility import to_device
@@ -23,6 +22,7 @@ def train(epochs: int = -1):
     optim = require("optimizer")
     model = require("model")
     dataloader = require("dataloader")
+    training_data = get("training_data")
 
     messengers: List[Messenger] = [
         FactorPurger(
@@ -38,7 +38,7 @@ def train(epochs: int = -1):
 
         def _every(n):
             def _predicate(**_msg):
-                if int(get("global_step")) % n == 0:
+                if training_data.step % n == 0:
                     return True
                 return False
 
@@ -65,24 +65,47 @@ def train(epochs: int = -1):
     @effectful(type="step")
     def _step(*, x):
         loss = pyro.infer.Trace_ELBO()
-        return pyro.infer.SVI(model.model, model.guide, optim, loss).step(x)
+        return -pyro.infer.SVI(model.model, model.guide, optim, loss).step(x)
 
     @effectful(type="epoch")
     def _epoch(*, epoch):
-        progress = tqdm(dataloader, dynamic_ncols=True)
+        progress = tqdm(dataloader, position=0, dynamic_ncols=True)
         elbo = []
         for x in progress:
+            training_data.step += 1
             elbo.append(_step(x=to_device(x)))
             progress.set_description(
-                f"epoch {epoch:05d} / mean ELBO {np.mean(elbo):.3e}"
+                f"Epoch {epoch:05d} :: Mean ELBO {np.mean(elbo):+.3e}"
             )
-            global_step = get("global_step")
-            global_step += 1
+        return np.mean(elbo)
 
     with ExitStack() as stack:
         for messenger in messengers:
             stack.enter_context(messenger)
-        for epoch in it.takewhile(
-            lambda x: epochs < 0 or x <= epochs, it.count(1)
+
+        for epoch in tqdm(
+            (
+                it.count(training_data.epoch + 1)
+                if epochs < 0
+                else range(training_data.epoch + 1, epochs + 1)
+            ),
+            position=1,
+            desc="Optimizing model",
+            unit="epoch",
+            dynamic_ncols=True,
         ):
-            _epoch(epoch=epoch)
+            training_data.epoch = epoch
+            training_data.elbos.append(_epoch(epoch=epoch))
+
+            if epochs < 0:
+                rmean_long = np.mean(
+                    training_data.elbos[-len(training_data.elbos) // 2 :]
+                )
+                rmean_short = np.mean(
+                    training_data.elbos[-len(training_data.elbos) // 4 :]
+                )
+                log(DEBUG, "Running mean ELBO (long):  %.2e", rmean_long)
+                log(DEBUG, "Running mean ELBO (short): %.2e", rmean_short)
+                if rmean_long > rmean_short:
+                    log(DEBUG, "Model has converged, stopping")
+                    break

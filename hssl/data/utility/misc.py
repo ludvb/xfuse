@@ -67,7 +67,7 @@ def make_dataloader(dataset: Dataset, **kwargs: Any) -> DataLoader:
         }
 
     def _worker_init(n):
-        np.random.seed(np.random.get_state()[1][0] + get("global_step"))
+        np.random.seed(np.random.get_state()[1][0] + get("training_data").step)
         np.random.seed(np.random.randint(np.iinfo(np.int32).max) + n)
 
     return DataLoader(
