@@ -13,11 +13,15 @@ from ..utility.modules import get_module
 
 
 class ModelWrapper(Messenger):
+    r""":class:`Messenger` wrapping the model to add context information."""
+
     def _process_message(self, msg):
         msg["is_guide"] = False
 
 
 class GuideWrapper(Messenger):
+    r""":class:`Messenger` wrapping the guide to add context information."""
+
     def _process_message(self, msg):
         msg["is_guide"] = True
 
