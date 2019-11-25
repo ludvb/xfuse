@@ -214,18 +214,18 @@ def run(project_file, save_path, session):
         _run(
             design,
             expansion_strategy=expansion_strategies[
-                config["expansion-strategy"]["type"]
+                config["expansion_strategy"]["type"]
             ](
-                **config["expansion-strategy"][
-                    config["expansion-strategy"]["type"]
+                **config["expansion_strategy"][
+                    config["expansion_strategy"]["type"]
                 ]
             ),
-            network_depth=config["xfuse"]["network-depth"],
-            network_width=config["xfuse"]["network-width"],
-            patch_size=config["optimization"]["patch-size"],
-            batch_size=config["optimization"]["batch-size"],
+            network_depth=config["xfuse"]["network_depth"],
+            network_width=config["xfuse"]["network_width"],
+            patch_size=config["optimization"]["patch_size"],
+            batch_size=config["optimization"]["batch_size"],
             epochs=config["optimization"]["epochs"],
-            learning_rate=config["optimization"]["learning-rate"],
+            learning_rate=config["optimization"]["learning_rate"],
             slide_options=slide_options,
         )
 

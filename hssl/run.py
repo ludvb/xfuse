@@ -29,14 +29,14 @@ from .utility.session import save_session
 def run(
     design: pd.DataFrame,
     expansion_strategy: ExpansionStrategy = STRATEGIES[
-        CONFIG["expansion-strategy"].value["type"].value
+        CONFIG["expansion_strategy"].value["type"].value
     ](),
-    network_depth: int = CONFIG["xfuse"].value["network-depth"].value,
-    network_width: int = CONFIG["xfuse"].value["network-width"].value,
-    patch_size: int = CONFIG["optimization"].value["patch-size"].value,
-    batch_size: int = CONFIG["optimization"].value["batch-size"].value,
+    network_depth: int = CONFIG["xfuse"].value["network_depth"].value,
+    network_width: int = CONFIG["xfuse"].value["network_width"].value,
+    patch_size: int = CONFIG["optimization"].value["patch_size"].value,
+    batch_size: int = CONFIG["optimization"].value["batch_size"].value,
     epochs: int = CONFIG["optimization"].value["epochs"].value,
-    learning_rate: float = CONFIG["optimization"].value["learning-rate"].value,
+    learning_rate: float = CONFIG["optimization"].value["learning_rate"].value,
     slide_options: Optional[Dict[str, Any]] = None,
 ):
     r"""Runs an analysis"""

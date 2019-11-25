@@ -37,8 +37,8 @@ _ANNOTATED_CONFIG = OrderedDict(
                 ),
                 value=OrderedDict(
                     [
-                        ("network-depth", Item(value=5)),
-                        ("network-width", Item(value=16)),
+                        ("network_depth", Item(value=5)),
+                        ("network_width", Item(value=16)),
                         (
                             "version",
                             Item(
@@ -56,7 +56,7 @@ _ANNOTATED_CONFIG = OrderedDict(
             ),
         ),
         (
-            "expansion-strategy",
+            "expansion_strategy",
             Item(
                 comment="This section contains configuration options for the factor expansion strategy.",
                 value=OrderedDict(
@@ -102,11 +102,11 @@ _ANNOTATED_CONFIG = OrderedDict(
                 ),
                 value=OrderedDict(
                     [
-                        ("batch-size", Item(value=4)),
+                        ("batch_size", Item(value=4)),
                         ("epochs", Item(value=-1)),
-                        ("learning-rate", Item(value=2e-4)),
+                        ("learning_rate", Item(value=2e-4)),
                         (
-                            "patch-size",
+                            "patch_size",
                             Item(
                                 comment=" ".join(
                                     [
@@ -147,15 +147,15 @@ _ANNOTATED_CONFIG = OrderedDict(
                                                 value=OrderedDict(
                                                     [
                                                         (
-                                                            "min-counts",
+                                                            "min_counts",
                                                             Item(value=100),
                                                         ),
                                                         (
-                                                            "always-filter",
+                                                            "always_filter",
                                                             Item(value=[]),
                                                         ),
                                                         (
-                                                            "always-keep",
+                                                            "always_keep",
                                                             Item(value=[1]),
                                                         ),
                                                     ]
