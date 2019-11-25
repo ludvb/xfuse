@@ -13,6 +13,7 @@ def reduce_last_dimension(
     mask: Optional[Union[torch.Tensor, np.ndarray]] = None,
     method: str = "umap",
     n_components: int = 3,
+    num_training_samples: Optional[int] = None,
     **kwargs,
 ) -> np.ndarray:
     r"""
@@ -30,13 +31,26 @@ def reduce_last_dimension(
     if isinstance(x, torch.Tensor):
         x = x.detach().cpu().numpy()
 
+    x = x[mask]
+
+    if num_training_samples:
+        training_samples = np.random.choice(
+            x.shape[0], min(x.shape[0], num_training_samples), replace=False,
+        )
+    else:
+        training_samples = np.arange(x.shape[0])
+
     if method == "pca":
-        values = PCA(n_components=n_components, **kwargs).fit_transform(
-            x[mask]
+        values = (
+            PCA(n_components=n_components, **kwargs)
+            .fit(x[training_samples])
+            .transform(x)
         )
     elif method == "umap":
-        values = UMAP(n_components=n_components, **kwargs).fit_transform(
-            x[mask]
+        values = (
+            UMAP(n_components=n_components, **kwargs)
+            .fit(x[training_samples])
+            .transform(x)
         )
     else:
         raise NotImplementedError(
