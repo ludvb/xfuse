@@ -144,10 +144,10 @@ class ST(Image):
     def _get_factor_decoder(self, in_channels, n):
         def _create_factor_decoder():
             decoder = torch.nn.Sequential(
-                torch.nn.Conv2d(16, 16, 1),
+                torch.nn.Conv2d(in_channels, in_channels, 3, 1, 1),
                 torch.nn.LeakyReLU(0.2, inplace=True),
-                torch.nn.BatchNorm2d(16),
-                torch.nn.Conv2d(16, 1, 1),
+                torch.nn.BatchNorm2d(in_channels),
+                torch.nn.Conv2d(in_channels, 1, 1, 1, 1),
             )
             torch.nn.init.constant_(decoder[-1].weight, 0.0)
             torch.nn.init.constant_(decoder[-1].bias, self.__factors[n][0])
@@ -157,9 +157,12 @@ class ST(Image):
             get_module(
                 "factor_predecoder",
                 lambda: torch.nn.Sequential(
-                    torch.nn.Conv2d(in_channels, 16, 7, 1, 3),
+                    torch.nn.Conv2d(in_channels, in_channels, 3, 1, 1),
                     torch.nn.LeakyReLU(0.2, inplace=True),
-                    torch.nn.BatchNorm2d(16),
+                    torch.nn.BatchNorm2d(in_channels),
+                    torch.nn.Conv2d(in_channels, in_channels, 3, 1, 1),
+                    torch.nn.LeakyReLU(0.2, inplace=True),
+                    torch.nn.BatchNorm2d(in_channels),
                 ),
             ),
             get_module(_encode_factor_name(n), _create_factor_decoder),
