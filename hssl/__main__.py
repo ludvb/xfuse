@@ -20,7 +20,7 @@ from ._config import (  # type: ignore
     construct_default_config_toml,
     merge_config,
 )
-from .logging import DEBUG, log
+from .logging import DEBUG, WARNING, log
 from .model.experiment.st import STRATEGIES as expansion_strategies
 from .run import run as _run
 from .session import Session
@@ -154,17 +154,6 @@ def run(project_file, save_path, session):
     The configuration file can be created manually or using the `init`
     subcommand.
     """
-
-    config = dict(tomlkit.loads(project_file.read().decode()))
-    config = merge_config(config)
-
-    if os.path.dirname(project_file.name) != save_path:
-        os.makedirs(save_path, exist_ok=True)
-        with open(
-            first_unique_filename(os.path.join(save_path, "config.toml")), "w"
-        ) as f:
-            f.write(tomlkit.dumps(config))
-
     session_stack = []
     if session is not None:
         session_stack.append(load_session(session))
@@ -175,17 +164,40 @@ def run(project_file, save_path, session):
         )
     )
 
-    design = design_matrix_from(config["slides"])
-    design.columns = [
-        x
-        if os.path.isabs(x)
-        else os.path.join(os.path.dirname(project_file.name), x)
-        for x in map(os.path.expanduser, design.columns)
-    ]
-
     with ExitStack() as stack:
-        for ctx in session_stack:
-            stack.enter_context(ctx)
+        for session_context in session_stack:
+            stack.enter_context(session_context)
+
+        config = dict(tomlkit.loads(project_file.read().decode()))
+        config = merge_config(config)
+
+        if config["xfuse"]["version"] != __version__:
+            log(
+                WARNING,
+                "Config was created using %s version %s"
+                " but this is version %s",
+                __package__,
+                config["xfuse"]["version"],
+                __version__,
+            )
+            config["xfuse"]["version"] = __version__
+
+        with open(
+            first_unique_filename(
+                os.path.join(save_path, "merged_config.toml")
+            ),
+            "w",
+        ) as f:
+            f.write(tomlkit.dumps(config))
+
+        design = design_matrix_from(config["slides"])
+        design.columns = [
+            x
+            if os.path.isabs(x)
+            else os.path.join(os.path.dirname(project_file.name), x)
+            for x in map(os.path.expanduser, design.columns)
+        ]
+
         _run(
             design,
             expansion_strategy=expansion_strategies[

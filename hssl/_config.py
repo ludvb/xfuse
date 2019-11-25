@@ -6,6 +6,7 @@ from typing import Dict, List, NamedTuple, Optional, OrderedDict, Union
 
 import tomlkit
 
+from . import __version__
 from .logging import WARNING, log
 from .model.experiment.st.factor_expansion_strategy import STRATEGIES
 
@@ -38,6 +39,18 @@ _ANNOTATED_CONFIG = OrderedDict(
                     [
                         ("network-depth", Item(value=5)),
                         ("network-width", Item(value=16)),
+                        (
+                            "version",
+                            Item(
+                                value=__version__,
+                                comment=" ".join(
+                                    [
+                                        f"This is the version of {__package__} used to create this config file.",
+                                        "It is only used for record keeping.",
+                                    ]
+                                ),
+                            ),
+                        ),
                     ]
                 ),
             ),
