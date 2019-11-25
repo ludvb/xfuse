@@ -35,10 +35,9 @@ def reduce_last_dimension(
             x[mask]
         )
     elif method == "umap":
-        umap = UMAP(n_components=n_components, **kwargs).fit(
-            x[mask][np.random.choice(len(x[mask]), 2000)]
+        values = UMAP(n_components=n_components, **kwargs).fit_transform(
+            x[mask]
         )
-        values = umap.transform(x[mask])
     else:
         raise NotImplementedError(
             f'Dimensionality reduction method "{method}" not implemented'

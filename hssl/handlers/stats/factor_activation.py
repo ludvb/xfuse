@@ -115,7 +115,7 @@ class FactorActivationSummary(StatsHandler):
         # pylint: disable=no-member
         self.add_images(
             "activation-summary/training-batch",
-            reduce_last_dimension(fn.mean.permute(0, 2, 3, 1)),
+            reduce_last_dimension(fn.mean.permute(0, 2, 3, 1), method="pca"),
             dataformats="NHWC",
         )
 
@@ -173,7 +173,10 @@ class FactorActivationFullSummary(StatsHandler):
                 factor_activation, mask = _compute_factor_activation(x)
                 n_components = 3 if factor_activation.shape[-1] >= 3 else 1
                 reduced_factor_activation = reduce_last_dimension(
-                    factor_activation, mask=mask, n_components=n_components
+                    factor_activation,
+                    mask=mask,
+                    n_components=n_components,
+                    method="umap",
                 )
                 # pylint: disable=no-member
                 self.add_image(
