@@ -49,7 +49,7 @@ class ExtraBaselines(ExpansionStrategy):
             default = torch.stack(defaults).mean(0).detach()
 
         scale_biases = [
-            experiment._get_factor_decoder(1, n)[-1][-1].bias.squeeze()
+            experiment._get_factor_decoder(1, n)[-1].bias.squeeze()
             for n in experiment.factors.keys()
         ]
         scale = torch.stack(scale_biases).min().item()
