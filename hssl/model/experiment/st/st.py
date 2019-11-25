@@ -291,7 +291,8 @@ class ST(Image):
                 )
 
                 expression_distr = NegativeBinomial(
-                    total_count=torch.cat(rgs), logits=torch.cat(logits_g)
+                    total_count=1e-8 + torch.cat(rgs),
+                    logits=torch.cat(logits_g),
                 )
                 p.sample("xsg", expression_distr, obs=torch.cat(data))
 
