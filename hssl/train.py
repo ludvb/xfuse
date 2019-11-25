@@ -97,7 +97,7 @@ def train(epochs: int = -1):
             training_data.epoch = epoch
             training_data.elbos.append(_epoch(epoch=epoch))
 
-            if epochs < 0:
+            if epochs < 0 and epoch >= 1000:
                 rmean_long = np.mean(
                     training_data.elbos[-len(training_data.elbos) // 2 :]
                 )
