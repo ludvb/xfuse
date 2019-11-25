@@ -3,6 +3,7 @@ from typing import Optional, Union, cast
 import numpy as np
 import torch
 from sklearn.decomposition import PCA
+from umap import UMAP
 
 __all__ = ["reduce_last_dimension"]
 
@@ -10,17 +11,13 @@ __all__ = ["reduce_last_dimension"]
 def reduce_last_dimension(
     x: Union[torch.Tensor, np.ndarray],
     mask: Optional[Union[torch.Tensor, np.ndarray]] = None,
-    method: str = "pca",
+    method: str = "umap",
     n_components: int = 3,
     **kwargs,
 ) -> np.ndarray:
     r"""
     Performs dimensionality reduction on the last dimension of the input array
     """
-
-    if method != "pca":
-        raise NotImplementedError()
-
     if mask is None:
         mask = np.ones(x.shape[:-1], dtype=np.bool)
     elif isinstance(mask, torch.Tensor):
@@ -33,7 +30,19 @@ def reduce_last_dimension(
     if isinstance(x, torch.Tensor):
         x = x.detach().cpu().numpy()
 
-    values = PCA(n_components=n_components, **kwargs).fit_transform(x[mask])
+    if method == "pca":
+        values = PCA(n_components=n_components, **kwargs).fit_transform(
+            x[mask]
+        )
+    elif method == "umap":
+        umap = UMAP(n_components=n_components, **kwargs).fit(
+            x[mask][np.random.choice(len(x[mask]), 2000)]
+        )
+        values = umap.transform(x[mask])
+    else:
+        raise NotImplementedError(
+            f'Dimensionality reduction method "{method}" not implemented'
+        )
 
     dst = np.zeros((*mask.shape, n_components))
     dst[mask] = (values - values.min(0)) / (values.max(0) - values.min(0))
