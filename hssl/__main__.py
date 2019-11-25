@@ -190,13 +190,26 @@ def run(project_file, save_path, session):
         ) as f:
             f.write(tomlkit.dumps(config))
 
-        design = design_matrix_from(config["slides"])
-        design.columns = [
-            x
-            if os.path.isabs(x)
-            else os.path.join(os.path.dirname(project_file.name), x)
-            for x in map(os.path.expanduser, design.columns)
-        ]
+        def _expand_path(path):
+            path = os.path.expanduser(path)
+            if os.path.isabs(path):
+                return path
+            return os.path.join(os.path.dirname(project_file.name), path)
+
+        config["slides"] = {
+            _expand_path(filename): v
+            for filename, v in config["slides"].items()
+        }
+        slide_options = {
+            filename: slide["options"] if "options" in slide else {}
+            for filename, slide in config["slides"].items()
+        }
+        design = design_matrix_from(
+            {
+                filename: {k: v for k, v in slide.items() if k != "options"}
+                for filename, slide in config["slides"].items()
+            }
+        )
 
         _run(
             design,
@@ -213,6 +226,7 @@ def run(project_file, save_path, session):
             batch_size=config["optimization"]["batch-size"],
             epochs=config["optimization"]["epochs"],
             learning_rate=config["optimization"]["learning-rate"],
+            slide_options=slide_options,
         )
 
 

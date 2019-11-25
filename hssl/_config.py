@@ -129,6 +129,7 @@ _ANNOTATED_CONFIG = OrderedDict(
                         "This section defines the slides to use in the experiment.",
                         "Section headers should be paths to the slides.",
                         "Section keys are covariates that will be modeled.",
+                        'Slide-specific options can be specified in the "options" table.',
                     ]
                 ),
                 value=OrderedDict(
@@ -140,6 +141,27 @@ _ANNOTATED_CONFIG = OrderedDict(
                                     [
                                         ("Id", Item(value=1)),
                                         ("Group", Item(value="Control")),
+                                        (
+                                            "options",
+                                            Item(
+                                                value=OrderedDict(
+                                                    [
+                                                        (
+                                                            "min-counts",
+                                                            Item(value=100),
+                                                        ),
+                                                        (
+                                                            "always-filter",
+                                                            Item(value=[]),
+                                                        ),
+                                                        (
+                                                            "always-keep",
+                                                            Item(value=[1]),
+                                                        ),
+                                                    ]
+                                                )
+                                            ),
+                                        ),
                                     ]
                                 ),
                             ),

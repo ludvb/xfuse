@@ -8,6 +8,8 @@ import numpy as np
 import scipy.sparse
 import torch
 
+from ...logging import DEBUG, log
+
 
 class SlideIterator(metaclass=ABCMeta):
     r"""Slide iterator"""
@@ -45,7 +47,13 @@ class SlideData(metaclass=ABCMeta):
 class STSlide(SlideData):
     r""":class:`SlideData` for Spatial Transcriptomics slides"""
 
-    def __init__(self, data: h5py.File):
+    def __init__(
+        self,
+        data: h5py.File,
+        min_counts: float = 0,
+        always_filter: List[int] = None,
+        always_keep: List[int] = None,
+    ):
         self._data = data
         self._counts = scipy.sparse.csr_matrix(
             (
@@ -62,11 +70,44 @@ class STSlide(SlideData):
             [self._counts, np.zeros((self._counts.shape[0], 1))], format="csr"
         )
         self.genes = list(self._data["counts"]["columns"][()])
+        self.__always_filter = always_filter or []
+        self.__always_keep = always_keep or []
+        self.min_counts = min_counts
         self.H, self.W, _ = self._data["image"].shape
 
     @property
     def type(self) -> str:
         return "ST"
+
+    @property
+    def min_counts(self) -> float:
+        r"""
+        The minimum number of reads for an ST spot to be included in this
+        dataset. This attribute can be used to filter out low quality spots.
+        """
+        return self.__min_counts
+
+    @min_counts.setter
+    def min_counts(self, n: float):
+        self.__min_counts = n
+        self.__label_mask = np.unique(
+            self.__always_filter
+            + [
+                x
+                for x in (
+                    (np.array(self.counts.sum(1)).flatten() < n).nonzero()[0]
+                    + 1
+                )
+                if x not in self.__always_keep
+            ]
+        )
+        if self.__label_mask.shape[0] > 0:
+            log(
+                DEBUG,
+                "The following labels will be masked out in %s: %s",
+                self._data.filename,
+                ", ".join(map(str, self.__label_mask)),
+            )
 
     @property
     def genes(self):
@@ -102,6 +143,7 @@ class STSlide(SlideData):
     def prepare_data(self, image, label):
         r"""Prepare data from image and label patches"""
 
+        label[np.isin(label, self.__label_mask)] = 0
         labels = np.sort(np.unique(label[label != 0]))
         data = self.counts[(labels - 1).tolist()]
         label = np.searchsorted([0, *labels], label)

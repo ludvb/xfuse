@@ -1,4 +1,6 @@
 from functools import partial
+import os
+from typing import Any, Dict, Optional
 
 import h5py
 import pandas as pd
@@ -35,11 +37,15 @@ def run(
     batch_size: int = CONFIG["optimization"].value["batch-size"].value,
     epochs: int = CONFIG["optimization"].value["epochs"].value,
     learning_rate: float = CONFIG["optimization"].value["learning-rate"].value,
+    slide_options: Optional[Dict[str, Any]] = None,
 ):
     r"""Runs an analysis"""
     slides = {
         slide: Slide(
-            data=STSlide(h5py.File(slide, "r")),
+            data=STSlide(
+                h5py.File(os.path.expanduser(slide), "r"),
+                **(slide_options[slide] if slide_options is not None else {}),
+            ),
             iterator=partial(
                 RandomSlide,
                 patch_size=(
