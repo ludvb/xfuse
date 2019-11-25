@@ -24,7 +24,7 @@ from .logging import DEBUG, log
 from .model.experiment.st import STRATEGIES as expansion_strategies
 from .run import run as _run
 from .session import Session
-from .utility import design_matrix_from
+from .utility import design_matrix_from, with_
 from .utility.file import first_unique_filename
 from .utility.session import load_session
 
@@ -33,6 +33,7 @@ _DEFAULT_SESSION = Session()
 
 def _init(f):
     @wraps(f)
+    @with_(_DEFAULT_SESSION)
     def _wrapped(*args, **kwargs):
         log(DEBUG, "this is %s %s", __package__, __version__)
         log(DEBUG, "invoked by %s", " ".join(sys.argv))
@@ -44,7 +45,6 @@ def _init(f):
 @click.group()
 @click.option("--debug", is_flag=True)
 @click.version_option()
-@_init
 def cli(debug):
     if debug:
 
@@ -56,6 +56,7 @@ def cli(debug):
 
 
 @click.group("convert")
+@_init
 def _convert():
     r"""Converts data of various formats to the format used by xfuse."""
 
@@ -123,6 +124,7 @@ _convert.add_command(st)
 @click.argument(
     "slides", type=click.Path(exists=True, dir_okay=False), nargs=-1,
 )
+@_init
 def init(target, slides):
     r"""Creates a template for the project configuration file."""
     config = construct_default_config_toml()
@@ -145,6 +147,7 @@ cli.add_command(init)
     show_default=True,
 )
 @click.option("--session", type=click.File("rb"))
+@_init
 def run(project_file, save_path, session):
     r"""
     Runs xfuse based on a project configuration file.
@@ -162,7 +165,7 @@ def run(project_file, save_path, session):
         ) as f:
             f.write(tomlkit.dumps(config))
 
-    session_stack = [_DEFAULT_SESSION]
+    session_stack = []
     if session is not None:
         session_stack.append(load_session(session))
     session_stack.append(
