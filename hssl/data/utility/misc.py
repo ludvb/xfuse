@@ -1,5 +1,5 @@
 import itertools as it
-from typing import Any
+from typing import Any, Dict
 
 import numpy as np
 import torch
@@ -10,19 +10,26 @@ from ...session import get
 from ...utility import center_crop
 from ..dataset import Dataset
 
-__all__ = ["make_dataloader", "spot_size"]
+__all__ = ["make_dataloader", "pixel_scale"]
 
 
-def spot_size(dataset: Dataset) -> np.float64:
-    r"""Computes the median spot size in the :class:`Dataset`"""
-    return np.median(
-        np.concatenate(
-            [
-                np.bincount(d["label"].flatten())[1:]
-                for d in it.islice(dataset, 1)  # type: ignore
-            ]
+def pixel_scale(dataset: Dataset) -> Dict[str, float]:
+    r"""Computes the mean count per gene and pixel in the :class:`Dataset`"""
+
+    def _compute_scale(x):
+        if x["type"] == "ST":
+            spot_size = np.bincount(x["label"].flatten().cpu().numpy())[1:]
+            mean_counts = x["data"].mean(1).cpu().numpy()
+            return (mean_counts / spot_size).mean()
+        raise NotImplementedError()
+
+    return {
+        k: np.mean([v[1] for v in vs])
+        for k, vs in it.groupby(
+            [(x["type"], _compute_scale(x)) for x in dataset],
+            key=lambda x: x[0],
         )
-    )
+    }
 
 
 def make_dataloader(dataset: Dataset, **kwargs: Any) -> DataLoader:

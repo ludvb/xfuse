@@ -9,7 +9,7 @@ import pyro
 from ._config import _ANNOTATED_CONFIG as CONFIG  # type: ignore
 from .data import Data, Dataset
 from .data.slide import RandomSlide, Slide, STSlide
-from .data.utility.misc import make_dataloader, spot_size
+from .data.utility.misc import make_dataloader, pixel_scale
 from .model import XFuse
 from .model.experiment.st import ST as STExperiment
 from .model.experiment.st.factor_expansion_strategy import (
@@ -64,7 +64,7 @@ def run(
             depth=network_depth,
             num_channels=network_width,
             factors=[FactorDefault(0.0, None)],
-            default_scale=1 / spot_size(dataset),
+            default_scale=pixel_scale(dataset)["ST"],
         )
         xfuse = XFuse(experiments=[st_experiment]).to(get("default_device"))
 

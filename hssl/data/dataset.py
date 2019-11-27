@@ -77,3 +77,7 @@ class Dataset(torch.utils.data.Dataset):
             ),
             effects=torch.as_tensor(self._data.design[slide].values),
         )
+
+    def __iter__(self):
+        for idx in range(len(self)):
+            yield self[idx]
