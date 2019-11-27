@@ -7,9 +7,11 @@ import pandas as pd
 import pyro
 
 from ._config import _ANNOTATED_CONFIG as CONFIG  # type: ignore
+from .analyze import analyses as _analyses
 from .data import Data, Dataset
 from .data.slide import RandomSlide, Slide, STSlide
 from .data.utility.misc import make_dataloader, pixel_scale
+from .logging import INFO, WARNING, log
 from .model import XFuse
 from .model.experiment.st import ST as STExperiment
 from .model.experiment.st.factor_expansion_strategy import (
@@ -21,13 +23,14 @@ from .model.experiment.st import (
     FactorDefault,
     purge_factors,
 )
-from .session import Session, Unset, get
+from .session import Session, Unset, get, require
 from .train import train
 from .utility.session import save_session
 
 
 def run(
     design: pd.DataFrame,
+    analyses: Dict[str, Dict[str, Any]] = None,
     expansion_strategy: ExpansionStrategy = STRATEGIES[
         CONFIG["expansion_strategy"].value["type"].value
     ](),
@@ -40,6 +43,12 @@ def run(
     slide_options: Optional[Dict[str, Any]] = None,
 ):
     r"""Runs an analysis"""
+
+    # pylint: disable=too-many-locals
+
+    if analyses is None:
+        analyses = {}
+
     slides = {
         slide: Slide(
             data=STSlide(
@@ -86,9 +95,16 @@ def run(
         panic=_panic,
     ):
         train(epochs)
-
         with Session(factor_expansion_strategy=ExtraBaselines(0)):
             purge_factors(xfuse, num_samples=10)
-
         with Session(dataloader=Unset, panic=Unset, pyro_stack=[]):
             save_session(f"final")
+
+        for name, options in analyses.items():
+            if name in analyses:
+                log(INFO, 'Running analysis "%s"', name)
+                save_path = require("save_path")
+                with Session(save_path=os.path.join(save_path, "analyses")):
+                    _analyses[name].function(**options)
+            else:
+                log(WARNING, 'Unknown analysis "%s"', name)

@@ -7,6 +7,7 @@ from typing import Dict, List, NamedTuple, Optional, OrderedDict, Union
 import tomlkit
 
 from . import __version__
+from .analyze import analyses
 from .logging import WARNING, log
 from .model.experiment.st.factor_expansion_strategy import STRATEGIES
 
@@ -117,6 +118,41 @@ _ANNOTATED_CONFIG = OrderedDict(
                                 value=-1,
                             ),
                         ),
+                    ]
+                ),
+            ),
+        ),
+        (
+            "analyses",
+            Item(
+                comment=" ".join(
+                    [
+                        "This section defines which analyses to run.",
+                        "Each analysis has its own subtable with configuration options.",
+                        "Remove the table to stop the analysis from being run.",
+                    ]
+                ),
+                example=True,
+                value=OrderedDict(
+                    [
+                        (
+                            name,
+                            Item(
+                                comment=analysis.description,
+                                value=OrderedDict(
+                                    [
+                                        (
+                                            param_name,
+                                            Item(value=param.default),
+                                        )
+                                        for param_name, param in signature(
+                                            analysis.function
+                                        ).parameters.items()
+                                    ]
+                                ),
+                            ),
+                        )
+                        for name, analysis in analyses.items()
                     ]
                 ),
             ),
@@ -252,8 +288,11 @@ def merge_config(config: Config) -> Config:
                         )
                     _merge(a[k], b[k].value)
         for k in b:
-            if not b[k].example and k not in a:
-                a[k] = _annotated_config2config(b[k].value)
+            if k not in a:
+                if b[k].example:
+                    a[k] = {}
+                else:
+                    a[k] = _annotated_config2config(b[k].value)
 
     config = config.copy()
     _merge(config, _ANNOTATED_CONFIG)

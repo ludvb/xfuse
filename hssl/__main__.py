@@ -213,6 +213,7 @@ def run(project_file, save_path, session):
 
         _run(
             design,
+            analyses=config["analyses"],
             expansion_strategy=expansion_strategies[
                 config["expansion_strategy"]["type"]
             ](

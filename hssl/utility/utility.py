@@ -311,7 +311,7 @@ def to_device(x, device=None):
         return [to_device(y, device) for y in x]
     if isinstance(x, dict):
         return {k: to_device(v, device) for k, v in x.items()}
-    raise NotImplementedError()
+    return x
 
 
 def with_(ctx: ContextManager) -> Callable[[Callable], Callable]:

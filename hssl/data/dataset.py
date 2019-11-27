@@ -35,8 +35,9 @@ class Dataset(torch.utils.data.Dataset):
                     ),
                 )
             )
+        self.__genes = genes
         for slide in self.data.slides.values():
-            slide.data.genes = genes
+            slide.data.genes = self.__genes
         self._data_iterators = {
             name: slide.iterator(slide.data)
             for name, slide in self.data.slides.items()
@@ -61,6 +62,11 @@ class Dataset(torch.utils.data.Dataset):
         )
 
     @property
+    def genes(self):
+        r"""The genes present in the dataset"""
+        return self.__genes
+
+    @property
     def data(self):
         r"""The underlying :class:`Data`"""
         return self._data
@@ -72,6 +78,7 @@ class Dataset(torch.utils.data.Dataset):
         slide = self.observations["sample"].iloc[idx]
         return dict(
             type=self._data.slides[slide].data.type,
+            slide_name=slide,
             **self._data_iterators[slide].__getitem__(
                 self.observations["idx"].iloc[idx]
             ),
