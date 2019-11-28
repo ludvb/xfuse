@@ -1,6 +1,7 @@
 import itertools as it
 from copy import deepcopy
 from typing import Dict, List, NamedTuple, Optional
+import warnings
 
 import numpy as np
 import pyro as p
@@ -326,16 +327,42 @@ class ST(Image):
                 ),
             )
 
-        expression_encoder = get_module(
-            "expression_encoder",
+        expression_encoder1 = get_module(
+            "expression_encoder1",
             lambda: torch.nn.Sequential(
                 torch.nn.Linear(num_genes, 256),
-                torch.nn.LeakyReLU(0.2, inplace=True),
+                torch.nn.Tanh(),
                 torch.nn.Linear(256, 256),
-                torch.nn.LeakyReLU(0.2, inplace=True),
-                torch.nn.Linear(256, 16),
+                torch.nn.Tanh(),
+                torch.nn.Linear(256, 8),
             ),
         ).to(x["image"])
+
+        smoothing_kernel = torch.nn.Conv2d(8, 8, 9, 1, 4, bias=False)
+        smoothing_kernel.weight = torch.nn.Parameter(
+            torch.ones_like(smoothing_kernel.weight) / 8 / 9 / 9,
+            requires_grad=False,
+        )
+        with warnings.catch_warnings():
+            # Ignore Pyro warning that the weights of the `smoothing_kernel`
+            # will not be registered to the param store, which is intended.
+            warnings.simplefilter("ignore", category=UserWarning)
+            expression_encoder2 = get_module(
+                "expression_encoder2",
+                lambda: torch.nn.Sequential(
+                    smoothing_kernel,
+                    torch.nn.Conv2d(
+                        8, 8, kernel_size=7, stride=1, padding=6, dilation=2
+                    ),
+                    torch.nn.Tanh(),
+                    smoothing_kernel,
+                    torch.nn.Conv2d(
+                        8, 8, kernel_size=7, stride=1, padding=6, dilation=2
+                    ),
+                    torch.nn.Tanh(),
+                    smoothing_kernel,
+                ),
+            ).to(x["image"])
 
         def encode(data, label):
             # Replace missing labels with closest neighbor
@@ -354,16 +381,25 @@ class ST(Image):
             label = label - 1
 
             # Expand labels into (encoded) expression vectors
-            encdat = expression_encoder(data)
+            encdat = expression_encoder1(data)
             labelonehot = sparseonehot(label.flatten(), len(encdat))
             expanded = torch.sparse.mm(labelonehot.float(), encdat)
             expanded = expanded.reshape(*label.shape, -1)
 
             return expanded.permute(2, 0, 1)
 
+        def _normalize(data, means, stdvs):
+            return (data - means) / stdvs.clamp_min(1e-2)
+
         expression = torch.stack(
-            [encode(data, label) for data, label in zip(x["data"], x["label"])]
+            [
+                encode(_normalize(data, means, stdvs), label)
+                for data, means, stdvs, label in zip(
+                    x["data"], x["means"], x["stdvs"], x["label"],
+                )
+            ]
         )
+        expression = expression_encoder2(expression)
         amended_x = x.copy()
         amended_x["image"] = torch.cat([x["image"], expression], dim=1)
 

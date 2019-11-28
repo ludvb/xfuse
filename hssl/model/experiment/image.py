@@ -112,6 +112,9 @@ class Image(Experiment):
                     torch.nn.Conv2d(in_nc, out_nc, 4, 2, 1),
                     torch.nn.LeakyReLU(0.2, inplace=True),
                     torch.nn.BatchNorm2d(out_nc),
+                    torch.nn.Conv2d(out_nc, out_nc, 3, 1, 2),
+                    torch.nn.LeakyReLU(0.2, inplace=True),
+                    torch.nn.BatchNorm2d(out_nc),
                 ).to(x),
             ).to(x)
             return encoder(x)
@@ -119,8 +122,15 @@ class Image(Experiment):
         preencoder = get_module(
             "img-preencoder",
             lambda: torch.nn.Sequential(
-                torch.nn.Conv2d(x.shape[1], self.num_channels, 5, 1, 2),
+                torch.nn.Conv2d(x.shape[1], self.num_channels, 7, 1, 3),
                 torch.nn.LeakyReLU(0.2, inplace=True),
+                torch.nn.BatchNorm2d(self.num_channels),
+                torch.nn.Conv2d(self.num_channels, self.num_channels, 7, 1, 3),
+                torch.nn.LeakyReLU(0.2, inplace=True),
+                torch.nn.BatchNorm2d(self.num_channels),
+                torch.nn.Conv2d(self.num_channels, self.num_channels, 7, 1, 3),
+                torch.nn.LeakyReLU(0.2, inplace=True),
+                torch.nn.BatchNorm2d(self.num_channels),
             ),
         ).to(x)
         ys = [preencoder(x)]
@@ -133,9 +143,7 @@ class Image(Experiment):
         img_mu = get_module(
             "img_mu",
             lambda: torch.nn.Sequential(
-                torch.nn.Conv2d(
-                    self.num_channels, self.num_channels, 7, 1, 3,
-                ),
+                torch.nn.Conv2d(self.num_channels, self.num_channels, 1),
                 torch.nn.LeakyReLU(0.2, inplace=True),
                 torch.nn.BatchNorm2d(self.num_channels),
                 torch.nn.Conv2d(self.num_channels, x["image"].shape[1], 1),
@@ -145,9 +153,7 @@ class Image(Experiment):
         img_sd = get_module(
             "img_sd",
             lambda: torch.nn.Sequential(
-                torch.nn.Conv2d(
-                    self.num_channels, self.num_channels, 7, 1, 3,
-                ),
+                torch.nn.Conv2d(self.num_channels, self.num_channels, 1),
                 torch.nn.LeakyReLU(0.2, inplace=True),
                 torch.nn.BatchNorm2d(self.num_channels),
                 torch.nn.Conv2d(self.num_channels, x["image"].shape[1], 1),

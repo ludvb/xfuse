@@ -79,6 +79,18 @@ class STSlide(SlideData):
     def type(self) -> str:
         return "ST"
 
+    def __recompute_summary_statistics(self):
+        try:
+            counts = self.counts[
+                ~np.isin(np.arange(self.counts.shape[0]), self.__label_mask)
+            ]
+        except AttributeError:
+            counts = self.counts
+        counts = counts.todense()
+        self.__counts_means = np.mean(np.array(counts), 0)
+        self.__counts_stdvs = np.nanstd(np.array(counts), 0)
+        return self
+
     @property
     def min_counts(self) -> float:
         r"""
@@ -108,6 +120,7 @@ class STSlide(SlideData):
                 self._data.filename,
                 ", ".join(map(str, self.__label_mask)),
             )
+        self.__recompute_summary_statistics()
 
     @property
     def genes(self):
@@ -123,12 +136,21 @@ class STSlide(SlideData):
         self.__gene_idxs = np.array(
             [idxs[gene] if gene in idxs else -1 for gene in genes]
         )
+        self.__recompute_summary_statistics()
         return self
 
     @property
     def counts(self):
         r"""Getter for the count data"""
         return self._counts[:, self.__gene_idxs]
+
+    @property
+    def means(self):
+        return self.__counts_means
+
+    @property
+    def stdvs(self):
+        return self.__counts_stdvs
 
     @property
     def image(self):
@@ -154,6 +176,8 @@ class STSlide(SlideData):
             ),
             label=torch.as_tensor(label).long(),
             data=torch.as_tensor(data.todense()).float(),
+            means=torch.as_tensor(self.means).float(),
+            stdvs=torch.as_tensor(self.stdvs).float(),
         )
 
 
