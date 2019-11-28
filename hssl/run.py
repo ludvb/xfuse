@@ -79,9 +79,7 @@ def run(
 
     optimizer = get("optimizer")
     if optimizer is None:
-        optimizer = pyro.optim.ClippedAdam(
-            {"lr": learning_rate, "weight_decay": 1e-5}
-        )
+        optimizer = pyro.optim.ClippedAdam({"lr": learning_rate})
 
     def _panic(_session, _err_type, _err, _tb):
         with Session(dataloader=Unset, panic=Unset, pyro_stack=[]):
