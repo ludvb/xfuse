@@ -327,6 +327,8 @@ class ST(Image):
                 ),
             )
 
+        encodings = super().guide(x)
+
         expression_encoder1 = get_module(
             "expression_encoder1",
             lambda: torch.nn.Sequential(
@@ -334,13 +336,13 @@ class ST(Image):
                 torch.nn.Tanh(),
                 torch.nn.Linear(256, 256),
                 torch.nn.Tanh(),
-                torch.nn.Linear(256, 8),
+                torch.nn.Linear(256, 64),
             ),
-        ).to(x["image"])
+        ).to(encodings[-1])
 
-        smoothing_kernel = torch.nn.Conv2d(8, 8, 9, 1, 4, bias=False)
+        smoothing_kernel = torch.nn.Conv2d(64, 64, 9, 1, 4, bias=False)
         smoothing_kernel.weight = torch.nn.Parameter(
-            torch.ones_like(smoothing_kernel.weight) / 8 / 9 / 9,
+            torch.ones_like(smoothing_kernel.weight) / 64 / 9 / 9,
             requires_grad=False,
         )
         with warnings.catch_warnings():
@@ -352,17 +354,15 @@ class ST(Image):
                 lambda: torch.nn.Sequential(
                     smoothing_kernel,
                     torch.nn.Conv2d(
-                        8, 8, kernel_size=7, stride=1, padding=6, dilation=2
+                        64, 64, kernel_size=7, stride=1, padding=6, dilation=2
                     ),
                     torch.nn.Tanh(),
-                    smoothing_kernel,
                     torch.nn.Conv2d(
-                        8, 8, kernel_size=7, stride=1, padding=6, dilation=2
+                        64, 64, kernel_size=7, stride=1, padding=6, dilation=2
                     ),
                     torch.nn.Tanh(),
-                    smoothing_kernel,
                 ),
-            ).to(x["image"])
+            ).to(encodings[-1])
 
         def encode(data, label):
             # Replace missing labels with closest neighbor
@@ -379,6 +379,10 @@ class ST(Image):
                 scaling[idxs - 1] = n_original[1:].float() / n_new.float()
                 data = data * scaling.unsqueeze(1)
             label = label - 1
+            label = torch.nn.functional.interpolate(
+                label[None, None].float(), size=encodings[-1].shape[-2:]
+            )
+            label = label.long().squeeze()
 
             # Expand labels into (encoded) expression vectors
             encdat = expression_encoder1(data)
@@ -400,7 +404,5 @@ class ST(Image):
             ]
         )
         expression = expression_encoder2(expression)
-        amended_x = x.copy()
-        amended_x["image"] = torch.cat([x["image"], expression], dim=1)
-
-        return super().guide(amended_x)
+        encodings[-1] = torch.cat([encodings[-1], expression], dim=1)
+        return encodings

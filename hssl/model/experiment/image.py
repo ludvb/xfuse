@@ -31,7 +31,12 @@ class Image(Experiment):
             "img-predecoder",
             lambda: torch.nn.Sequential(
                 torch.nn.Conv2d(
-                    zs[-1].shape[1], zs[-1].shape[1], 5, padding=5
+                    zs[-1].shape[1], zs[-1].shape[1], 7, padding=5
+                ),
+                torch.nn.LeakyReLU(0.2, inplace=True),
+                torch.nn.BatchNorm2d(zs[-1].shape[1]),
+                torch.nn.Conv2d(
+                    zs[-1].shape[1], zs[-1].shape[1], 7, padding=3
                 ),
                 torch.nn.LeakyReLU(0.2, inplace=True),
                 torch.nn.BatchNorm2d(zs[-1].shape[1]),
