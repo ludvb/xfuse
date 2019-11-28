@@ -176,8 +176,7 @@ class FactorActivationFullSummary(StatsHandler):
                     factor_activation,
                     mask=mask,
                     n_components=n_components,
-                    method="umap",
-                    num_training_samples=1000,
+                    method="pca",
                 )
                 # pylint: disable=no-member
                 self.add_image(
