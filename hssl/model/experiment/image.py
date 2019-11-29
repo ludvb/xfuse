@@ -95,10 +95,10 @@ class Image(Experiment):
         postdecoder = get_module(
             "img-postdecoder",
             lambda: torch.nn.Sequential(
-                torch.nn.Conv2d(y.shape[1], y.shape[1], 5, 1, 5),
+                torch.nn.Conv2d(y.shape[1], y.shape[1], 3, 1, 1),
                 torch.nn.LeakyReLU(0.2, inplace=True),
                 torch.nn.BatchNorm2d(y.shape[1]),
-                torch.nn.Conv2d(y.shape[1], y.shape[1], 5, 1, 5),
+                torch.nn.Conv2d(y.shape[1], y.shape[1], 3, 1, 1),
                 torch.nn.LeakyReLU(0.2, inplace=True),
                 torch.nn.BatchNorm2d(y.shape[1]),
             ),
