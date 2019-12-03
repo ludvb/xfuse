@@ -1,6 +1,9 @@
+from typing import Optional
+
 import h5py
 import numpy as np
 import pandas as pd
+from scipy.ndimage.interpolation import zoom
 from scipy.sparse import csr_matrix
 
 from .utility import (
@@ -18,6 +21,7 @@ def run(
     tissue_positions: pd.DataFrame,
     spot_radius: float,
     output_file: str,
+    scale_factor: Optional[float] = None,
 ) -> None:
     r"""
     Converts data from the 10X SpaceRanger pipeline for visium arrays into
@@ -39,6 +43,10 @@ def run(
         columns=bc_matrix["matrix"]["features"]["name"][()].astype(str),
         index=pd.Index([*range(1, counts.shape[0] + 1)], name="n"),
     )
+
+    if scale_factor is not None:
+        tissue_positions[["x", "y"]] *= scale_factor
+        image = zoom(image, (scale_factor, scale_factor, 1.0), order=0)
 
     spots = list(
         tissue_positions.loc[
