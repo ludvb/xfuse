@@ -179,6 +179,17 @@ def run(project_file, save_path, session):
         config = dict(tomlkit.loads(project_file.read().decode()))
         config = merge_config(config)
 
+        def _expand_path(path):
+            path = os.path.expanduser(path)
+            if os.path.isabs(path):
+                return path
+            return os.path.join(os.path.dirname(project_file.name), path)
+
+        config["slides"] = {
+            _expand_path(filename): v
+            for filename, v in config["slides"].items()
+        }
+
         if config["xfuse"]["version"] != __version__:
             log(
                 WARNING,
@@ -198,16 +209,6 @@ def run(project_file, save_path, session):
         ) as f:
             f.write(tomlkit.dumps(config))
 
-        def _expand_path(path):
-            path = os.path.expanduser(path)
-            if os.path.isabs(path):
-                return path
-            return os.path.join(os.path.dirname(project_file.name), path)
-
-        config["slides"] = {
-            _expand_path(filename): v
-            for filename, v in config["slides"].items()
-        }
         slide_options = {
             filename: slide["options"] if "options" in slide else {}
             for filename, slide in config["slides"].items()
