@@ -87,6 +87,7 @@ class STSlide(SlideData):
         except AttributeError:
             counts = self.counts
         counts = counts.todense()
+        # pylint: disable=attribute-defined-outside-init
         self.__counts_means = np.mean(np.array(counts), 0)
         self.__counts_stdvs = np.nanstd(np.array(counts), 0)
         return self
@@ -146,10 +147,12 @@ class STSlide(SlideData):
 
     @property
     def means(self):
+        r"""Count mean for each gene"""
         return self.__counts_means
 
     @property
     def stdvs(self):
+        r"""Count standard deviation for each gene"""
         return self.__counts_stdvs
 
     @property
