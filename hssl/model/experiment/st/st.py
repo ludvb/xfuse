@@ -145,16 +145,23 @@ class ST(Image):
     def _get_factor_decoder(self, in_channels, n):
         def _create_factor_decoder():
             decoder = torch.nn.Sequential(
-                torch.nn.Conv2d(in_channels, in_channels, 7, 1, 3),
-                torch.nn.LeakyReLU(0.2, inplace=True),
-                torch.nn.BatchNorm2d(in_channels),
                 torch.nn.Conv2d(in_channels, 1, 1, 1, 1),
             )
             torch.nn.init.constant_(decoder[-1].weight, 0.0)
             torch.nn.init.constant_(decoder[-1].bias, self.__factors[n][0])
             return decoder
 
-        return get_module(_encode_factor_name(n), _create_factor_decoder)
+        return torch.nn.Sequential(
+            get_module(
+                "factor_shared",
+                lambda: torch.nn.Sequential(
+                    torch.nn.Conv2d(in_channels, in_channels, 1),
+                    torch.nn.LeakyReLU(0.2, inplace=True),
+                    torch.nn.BatchNorm2d(in_channels),
+                ),
+            ),
+            get_module(_encode_factor_name(n), _create_factor_decoder),
+        )
 
     def model(self, x, zs):
         # pylint: disable=too-many-locals
