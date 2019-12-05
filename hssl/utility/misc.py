@@ -1,6 +1,24 @@
 import torch
 
-__all__ = ["Unpool"]
+__all__ = ["PaddedConv2d", "Unpool"]
+
+
+class PaddedConv2d(torch.nn.Module):
+    def __init__(
+        self, *args, padding: int = 0, padding_mode: str = "reflect", **kwargs
+    ):
+        super().__init__()
+        self.conv_layer = torch.nn.Conv2d(*args, padding=0, **kwargs)
+        self.padding_mode = padding_mode
+        self.padding = padding
+
+    def forward(self, x):
+        x = torch.nn.functional.pad(
+            x,
+            [self.padding, self.padding, self.padding, self.padding],
+            mode=self.padding_mode,
+        )
+        return self.conv_layer(x)
 
 
 class Unpool(torch.nn.Module):

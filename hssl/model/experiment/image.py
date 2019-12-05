@@ -4,6 +4,7 @@ import torch
 from pyro.distributions import Normal  # pylint: disable=no-name-in-module
 
 from ...utility import center_crop
+from ...utility.misc import PaddedConv2d
 from ...utility.modules import get_module
 from . import Experiment
 
@@ -30,7 +31,7 @@ class Image(Experiment):
             decoder1 = get_module(
                 f"img-decoder-{i}-1",
                 lambda: torch.nn.Sequential(
-                    torch.nn.Conv2d(
+                    PaddedConv2d(
                         y.shape[1],
                         y.shape[1],
                         kernel_size=5,
@@ -39,7 +40,7 @@ class Image(Experiment):
                     ),
                     torch.nn.LeakyReLU(0.2, inplace=True),
                     torch.nn.BatchNorm2d(y.shape[1]),
-                    torch.nn.Conv2d(
+                    PaddedConv2d(
                         y.shape[1],
                         z.shape[1],
                         kernel_size=5,
@@ -53,7 +54,7 @@ class Image(Experiment):
             decoder2 = get_module(
                 f"img-decoder-{i}-2",
                 lambda: torch.nn.Sequential(
-                    torch.nn.Conv2d(
+                    PaddedConv2d(
                         2 * z.shape[1],
                         2 * z.shape[1],
                         kernel_size=5,
@@ -61,7 +62,7 @@ class Image(Experiment):
                     ),
                     torch.nn.LeakyReLU(0.2, inplace=True),
                     torch.nn.BatchNorm2d(2 * z.shape[1]),
-                    torch.nn.Conv2d(
+                    PaddedConv2d(
                         2 * z.shape[1], z.shape[1], kernel_size=5, padding=2,
                     ),
                     torch.nn.LeakyReLU(0.2, inplace=True),
@@ -97,10 +98,14 @@ class Image(Experiment):
             encoder = get_module(
                 f"img-encoder-{i}",
                 lambda: torch.nn.Sequential(
-                    torch.nn.Conv2d(in_nc, out_nc, 4, 2, 1),
+                    PaddedConv2d(
+                        in_nc, out_nc, kernel_size=4, stride=2, padding=1
+                    ),
                     torch.nn.LeakyReLU(0.2, inplace=True),
                     torch.nn.BatchNorm2d(out_nc),
-                    torch.nn.Conv2d(out_nc, out_nc, 3, 1, 2),
+                    PaddedConv2d(
+                        out_nc, out_nc, kernel_size=3, stride=1, padding=2
+                    ),
                     torch.nn.LeakyReLU(0.2, inplace=True),
                     torch.nn.BatchNorm2d(out_nc),
                 ).to(x),
@@ -110,10 +115,22 @@ class Image(Experiment):
         preencoder = get_module(
             "img-preencoder",
             lambda: torch.nn.Sequential(
-                torch.nn.Conv2d(x.shape[1], self.num_channels, 7, 1, 3),
+                PaddedConv2d(
+                    x.shape[1],
+                    self.num_channels,
+                    kernel_size=7,
+                    stride=1,
+                    padding=3,
+                ),
                 torch.nn.LeakyReLU(0.2, inplace=True),
                 torch.nn.BatchNorm2d(self.num_channels),
-                torch.nn.Conv2d(self.num_channels, self.num_channels, 7, 1, 3),
+                PaddedConv2d(
+                    self.num_channels,
+                    self.num_channels,
+                    kernel_size=7,
+                    stride=1,
+                    padding=3,
+                ),
                 torch.nn.LeakyReLU(0.2, inplace=True),
                 torch.nn.BatchNorm2d(self.num_channels),
             ),
