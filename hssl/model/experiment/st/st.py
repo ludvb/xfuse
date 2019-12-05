@@ -1,7 +1,7 @@
 import itertools as it
+import warnings
 from copy import deepcopy
 from typing import Dict, List, NamedTuple, Optional
-import warnings
 
 import numpy as np
 import pyro as p
