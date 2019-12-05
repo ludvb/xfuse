@@ -36,6 +36,7 @@ def run(
     ](),
     network_depth: int = CONFIG["xfuse"].value["network_depth"].value,
     network_width: int = CONFIG["xfuse"].value["network_width"].value,
+    encode_expression: bool = CONFIG["xfuse"].value["encode_expression"].value,
     patch_size: int = CONFIG["optimization"].value["patch_size"].value,
     batch_size: int = CONFIG["optimization"].value["batch_size"].value,
     epochs: int = CONFIG["optimization"].value["epochs"].value,
@@ -74,6 +75,7 @@ def run(
             num_channels=network_width,
             factors=[FactorDefault(0.0, None)],
             default_scale=pixel_scale(dataset)["ST"],
+            encode_expression=encode_expression,
         )
         xfuse = XFuse(experiments=[st_experiment]).to(get("default_device"))
 

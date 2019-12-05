@@ -45,6 +45,7 @@ class ST(Image):
         *args,
         factors: List[FactorDefault] = [],
         default_scale: float = 1.0,
+        encode_expression: bool = False,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -55,6 +56,7 @@ class ST(Image):
             self.add_factor(factor)
 
         self.__default_scale = default_scale
+        self.__encode_expression = encode_expression
 
     @property
     def factors(self) -> Dict[str, FactorDefault]:
@@ -296,48 +298,12 @@ class ST(Image):
 
         return image_distr, expression_distr
 
-    def guide(self, x):
-        num_genes = x["data"][0].shape[1]
-
-        for name, dim in [
-            ("rate_g_effects", [1 + x["effects"].shape[1], num_genes]),
-            ("logits_g_effects", [1 + x["effects"].shape[1], num_genes]),
-        ]:
-            p.sample(
-                name,
-                Normal(
-                    p.param(f"{name}_mu", torch.zeros(dim)).to(find_device(x)),
-                    1e-8
-                    + p.param(
-                        f"{name}_sd",
-                        1e-2 * torch.ones(dim),
-                        constraint=constraints.positive,
-                    ).to(find_device(x)),
-                ),
-            )
-
-        for n, factor in self.factors.items():
-            if factor.profile is None:
-                factor = FactorDefault(factor.scale, torch.zeros(num_genes))
-            p.sample(
-                _encode_factor_name(n),
-                Normal(
-                    p.param(
-                        f"{_encode_factor_name(n)}_mu", factor.profile.float()
-                    ).to(find_device(x)),
-                    1e-8
-                    + p.param(
-                        f"{_encode_factor_name(n)}_sd",
-                        1e-2 * torch.ones_like(factor.profile).float(),
-                        constraint=constraints.positive,
-                    ).to(find_device(x)),
-                ),
-            )
-
+    @staticmethod
+    def _construct_expression_encoding(x):
         expression_encoder1 = get_module(
             "expression_encoder1",
             lambda: torch.nn.Sequential(
-                torch.nn.Linear(num_genes, 256),
+                torch.nn.Linear(x["data"][0].shape[1], 256),
                 torch.nn.Tanh(),
                 torch.nn.Linear(256, 256),
                 torch.nn.Tanh(),
@@ -407,7 +373,50 @@ class ST(Image):
             ]
         )
         expression = expression_encoder2(expression)
-        amended_x = x.copy()
-        amended_x["image"] = torch.cat([x["image"], expression], dim=1)
 
-        return super().guide(amended_x)
+        return expression
+
+    def guide(self, x):
+        num_genes = x["data"][0].shape[1]
+
+        for name, dim in [
+            ("rate_g_effects", [1 + x["effects"].shape[1], num_genes]),
+            ("logits_g_effects", [1 + x["effects"].shape[1], num_genes]),
+        ]:
+            p.sample(
+                name,
+                Normal(
+                    p.param(f"{name}_mu", torch.zeros(dim)).to(find_device(x)),
+                    1e-8
+                    + p.param(
+                        f"{name}_sd",
+                        1e-2 * torch.ones(dim),
+                        constraint=constraints.positive,
+                    ).to(find_device(x)),
+                ),
+            )
+
+        for n, factor in self.factors.items():
+            if factor.profile is None:
+                factor = FactorDefault(factor.scale, torch.zeros(num_genes))
+            p.sample(
+                _encode_factor_name(n),
+                Normal(
+                    p.param(
+                        f"{_encode_factor_name(n)}_mu", factor.profile.float()
+                    ).to(find_device(x)),
+                    1e-8
+                    + p.param(
+                        f"{_encode_factor_name(n)}_sd",
+                        1e-2 * torch.ones_like(factor.profile).float(),
+                        constraint=constraints.positive,
+                    ).to(find_device(x)),
+                ),
+            )
+
+        if self.__encode_expression:
+            expression = self._construct_expression_encoding(x)
+            x = x.copy()
+            x["image"] = torch.cat([x["image"], expression], dim=1)
+
+        return super().guide(x)
