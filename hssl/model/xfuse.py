@@ -100,7 +100,7 @@ class XFuse(torch.nn.Module):
                         torch.nn.Conv2d(y.shape[1], y.shape[1], 5, 1, 2),
                         torch.nn.LeakyReLU(0.2, inplace=True),
                         torch.nn.BatchNorm2d(y.shape[1]),
-                        torch.nn.Conv2d(y.shape[1], y.shape[1], 5, 1, 2),
+                        torch.nn.Conv2d(y.shape[1], y.shape[1], 1),
                     ),
                 ).to(y)
                 z_sd = get_module(
@@ -109,7 +109,7 @@ class XFuse(torch.nn.Module):
                         torch.nn.Conv2d(y.shape[1], y.shape[1], 5, 1, 2),
                         torch.nn.LeakyReLU(0.2, inplace=True),
                         torch.nn.BatchNorm2d(y.shape[1]),
-                        torch.nn.Conv2d(y.shape[1], y.shape[1], 5, 1, 2),
+                        torch.nn.Conv2d(y.shape[1], y.shape[1], 1),
                         torch.nn.Softplus(),
                     ),
                 ).to(y)
