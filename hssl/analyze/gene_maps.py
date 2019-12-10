@@ -25,6 +25,8 @@ def compute_gene_maps(
     dataloader = require("dataloader")
     save_path = require("save_path")
 
+    output_dir = os.path.join(save_path, "gene_maps")
+
     dataloader = make_dataloader(
         Dataset(
             Data(
@@ -105,7 +107,9 @@ def compute_gene_maps(
                 ):
                     continue
                 filename = os.path.join(
-                    save_path, os.path.basename(slide_name), f"{gene_name}.png"
+                    output_dir,
+                    os.path.basename(slide_name),
+                    f"{gene_name}.png",
                 )
                 os.makedirs(os.path.dirname(filename), exist_ok=True)
                 imwrite(filename, gene_map.cpu().numpy())
