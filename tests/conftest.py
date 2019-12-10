@@ -113,7 +113,7 @@ def toydata(tmp_path):
     )
 
     filepath = tmp_path / "data.h5"
-    write_data(counts, image, label, "ST", str(filepath))
+    write_data(counts, image, label, {}, "ST", str(filepath))
 
     design_matrix = design_matrix_from({str(filepath): {"ID": 1}})
     slide = Slide(data=STSlide(h5py.File(filepath, "r")), iterator=FullSlide)

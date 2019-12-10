@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Dict, Optional
 
 import h5py
 import numpy as np
@@ -21,12 +21,16 @@ def run(
     tissue_positions: pd.DataFrame,
     spot_radius: float,
     output_file: str,
+    annotation: Optional[Dict[str, np.ndarray]] = None,
     scale_factor: Optional[float] = None,
 ) -> None:
     r"""
     Converts data from the 10X SpaceRanger pipeline for visium arrays into
     the data format used by xfuse.
     """
+    if annotation is None:
+        annotation = {}
+
     counts = csr_matrix(
         (
             bc_matrix["matrix"]["data"],
@@ -47,6 +51,10 @@ def run(
     if scale_factor is not None:
         tissue_positions[["x", "y"]] *= scale_factor
         image = zoom(image, (scale_factor, scale_factor, 1.0), order=0)
+        annotation = {
+            k: zoom(v, (scale_factor, scale_factor), order=0)
+            for k, v in annotation.items()
+        }
 
     spots = list(
         tissue_positions.loc[
@@ -61,7 +69,15 @@ def run(
 
     image = crop_image(image, spots)
     label = crop_image(label, spots)
+    annotation = {k: crop_image(v, spots) for k, v in annotation.items()}
 
     counts, label = mask_tissue(image, counts, label)
 
-    write_data(counts, image, label, type_label="ST", path=output_file)
+    write_data(
+        counts,
+        image,
+        label,
+        type_label="ST",
+        annotation=annotation,
+        path=output_file,
+    )

@@ -1,4 +1,4 @@
-from typing import List, NamedTuple, Tuple
+from typing import Dict, List, NamedTuple, Tuple
 import os
 
 import h5py
@@ -103,6 +103,7 @@ def write_data(
     counts: pd.DataFrame,
     image: np.ndarray,
     label: np.ndarray,
+    annotation: Dict[str, np.ndarray],
     type_label: str,
     path: str = "data.h5",
 ) -> None:
@@ -160,6 +161,8 @@ def write_data(
         )
         data_file.create_dataset("image", image.shape, np.uint8, image)
         data_file.create_dataset("label", label.shape, np.int16, label)
+        for k, v in annotation.items():
+            data_file.create_dataset(f"annotation/{k}", v.shape, bool, v)
         data_file.create_dataset(
             "type", data=type_label, dtype=h5py.string_dtype()
         )

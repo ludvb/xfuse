@@ -68,6 +68,7 @@ cli.add_command(_convert)
 @click.option("--image", type=click.File("rb"), required=True)
 @click.option("--bc-matrix", type=click.File("rb"), required=True)
 @click.option("--tissue-positions", type=click.File("rb"), required=True)
+@click.option("--annotation", type=click.File("rb"))
 @click.option("--scale-factors", type=click.File("rb"), required=True)
 @click.option("--scale", type=float)
 @click.option(
@@ -76,7 +77,13 @@ cli.add_command(_convert)
     required=True,
 )
 def visium(
-    image, bc_matrix, tissue_positions, scale_factors, scale, output_file
+    image,
+    bc_matrix,
+    tissue_positions,
+    annotation,
+    scale_factors,
+    scale,
+    output_file,
 ):
     r"""Converts 10X Visium data"""
     scale_factors = json.load(scale_factors)
@@ -87,6 +94,11 @@ def visium(
     tissue_positions = tissue_positions.rename(columns={4: "y", 5: "x"})
     tissue_positions = tissue_positions * scale_factors["tissue_hires_scalef"]
     image = imread(image)
+    if annotation:
+        with h5py.File(annotation, "r") as annotation_file:
+            annotation = {
+                k: annotation_file[k][()] for k in annotation_file.keys()
+            }
     with h5py.File(bc_matrix, "r") as data:
         convert.visium.run(
             image,
@@ -94,6 +106,7 @@ def visium(
             tissue_positions,
             spot_radius,
             output_file,
+            annotation=annotation,
             scale_factor=scale,
         )
 
@@ -105,13 +118,14 @@ _convert.add_command(visium)
 @click.option("--counts", type=click.File("rb"), required=True)
 @click.option("--image", type=click.File("rb"), required=True)
 @click.option("--spots", type=click.File("rb"))
+@click.option("--annotation", type=click.File("rb"))
 @click.option("--scale", type=float)
 @click.option(
     "--output-file",
     type=click.Path(exists=False, writable=True),
     required=True,
 )
-def st(counts, image, spots, scale, output_file):
+def st(counts, image, spots, annotation, scale, output_file):
     r"""Converts Spatial Transcriptomics ("ST") data"""
     if spots is not None:
         spots_data = pd.read_csv(spots, sep="\t")
@@ -119,8 +133,18 @@ def st(counts, image, spots, scale, output_file):
         spots_data = None
     counts_data = pd.read_csv(counts, sep="\t", index_col=0)
     image_data = imread(image)
+    if annotation:
+        with h5py.File(annotation, "r") as annotation_file:
+            annotation = {
+                k: annotation_file[k][()] for k in annotation_file.keys()
+            }
     convert.st.run(
-        counts_data, image_data, spots_data, output_file, scale_factor=scale
+        counts_data,
+        image_data,
+        output_file,
+        spots_data,
+        annotation=annotation,
+        scale_factor=scale,
     )
 
 

@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Dict, Optional
 
 import numpy as np
 import pandas as pd
@@ -16,16 +16,24 @@ from .utility import (
 def run(
     counts: pd.DataFrame,
     image: np.ndarray,
-    spots: Optional[pd.DataFrame],
     output_file: str,
+    spots: Optional[pd.DataFrame] = None,
+    annotation: Optional[Dict[str, np.ndarray]] = None,
     scale_factor: Optional[float] = None,
 ) -> None:
     r"""
     Converts data from the Spatial Transcriptomics pipeline into the data
     format used by xfuse.
     """
+    if annotation is None:
+        annotation = {}
+
     if scale_factor is not None:
         image = zoom(image, (scale_factor, scale_factor, 1.0), order=0)
+        annotation = {
+            k: zoom(v, (scale_factor, scale_factor), order=0)
+            for k, v in annotation.items()
+        }
         if spots is not None:
             spots[["pixel_x", "pixel_y"]] *= scale_factor
 
@@ -66,7 +74,15 @@ def run(
 
     image = crop_image(image, spots)
     label = crop_image(label, spots)
+    annotation = {k: crop_image(v, spots) for k, v in annotation.items()}
 
     counts, label = mask_tissue(image, counts, label)
 
-    write_data(counts, image, label, type_label="ST", path=output_file)
+    write_data(
+        counts,
+        image,
+        label,
+        type_label="ST",
+        annotation=annotation,
+        path=output_file,
+    )

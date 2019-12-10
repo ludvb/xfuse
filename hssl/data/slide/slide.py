@@ -43,6 +43,10 @@ class SlideData(metaclass=ABCMeta):
     def genes(self, genes: List[str]) -> SlideData:
         r"""Setter for which genes to return from this dataset"""
 
+    @abstractmethod
+    def annotation(self, name) -> torch.Tensor:
+        r"""Get annotation layer by name"""
+
 
 class STSlide(SlideData):
     r""":class:`SlideData` for Spatial Transcriptomics slides"""
@@ -164,6 +168,11 @@ class STSlide(SlideData):
     def label(self):
         r"""Getter for the label image of the slide"""
         return self._data["label"]
+
+    def annotation(self, name):
+        if name not in self._data["annotation"]:
+            raise RuntimeError(f'annotation layer "{name}" is missing')
+        return self._data["annotation"][name][()]
 
     def prepare_data(self, image, label):
         r"""Prepare data from image and label patches"""
