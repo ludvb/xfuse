@@ -104,6 +104,7 @@ def run(
         with Session(dataloader=Unset, panic=Unset, pyro_stack=[]):
             save_session(f"final")
 
+    with Session(model=xfuse, dataloader=dataloader):
         for name, options in analyses.items():
             if name in analyses:
                 log(INFO, 'Running analysis "%s"', name)
