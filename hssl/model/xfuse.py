@@ -9,7 +9,6 @@ import torch
 from .experiment import Experiment
 from ..logging import INFO, log
 from ..utility import find_device
-from ..utility.misc import PaddedConv2d
 from ..utility.modules import get_module
 
 
@@ -98,43 +97,19 @@ class XFuse(torch.nn.Module):
                 z_mu = get_module(
                     f"{name}-mu",
                     lambda: torch.nn.Sequential(
-                        PaddedConv2d(
-                            y.shape[1],
-                            y.shape[1],
-                            kernel_size=5,
-                            stride=1,
-                            padding=2,
-                        ),
+                        torch.nn.Conv2d(y.shape[1], y.shape[1], 5, 1, 2),
                         torch.nn.LeakyReLU(0.2, inplace=True),
                         torch.nn.BatchNorm2d(y.shape[1]),
-                        PaddedConv2d(
-                            y.shape[1],
-                            y.shape[1],
-                            kernel_size=5,
-                            stride=1,
-                            padding=2,
-                        ),
+                        torch.nn.Conv2d(y.shape[1], y.shape[1], 5, 1, 2),
                     ),
                 ).to(y)
                 z_sd = get_module(
                     f"{name}-sd",
                     lambda: torch.nn.Sequential(
-                        PaddedConv2d(
-                            y.shape[1],
-                            y.shape[1],
-                            kernel_size=5,
-                            stride=1,
-                            padding=2,
-                        ),
+                        torch.nn.Conv2d(y.shape[1], y.shape[1], 5, 1, 2),
                         torch.nn.LeakyReLU(0.2, inplace=True),
                         torch.nn.BatchNorm2d(y.shape[1]),
-                        PaddedConv2d(
-                            y.shape[1],
-                            y.shape[1],
-                            kernel_size=5,
-                            stride=1,
-                            padding=2,
-                        ),
+                        torch.nn.Conv2d(y.shape[1], y.shape[1], 5, 1, 2),
                         torch.nn.Softplus(),
                     ),
                 ).to(y)
