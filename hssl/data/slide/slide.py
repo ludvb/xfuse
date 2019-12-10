@@ -30,8 +30,7 @@ class SlideIterator(metaclass=ABCMeta):
 class SlideData(metaclass=ABCMeta):
     r"""Abstract class for different kinds of slide data"""
 
-    @property
-    @abstractmethod
+    @abstractproperty
     def type(self) -> str:
         r"""The type tag of this slide"""
 

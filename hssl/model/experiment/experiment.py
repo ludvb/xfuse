@@ -1,4 +1,4 @@
-from abc import abstractmethod
+from abc import abstractmethod, abstractproperty
 
 import torch as t
 
@@ -24,8 +24,7 @@ class Experiment(t.nn.Module):
         r"""Number of independent tissue states"""
         return 1
 
-    @property
-    @abstractmethod
+    @abstractproperty
     def tag(self):
         r"""Experiment name"""
 
