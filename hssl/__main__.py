@@ -232,6 +232,7 @@ def run(project_file, save_path, session):
             ),
             network_depth=config["xfuse"]["network_depth"],
             network_width=config["xfuse"]["network_width"],
+            genes=config["xfuse"]["genes"],
             patch_size=config["optimization"]["patch_size"],
             batch_size=config["optimization"]["batch_size"],
             epochs=config["optimization"]["epochs"],

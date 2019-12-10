@@ -42,6 +42,18 @@ _ANNOTATED_CONFIG = OrderedDict(
                         ("network_width", Item(value=16)),
                         ("encode_expression", Item(value=False)),
                         (
+                            "genes",
+                            Item(
+                                value=[],
+                                comment=" ".join(
+                                    [
+                                        "List of genes to include in the analysis.",
+                                        "An empty list will include all genes.",
+                                    ]
+                                ),
+                            ),
+                        ),
+                        (
                             "version",
                             Item(
                                 value=__version__,
