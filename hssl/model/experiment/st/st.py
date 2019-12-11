@@ -394,6 +394,7 @@ class ST(Image):
                         constraint=constraints.positive,
                     ).to(find_device(x)),
                 ),
+                infer={"is_global": True},
             )
 
         for n, factor in self.factors.items():
@@ -412,6 +413,7 @@ class ST(Image):
                         constraint=constraints.positive,
                     ).to(find_device(x)),
                 ),
+                infer={"is_global": True},
             )
 
         if self.__encode_expression:
