@@ -47,7 +47,7 @@ def run(
 ):
     r"""Runs an analysis"""
 
-    # pylint: disable=too-many-locals
+    # pylint: disable=too-many-arguments,too-many-locals
 
     if analyses is None:
         analyses = {}
