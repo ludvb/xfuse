@@ -161,6 +161,7 @@ def write_data(
         )
         data_file.create_dataset("image", image.shape, np.uint8, image)
         data_file.create_dataset("label", label.shape, np.int16, label)
+        data_file.create_group("annotation", track_order=True)
         for k, v in annotation.items():
             data_file.create_dataset(f"annotation/{k}", v.shape, bool, v)
         data_file.create_dataset(
