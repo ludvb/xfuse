@@ -97,10 +97,13 @@ class Image(Experiment):
             encoder = get_module(
                 f"img-encoder-{i}",
                 lambda: torch.nn.Sequential(
-                    torch.nn.Conv2d(in_nc, out_nc, 4, 2, 1),
+                    torch.nn.Conv2d(in_nc, out_nc, 4, 2, 2),
                     torch.nn.LeakyReLU(0.2, inplace=True),
                     torch.nn.BatchNorm2d(out_nc),
-                    torch.nn.Conv2d(out_nc, out_nc, 3, 1, 2),
+                    torch.nn.Conv2d(out_nc, out_nc, 3, 1, 1),
+                    torch.nn.LeakyReLU(0.2, inplace=True),
+                    torch.nn.BatchNorm2d(out_nc),
+                    torch.nn.Conv2d(out_nc, out_nc, 3, 1, 1),
                     torch.nn.LeakyReLU(0.2, inplace=True),
                     torch.nn.BatchNorm2d(out_nc),
                 ).to(x),
@@ -111,9 +114,6 @@ class Image(Experiment):
             "img-preencoder",
             lambda: torch.nn.Sequential(
                 torch.nn.Conv2d(x.shape[1], self.num_channels, 7, 1, 3),
-                torch.nn.LeakyReLU(0.2, inplace=True),
-                torch.nn.BatchNorm2d(self.num_channels),
-                torch.nn.Conv2d(self.num_channels, self.num_channels, 7, 1, 3),
                 torch.nn.LeakyReLU(0.2, inplace=True),
                 torch.nn.BatchNorm2d(self.num_channels),
             ),
