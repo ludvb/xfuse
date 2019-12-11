@@ -25,6 +25,7 @@ from .model.experiment.st import (
 )
 from .session import Session, Unset, get, require
 from .train import train
+from .utility.file import first_unique_filename
 from .utility.session import save_session
 
 
@@ -104,12 +105,16 @@ def run(
         with Session(dataloader=Unset, panic=Unset, pyro_stack=[]):
             save_session(f"final")
 
-    with Session(model=xfuse, dataloader=dataloader):
+    with Session(
+        model=xfuse,
+        dataloader=dataloader,
+        save_path=first_unique_filename(
+            os.path.join(require("save_path"), "analyses")
+        ),
+    ):
         for name, options in analyses.items():
             if name in analyses:
                 log(INFO, 'Running analysis "%s"', name)
-                save_path = require("save_path")
-                with Session(save_path=os.path.join(save_path, "analyses")):
-                    _analyses[name].function(**options)
+                _analyses[name].function(**options)
             else:
                 log(WARNING, 'Unknown analysis "%s"', name)
