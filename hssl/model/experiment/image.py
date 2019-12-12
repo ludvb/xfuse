@@ -97,10 +97,10 @@ class Image(Experiment):
             encoder = get_module(
                 f"img-encoder-{i}",
                 lambda: torch.nn.Sequential(
-                    torch.nn.Conv2d(in_nc, out_nc, 4, 2, 2),
+                    torch.nn.Conv2d(in_nc, out_nc, 4, 2, 3),
                     torch.nn.LeakyReLU(0.2, inplace=True),
                     torch.nn.BatchNorm2d(out_nc),
-                    torch.nn.Conv2d(out_nc, out_nc, 3, 1, 1),
+                    torch.nn.Conv2d(out_nc, out_nc, 3, 1, 2),
                     torch.nn.LeakyReLU(0.2, inplace=True),
                     torch.nn.BatchNorm2d(out_nc),
                     torch.nn.Conv2d(out_nc, out_nc, 3, 1, 1),
