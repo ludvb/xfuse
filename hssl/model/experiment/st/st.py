@@ -379,21 +379,31 @@ class ST(Image):
     def guide(self, x):
         num_genes = x["data"][0].shape[1]
 
-        for name, dim in [
-            ("rate_g_effects", [1 + x["effects"].shape[1], num_genes]),
-            ("logits_g_effects", [1 + x["effects"].shape[1], num_genes]),
-        ]:
-            p.sample(
-                name,
+        for name in ("rate_g_effects", "logits_g_effects"):
+            a = p.sample(
+                f"{name}-baseline",
+                Delta(
+                    p.param(f"{name}-baseline-value", torch.zeros(num_genes))
+                ),
+            ).to(find_device(x))
+            b = p.sample(
+                f"{name}-covariate",
                 Normal(
-                    p.param(f"{name}_mu", torch.zeros(dim)).to(find_device(x)),
+                    p.param(
+                        f"{name}-covariate_mu",
+                        torch.zeros(x["effects"].shape[1], num_genes),
+                    ).to(find_device(x)),
                     1e-8
                     + p.param(
-                        f"{name}_sd",
-                        1e-2 * torch.ones(dim),
+                        f"{name}-covariate_sd",
+                        1e-2 * torch.ones(x["effects"].shape[1], num_genes),
                         constraint=constraints.positive,
                     ).to(find_device(x)),
                 ),
+            ).to(find_device(x))
+            p.sample(
+                name,
+                Delta(torch.cat([a.unsqueeze(0), b])),
                 infer={"is_global": True},
             )
 
