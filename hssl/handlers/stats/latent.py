@@ -13,8 +13,11 @@ class Latent(StatsHandler):
     def _handle(self, value, name, **_):
         # pylint: disable=arguments-differ
         # pylint: disable=no-member
-        self.add_images(
-            f"z/{name[2:]}",
-            reduce_last_dimension(value.permute(0, 2, 3, 1), method="pca"),
-            dataformats="NHWC",
-        )
+        try:
+            self.add_images(
+                f"z/{name[2:]}",
+                reduce_last_dimension(value.permute(0, 2, 3, 1)),
+                dataformats="NHWC",
+            )
+        except ValueError:
+            pass

@@ -1,17 +1,12 @@
 from abc import abstractmethod
 
-import numpy as np
 import pyro.poutine
 import torch
 
-from ...data import Data, Dataset
-from ...data.slide import FullSlide, Slide
-from ...data.utility.misc import make_dataloader
 from ...logging import WARNING, log
 from ...model.experiment.st import ST
-from ...session import Session, require
-from ...utility import center_crop
-from ...utility.visualization import reduce_last_dimension
+from ...session import require
+from ...utility.visualization import reduce_last_dimension, visualize_factors
 from .. import Noop
 from .stats_handler import StatsHandler
 
@@ -114,11 +109,14 @@ class FactorActivationSummary(StatsHandler):
     def _handle(self, fn, **_):
         # pylint: disable=arguments-differ
         # pylint: disable=no-member
-        self.add_images(
-            "activation-summary/training-batch",
-            reduce_last_dimension(fn.mean.permute(0, 2, 3, 1), method="pca"),
-            dataformats="NHWC",
-        )
+        try:
+            self.add_images(
+                "activation-summary/training-batch",
+                reduce_last_dimension(fn.mean.permute(0, 2, 3, 1)),
+                dataformats="NHWC",
+            )
+        except ValueError:
+            pass
 
 
 class FactorActivationFullSummary(StatsHandler):
@@ -133,58 +131,14 @@ class FactorActivationFullSummary(StatsHandler):
         return type == "step"
 
     def _handle(self, **msg):
-        model = require("model")
-        dataloader = require("dataloader")
-
-        def _compute_factor_activation(xs):
-            if len(xs) != 1:
-                raise RuntimeError()
-            if "ST" not in xs:
-                raise NotImplementedError()
-            data = xs["ST"]
-            with torch.no_grad():
-                with pyro.poutine.trace() as guide_trace:
-                    model.guide(xs)
-                with pyro.poutine.replay(trace=guide_trace.trace):
-                    with pyro.poutine.trace() as model_trace:
-                        model.model(xs)
-            factor_activation = (
-                model_trace.trace.nodes["rim"]["fn"].mean[0].permute(1, 2, 0)
-            )
-            zero_label = torch.where(data["data"][0].sum(1) == 0)[0] + 1
-            mask = ~np.isin(
-                center_crop(data["label"][0], factor_activation.shape[:2]),
-                zero_label,
-            )
-            return factor_activation, mask
-
-        dataloader = make_dataloader(
-            Dataset(
-                Data(
-                    slides={
-                        k: Slide(data=v.data, iterator=FullSlide)
-                        for k, v in dataloader.dataset.data.slides.items()
-                    },
-                    design=dataloader.dataset.data.design,
-                )
-            ),
-            batch_size=1,
-            shuffle=False,
-        )
-
-        with Session(default_device=torch.device("cpu"), pyro_stack=[]):
-            for i, x in enumerate(dataloader, 1):
-                factor_activation, mask = _compute_factor_activation(x)
-                n_components = 3 if factor_activation.shape[-1] >= 3 else 1
-                reduced_factor_activation = reduce_last_dimension(
-                    factor_activation,
-                    mask=mask,
-                    n_components=n_components,
-                    method="pca",
-                )
-                # pylint: disable=no-member
-                self.add_image(
-                    f"activation-summary/sample{i}",
-                    torch.as_tensor(reduced_factor_activation),
-                    dataformats="HWC",
-                )
+        try:
+            with pyro.poutine.block():
+                for i, factor_activation in enumerate(visualize_factors()):
+                    # pylint: disable=no-member
+                    self.add_image(
+                        f"activation-summary/sample{i}",
+                        torch.as_tensor(factor_activation),
+                        dataformats="HWC",
+                    )
+        except ValueError:
+            pass
