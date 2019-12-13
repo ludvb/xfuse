@@ -15,9 +15,13 @@ __all__ = ["load_session", "save_session"]
 
 def save_session(filename_prefix: str) -> None:
     r"""Saves the current :class:`Session`"""
+    try:
+        save_path = require("save_path")
+    except RuntimeError:
+        return
 
     path = first_unique_filename(
-        os.path.join(get("save_path"), f"{filename_prefix}.session")
+        os.path.join(save_path, f"{filename_prefix}.session")
     )
     os.makedirs(os.path.dirname(path), exist_ok=True)
 
