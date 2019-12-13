@@ -25,35 +25,46 @@ class Image(Experiment):
 
     def _decode(self, zs):
         # pylint: disable=no-self-use
-        def _decode(y, z, i):
-            decoder1 = get_module(
-                f"img-decoder-{i}-1",
+        def _decode(y, i):
+            decoder = get_module(
+                f"img-decoder-{i}",
                 lambda: torch.nn.Sequential(
-                    torch.nn.ConvTranspose2d(
-                        y.shape[1], z.shape[1], kernel_size=2, stride=2,
-                    ),
+                    torch.nn.Conv2d(y.shape[1], y.shape[1], kernel_size=3),
+                    torch.nn.BatchNorm2d(y.shape[1]),
                     torch.nn.LeakyReLU(0.2, inplace=True),
-                    torch.nn.BatchNorm2d(z.shape[1]),
+                    torch.nn.Conv2d(y.shape[1], y.shape[1], kernel_size=3),
+                    torch.nn.BatchNorm2d(y.shape[1]),
+                    torch.nn.LeakyReLU(0.2, inplace=True),
                 ),
             ).to(y)
-            decoder2 = get_module(
-                f"img-decoder-{i}-2",
-                lambda: torch.nn.Sequential(
-                    torch.nn.Conv2d(2 * z.shape[1], z.shape[1], kernel_size=3),
-                    torch.nn.LeakyReLU(0.2, inplace=True),
-                    torch.nn.BatchNorm2d(z.shape[1]),
-                    torch.nn.Conv2d(z.shape[1], z.shape[1], kernel_size=3),
-                    torch.nn.LeakyReLU(0.2, inplace=True),
-                    torch.nn.BatchNorm2d(z.shape[1]),
-                ),
-            ).to(y)
-            y = decoder1(y)
-            z = center_crop(z, [None, None, *y.shape[-2:]])
-            return decoder2(torch.cat([y, z], 1))
+            return decoder(y)
 
-        y = zs[-1]
-        for i, z in enumerate(reversed(zs[:-1])):
-            y = _decode(y, z, i)
+        def _combine(y, z, i):
+            combiner = get_module(
+                f"img-combiner-{i}",
+                lambda: torch.nn.Sequential(
+                    torch.nn.Conv2d(
+                        y.shape[1] + z.shape[1], z.shape[1], kernel_size=1
+                    ),
+                    torch.nn.BatchNorm2d(z.shape[1]),
+                    torch.nn.LeakyReLU(0.2, inplace=True),
+                ),
+            ).to(y)
+            z = center_crop(z, [None, None, *y.shape[-2:]])
+            return combiner(torch.cat([y, z], 1))
+
+        def _upsample(y, i):
+            upsampler = get_module(
+                f"upsampler-{i}",
+                lambda: torch.nn.Sequential(
+                    torch.nn.Upsample(scale_factor=2),
+                ),
+            ).to(y)
+            return upsampler(y)
+
+        y = _decode(zs[-1], self.depth)
+        for i, z in zip(reversed(range(1, self.depth)), zs[::-1][1:]):
+            y = _decode(_combine(_upsample(y, i), z, i), i)
 
         return y
 
@@ -64,11 +75,11 @@ class Image(Experiment):
                 f"img-encoder-{i}",
                 lambda: torch.nn.Sequential(
                     torch.nn.Conv2d(x.shape[1], out_nc, kernel_size=3),
-                    torch.nn.LeakyReLU(0.2, inplace=True),
                     torch.nn.BatchNorm2d(out_nc),
+                    torch.nn.LeakyReLU(0.2, inplace=True),
                     torch.nn.Conv2d(out_nc, out_nc, kernel_size=3),
-                    torch.nn.LeakyReLU(0.2, inplace=True),
                     torch.nn.BatchNorm2d(out_nc),
+                    torch.nn.LeakyReLU(0.2, inplace=True),
                 ).to(x),
             ).to(x)
             return encoder(x)
@@ -80,8 +91,8 @@ class Image(Experiment):
                     torch.nn.Conv2d(
                         x.shape[1], 2 * x.shape[1], kernel_size=2, stride=2
                     ),
-                    torch.nn.LeakyReLU(0.2, inplace=True),
                     torch.nn.BatchNorm2d(2 * x.shape[1]),
+                    torch.nn.LeakyReLU(0.2, inplace=True),
                 ).to(x),
             ).to(x)
             return downsampler(x)
@@ -97,8 +108,8 @@ class Image(Experiment):
             "img_mu",
             lambda: torch.nn.Sequential(
                 torch.nn.Conv2d(self.num_channels, self.num_channels, 1),
-                torch.nn.LeakyReLU(0.2, inplace=True),
                 torch.nn.BatchNorm2d(self.num_channels),
+                torch.nn.LeakyReLU(0.2, inplace=True),
                 torch.nn.Conv2d(self.num_channels, x["image"].shape[1], 1),
                 torch.nn.Tanh(),
             ),
@@ -107,8 +118,8 @@ class Image(Experiment):
             "img_sd",
             lambda: torch.nn.Sequential(
                 torch.nn.Conv2d(self.num_channels, self.num_channels, 1),
-                torch.nn.LeakyReLU(0.2, inplace=True),
                 torch.nn.BatchNorm2d(self.num_channels),
+                torch.nn.LeakyReLU(0.2, inplace=True),
                 torch.nn.Conv2d(self.num_channels, x["image"].shape[1], 1),
                 torch.nn.Softplus(),
             ),
