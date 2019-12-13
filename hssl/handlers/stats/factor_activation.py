@@ -10,6 +10,7 @@ from ...data.utility.misc import make_dataloader
 from ...logging import WARNING, log
 from ...model.experiment.st import ST
 from ...session import Session, require
+from ...utility import center_crop
 from ...utility.visualization import reduce_last_dimension
 from .. import Noop
 from .stats_handler import StatsHandler
@@ -147,12 +148,15 @@ class FactorActivationFullSummary(StatsHandler):
                 with pyro.poutine.replay(trace=guide_trace.trace):
                     with pyro.poutine.trace() as model_trace:
                         model.model(xs)
-            zero_label = torch.where(data["data"][0].sum(1) == 0)[0] + 1
-            mask = ~np.isin(data["label"][0], zero_label)
-            return (
-                model_trace.trace.nodes["rim"]["fn"].mean[0].permute(1, 2, 0),
-                mask,
+            factor_activation = (
+                model_trace.trace.nodes["rim"]["fn"].mean[0].permute(1, 2, 0)
             )
+            zero_label = torch.where(data["data"][0].sum(1) == 0)[0] + 1
+            mask = ~np.isin(
+                center_crop(data["label"][0], factor_activation.shape[:2]),
+                zero_label,
+            )
+            return factor_activation, mask
 
         dataloader = make_dataloader(
             Dataset(

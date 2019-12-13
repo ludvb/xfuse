@@ -170,6 +170,7 @@ class ST(Image):
         num_genes = x["data"][0].shape[1]
 
         decoded = self._decode(zs)
+        label = center_crop(x["label"], [None, *decoded.shape[-2:]])
 
         scale = p.sample(
             "scale",
@@ -178,7 +179,7 @@ class ST(Image):
                     self._get_scale_decoder(decoded.shape[1]).to(decoded)(
                         decoded
                     ),
-                    [None, None, *x["label"].shape[-2:]],
+                    [None, None, *label.shape[-2:]],
                 )
             ),
         )
@@ -193,7 +194,7 @@ class ST(Image):
                 ],
                 dim=1,
             )
-            rim = center_crop(rim, [None, None, *x["label"].shape[-2:]])
+            rim = center_crop(rim, [None, None, *label.shape[-2:]])
             rim = torch.nn.functional.softmax(rim, dim=1)
             rim = p.sample("rim", Delta(rim))
             rim = scale * rim
@@ -218,7 +219,7 @@ class ST(Image):
             rim = p.sample(
                 "rim",
                 Delta(
-                    torch.zeros(len(x["data"]), 0, *x["label"].shape[-2:]).to(
+                    torch.zeros(len(x["data"]), 0, *label.shape[-2:]).to(
                         decoded
                     )
                 ),
@@ -272,6 +273,13 @@ class ST(Image):
                     nonpartial = torch.as_tensor(nonpartial).to(nonmissing)
                     mask = nonpartial & nonmissing
 
+                    if not mask.any():
+                        return (
+                            data[[]],
+                            torch.zeros(0, num_genes),
+                            logits_g.expand(0, -1),
+                        )
+
                     rim = rim[:, mask]
                     label = label[mask] - 1
                     idxs, label = torch.unique(label, return_inverse=True)
@@ -286,7 +294,7 @@ class ST(Image):
                 data, rgs, logits_g = zip(
                     *it.starmap(
                         _compute_sample_params,
-                        zip(x["data"], x["label"], rim, rate_mg, logits_g),
+                        zip(x["data"], label, rim, rate_mg, logits_g),
                     )
                 )
 

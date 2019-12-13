@@ -1,3 +1,6 @@
+[xfuse]
+network_depth = 2
+
 [optimization]
 epochs = 10
 

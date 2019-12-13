@@ -14,6 +14,7 @@ from ..data.slide import FullSlide, Slide
 from ..data.utility.misc import make_dataloader
 from ..logging import WARNING, log
 from ..session import Session, require
+from ..utility import center_crop
 
 
 def compute_gene_maps(
@@ -62,7 +63,12 @@ def compute_gene_maps(
             gene_map /= gene_map.max() - gene_map.min()
             gene_map = (255 * gene_map).round().byte()
             nonzero_labels = (data["data"][0].sum(1) == 0).nonzero() + 1
-            gene_map[np.isin(data["label"].cpu(), nonzero_labels.cpu())] = 0
+            gene_map[
+                np.isin(
+                    center_crop(data["label"][0].cpu(), gene_map.shape),
+                    nonzero_labels.cpu(),
+                )
+            ] = 0
             yield name, gene_map
 
     fns: Dict[
