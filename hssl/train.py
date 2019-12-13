@@ -17,6 +17,21 @@ from .session import get, require
 from .utility import to_device
 
 
+def test_convergence():
+    r"""
+    Tests if the model has converged according to a heuristic stopping
+    criterion
+    """
+    training_data = get("training_data")
+    rmean_long = np.mean(training_data.elbos[-len(training_data.elbos) // 2 :])
+    rmean_short = np.mean(
+        training_data.elbos[-len(training_data.elbos) // 4 :]
+    )
+    log(DEBUG, "Running mean ELBO (long):  %.2e", rmean_long)
+    log(DEBUG, "Running mean ELBO (short): %.2e", rmean_short)
+    return rmean_long > rmean_short
+
+
 def train(epochs: int = -1):
     """Trains the session model"""
     optim = require("optimizer")
@@ -97,15 +112,6 @@ def train(epochs: int = -1):
             training_data.epoch = epoch
             training_data.elbos.append(_epoch(epoch=epoch))
 
-            if epochs < 0 and epoch >= 1000:
-                rmean_long = np.mean(
-                    training_data.elbos[-len(training_data.elbos) // 2 :]
-                )
-                rmean_short = np.mean(
-                    training_data.elbos[-len(training_data.elbos) // 4 :]
-                )
-                log(DEBUG, "Running mean ELBO (long):  %.2e", rmean_long)
-                log(DEBUG, "Running mean ELBO (short): %.2e", rmean_short)
-                if rmean_long > rmean_short:
-                    log(DEBUG, "Model has converged, stopping")
-                    break
+            if epochs < 0 and test_convergence():
+                log(DEBUG, "Model has converged, stopping")
+                break

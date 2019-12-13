@@ -7,7 +7,7 @@ import torch as t
 from _io import BufferedReader
 
 from ..logging import INFO, WARNING, log
-from ..session import Session, get, get_session
+from ..session import Session, get_session, require
 from .file import first_unique_filename
 
 __all__ = ["load_session", "save_session"]

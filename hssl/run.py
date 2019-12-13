@@ -24,7 +24,7 @@ from .model.experiment.st import (
     purge_factors,
 )
 from .session import Session, Unset, get, require
-from .train import train
+from .train import test_convergence, train
 from .utility.file import first_unique_filename
 from .utility.session import save_session
 
@@ -99,11 +99,17 @@ def run(
         dataloader=dataloader,
         panic=_panic,
     ):
-        train(epochs)
-        with Session(factor_expansion_strategy=ExtraBaselines(0)):
-            purge_factors(xfuse, num_samples=10)
-        with Session(dataloader=Unset, panic=Unset, pyro_stack=[]):
-            save_session(f"final")
+        has_converged = (
+            test_convergence()
+            if epochs < 0
+            else get("training_data").epoch >= epochs
+        )
+        if not has_converged:
+            train(epochs)
+            with Session(factor_expansion_strategy=ExtraBaselines(0)):
+                purge_factors(xfuse, num_samples=10)
+            with Session(dataloader=Unset, panic=Unset, pyro_stack=[]):
+                save_session(f"final")
 
     with Session(
         model=xfuse,
