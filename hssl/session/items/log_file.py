@@ -1,15 +1,15 @@
 import os
 from logging import StreamHandler
-from typing import Optional
+from typing import Optional, Type, Union
 
 from ...logging import DEBUG, LOGGER, Formatter, log
-from .. import SessionItem, register_session_item
+from .. import SessionItem, Unset, register_session_item
 
 _LOG_HANDLER = None
 _FILE_STREAM = None
 
 
-def _setter(path: Optional[str]):
+def _setter(path: Optional[Union[str, Type[Unset]]]):
     # pylint: disable=global-statement
     global _FILE_STREAM, _LOG_HANDLER
     if _LOG_HANDLER is not None:
@@ -18,7 +18,7 @@ def _setter(path: Optional[str]):
     if _FILE_STREAM is not None:
         _FILE_STREAM.close()
         _FILE_STREAM = None
-    if path is not None:
+    if isinstance(path, str):
         log(DEBUG, "opening log file stream: %s", path)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         _FILE_STREAM = open(path, "a")

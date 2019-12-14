@@ -89,7 +89,9 @@ def run(
         optimizer = pyro.optim.ClippedAdam({"lr": learning_rate})
 
     def _panic(_session, _err_type, _err, _tb):
-        with Session(dataloader=Unset, panic=Unset, pyro_stack=[]):
+        with Session(
+            dataloader=Unset, log_file=Unset, panic=Unset, pyro_stack=[],
+        ):
             save_session(f"exception")
 
     with Session(
@@ -108,7 +110,9 @@ def run(
             train(epochs)
             with Session(factor_expansion_strategy=ExtraBaselines(0)):
                 purge_factors(xfuse, num_samples=10)
-            with Session(dataloader=Unset, panic=Unset, pyro_stack=[]):
+            with Session(
+                dataloader=Unset, log_file=Unset, panic=Unset, pyro_stack=[],
+            ):
                 save_session(f"final")
 
     with Session(
