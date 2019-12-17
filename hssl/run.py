@@ -122,6 +122,7 @@ def run(
         save_path=first_unique_filename(
             os.path.join(require("save_path"), "analyses")
         ),
+        eval=True,
     ):
         for name, options in analyses.items():
             if name in analyses:

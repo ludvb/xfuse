@@ -34,7 +34,7 @@ def get_module(
         if name in __DEFAULT_STATE_DICT:
             module_.load_state_dict(__DEFAULT_STATE_DICT[name])
         __MODULES[name] = module_
-    return module_
+    return module_.train(not get("eval"))
 
 
 def get_state_dict() -> Dict[str, OrderedDict[str, torch.Tensor]]:

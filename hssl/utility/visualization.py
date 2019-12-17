@@ -60,7 +60,7 @@ def visualize_factors(
         batch_size=1,
     )
 
-    with Session(default_device=torch.device("cpu")):
+    with Session(default_device=torch.device("cpu"), eval=True):
         activations: List[np.ndarray] = []
         masks: List[torch.Tensor] = []
         for x in dataloader:
