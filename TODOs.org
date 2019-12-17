@@ -104,3 +104,5 @@
 * TODO [#A] "arbitrary precision" posteriors
   - normalizing flows?
   - hmc?
+
+* TODO rename factor -> metagene
