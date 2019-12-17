@@ -70,6 +70,7 @@ def run(
     dataset = Dataset(
         data=Data(slides=slides, design=design),
         genes=genes if genes != [] else None,
+        unify_genes=True,
     )
     dataloader = make_dataloader(dataset, batch_size=batch_size, shuffle=True)
 

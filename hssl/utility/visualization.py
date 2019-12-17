@@ -55,7 +55,7 @@ def visualize_factors(
                     for k, v in dataloader.dataset.data.slides.items()
                 },
                 design=dataloader.dataset.data.design,
-            )
+            ),
         ),
         batch_size=1,
     )

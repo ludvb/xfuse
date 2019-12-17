@@ -1,5 +1,6 @@
 from functools import reduce
 from typing import Dict, List, NamedTuple, Optional
+from warnings import warn
 
 import numpy as np
 import pandas as pd
@@ -23,21 +24,52 @@ class Dataset(torch.utils.data.Dataset):
     instance
     """
 
-    def __init__(self, data: Data, genes: Optional[List[str]] = None):
+    def __init__(
+        self,
+        data: Data,
+        genes: Optional[List[str]] = None,
+        unify_genes: bool = False,
+    ):
         self._data = data
         if genes is None:
             genes = list(
-                reduce(
-                    set.union,  # type: ignore
-                    (
-                        set(slide.data.genes)
-                        for slide in self.data.slides.values()
-                    ),
+                sorted(
+                    reduce(
+                        set.union,  # type: ignore
+                        (
+                            set(slide.data.genes)
+                            for slide in self.data.slides.values()
+                        ),
+                    )
                 )
             )
+        elif not unify_genes:
+            warn(
+                UserWarning(
+                    " ".join(
+                        [
+                            "Passing a list of `genes` to `Dataset` implies"
+                            " `unify_genes=True`.",
+                            "Set `unify_genes=True` explicitly to disable this"
+                            " warning.",
+                        ]
+                    )
+                )
+            )
+            unify_genes = True
         self.__genes = genes
         for slide in self.data.slides.values():
-            slide.data.genes = self.__genes
+            if unify_genes:
+                slide.data.genes = self.__genes
+            elif slide.data.genes != self.__genes:
+                raise ValueError(
+                    " ".join(
+                        [
+                            "Slide uses incongruent set of genes.",
+                            "Unify genes by passing `unify_genes=True`.",
+                        ]
+                    )
+                )
         self._data_iterators = {
             name: slide.iterator(slide.data)
             for name, slide in self.data.slides.items()
