@@ -35,6 +35,11 @@ class XFuse(torch.nn.Module):
         for experiment in experiments:
             self.register_experiment(experiment)
 
+    @property
+    def experiments(self):
+        r"""Returns the registered experiments"""
+        return self.__experiment_store.copy()
+
     def get_experiment(self, experiment_type: str) -> Experiment:
         r"""Get registered :class:`Experiment` by tag"""
 
@@ -56,6 +61,7 @@ class XFuse(torch.nn.Module):
             type(experiment).__name__,
             experiment.tag,
         )
+        self.add_module(experiment.tag, experiment)
         self.__experiment_store[experiment.tag] = experiment
 
     def forward(self, *input):
