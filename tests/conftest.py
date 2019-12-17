@@ -15,7 +15,7 @@ from hssl.data import Data, Dataset
 from hssl.data.slide import STSlide, FullSlide, Slide
 from hssl.data.utility.misc import make_dataloader
 from hssl.utility import design_matrix_from
-from hssl.utility.modules import clear_module_store
+from hssl.utility.modules import load_state_dict
 
 
 def pytest_configure(config):
@@ -29,7 +29,7 @@ def pytest_configure(config):
 def pytest_runtest_setup(item):
     # pylint: disable=missing-function-docstring
     pyro.clear_param_store()
-    clear_module_store()
+    load_state_dict({})
     if item.get_closest_marker("fix_rng") is not None:
         torch.manual_seed(0)
 
@@ -118,7 +118,7 @@ def toydata(tmp_path):
     design_matrix = design_matrix_from({str(filepath): {"ID": 1}})
     slide = Slide(data=STSlide(h5py.File(filepath, "r")), iterator=FullSlide)
     data = Data(slides={str(filepath): slide}, design=design_matrix)
-    dataset = Dataset(data)
+    dataset = Dataset(data, unify_genes=True)
     dataloader = make_dataloader(dataset)
 
     return dataloader

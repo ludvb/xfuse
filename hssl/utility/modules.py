@@ -1,9 +1,12 @@
-from typing import Callable, Dict, Optional
+from typing import Callable, Dict, Optional, OrderedDict
 
 import pyro
 import torch
 
+from ..session import get
+
 __MODULES: Dict[str, torch.nn.Module] = {}
+__DEFAULT_STATE_DICT: Dict[str, OrderedDict[str, torch.Tensor]] = {}
 
 
 def get_module(
@@ -23,17 +26,30 @@ def get_module(
     `None`.
     """
     try:
-        return pyro.module(name, __MODULES[name])
+        module_ = pyro.module(name, __MODULES[name])
     except KeyError:
-        if module is not None:
-            registered_module = pyro.module(
-                name, module(), update_module_params=True
-            )
-            __MODULES[name] = registered_module
-            return registered_module
-        raise RuntimeError(f"Module '{name}' does not exist")
+        if module is None:
+            raise RuntimeError(f'Module "{name}" does not exist')
+        module_ = pyro.module(name, module(), update_module_params=True)
+        if name in __DEFAULT_STATE_DICT:
+            module_.load_state_dict(__DEFAULT_STATE_DICT[name])
+        __MODULES[name] = module_
+    return module_
 
 
-def clear_module_store() -> None:
-    r"""Clears the module store"""
+def get_state_dict() -> Dict[str, OrderedDict[str, torch.Tensor]]:
+    r"""Returns the state dicts of the modules in the module store"""
+    state_dicts = __DEFAULT_STATE_DICT.copy()
+    state_dicts.update(
+        {name: module.state_dict() for name, module in __MODULES.items()}
+    )
+    return state_dicts
+
+
+def load_state_dict(
+    state_dict: Dict[str, OrderedDict[str, torch.Tensor]]
+) -> None:
+    r"""Sets the default state dicts for the modules in the module store"""
     __MODULES.clear()
+    __DEFAULT_STATE_DICT.clear()
+    __DEFAULT_STATE_DICT.update(state_dict)

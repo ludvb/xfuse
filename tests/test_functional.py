@@ -2,10 +2,10 @@ r"""Functional tests"""
 
 import os
 
-import pyro
 import pytest
 
 from hssl.session import Session, Unset, get
+from hssl.utility.modules import get_state_dict, load_state_dict
 
 
 @pytest.mark.parametrize(
@@ -36,15 +36,16 @@ def test_restore_session(shared_datadir, script_runner, mocker, tmp_path):
         str(shared_datadir / "test_restore_session.toml"),
     )
 
-    params = [*pyro.get_param_store().values()]
-    pyro.clear_param_store()
+    module_state = get_state_dict()
+    load_state_dict({})
 
     def _mock_run(*_args, **_kwargs):
         with Session(panic=Unset):
             assert get("training_data").step > 1
+            new_module_state = get_state_dict()
             assert all(
-                (a == b).all()
-                for a, b in zip(params, get("param_store").values())
+                (new_module_state[k] == v).all()
+                for k, v in module_state.items()
             )
 
     mocker.patch("hssl.__main__._run", _mock_run)

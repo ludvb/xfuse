@@ -9,6 +9,7 @@ from _io import BufferedReader
 from ..logging import INFO, WARNING, log
 from ..session import Session, get_session, require
 from .file import first_unique_filename
+from .modules import get_state_dict, load_state_dict
 
 __all__ = ["load_session", "save_session"]
 
@@ -43,10 +44,12 @@ def save_session(filename_prefix: str) -> None:
     )
 
     log(INFO, "saving session to %s", path)
-    t.save(session, path)
+    t.save((session, get_state_dict()), path)
 
 
 def load_session(file: Union[str, BufferedReader]) -> Session:
     r"""Loads :class:`Session` from a file"""
     log(INFO, "loading session from %s", str(file))
-    return t.load(file)
+    session, state_dict = t.load(file)
+    load_state_dict(state_dict)
+    return session

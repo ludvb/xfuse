@@ -91,7 +91,7 @@ class ST(Image):
         name = _encode_factor_name(factor)
         new_name = _encode_factor_name(new_factor)
 
-        store = get("param_store")
+        store = p.get_param_store()
 
         for pname in [p for p in store.keys() if name in p]:
             new_pname = pname.replace(name, new_name)
@@ -118,7 +118,7 @@ class ST(Image):
         self.__factor_queue.append(n)
 
         if remove_params:
-            store = get("param_store")
+            store = p.get_param_store()
             optim = get("optimizer")
             pname = _encode_factor_name(n)
             for x in [p for p in store.keys() if pname in p]:
