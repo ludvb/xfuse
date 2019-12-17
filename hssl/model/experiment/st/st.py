@@ -16,8 +16,8 @@ from pyro.distributions import (  # pylint: disable=no-name-in-module
 from scipy.ndimage.morphology import binary_fill_holes, distance_transform_edt
 
 from ....logging import DEBUG, INFO, log
-from ....session import get
-from ....utility import center_crop, find_device, sparseonehot
+from ....session import get, require
+from ....utility import center_crop, sparseonehot
 from ....utility.modules import get_module
 from ..image import Image
 
@@ -384,8 +384,10 @@ class ST(Image):
 
         return expression
 
-    def guide(self, x):
-        num_genes = x["data"][0].shape[1]
+    def _sample_globals(self):
+        dataset = require("dataloader").dataset
+        device = get("default_device")
+        num_genes = len(dataset.genes)
 
         for name in ("rate_g_effects", "logits_g_effects"):
             a = p.sample(
@@ -393,22 +395,23 @@ class ST(Image):
                 Delta(
                     p.param(f"{name}-baseline-value", torch.zeros(num_genes))
                 ),
-            ).to(find_device(x))
+            ).to(device)
             b = p.sample(
                 f"{name}-covariate",
                 Normal(
                     p.param(
                         f"{name}-covariate_mu",
-                        torch.zeros(x["effects"].shape[1], num_genes),
-                    ).to(find_device(x)),
+                        torch.zeros(dataset.data.design.shape[0], num_genes),
+                    ).to(device),
                     1e-8
                     + p.param(
                         f"{name}-covariate_sd",
-                        1e-2 * torch.ones(x["effects"].shape[1], num_genes),
+                        1e-2
+                        * torch.ones(dataset.data.design.shape[0], num_genes),
                         constraint=constraints.positive,
-                    ).to(find_device(x)),
+                    ).to(device),
                 ),
-            ).to(find_device(x))
+            ).to(device)
             p.sample(
                 name,
                 Delta(torch.cat([a.unsqueeze(0), b])),
@@ -423,20 +426,21 @@ class ST(Image):
                 Normal(
                     p.param(
                         f"{_encode_factor_name(n)}_mu", factor.profile.float()
-                    ).to(find_device(x)),
+                    ).to(device),
                     1e-8
                     + p.param(
                         f"{_encode_factor_name(n)}_sd",
                         1e-2 * torch.ones_like(factor.profile).float(),
                         constraint=constraints.positive,
-                    ).to(find_device(x)),
+                    ).to(device),
                 ),
                 infer={"is_global": True},
             )
 
+    def guide(self, x):
+        self._sample_globals()
         if self.__encode_expression:
             expression = self._construct_expression_encoding(x)
             x = x.copy()
             x["image"] = torch.cat([x["image"], expression], dim=1)
-
         return super().guide(x)
