@@ -18,7 +18,7 @@ from scipy.ndimage.morphology import binary_fill_holes, distance_transform_edt
 from ....logging import DEBUG, INFO, log
 from ....session import get, require
 from ....utility import center_crop, sparseonehot
-from ....utility.modules import get_module
+from ....utility.modules import get_module, get_param
 from ..image import Image
 
 
@@ -204,11 +204,13 @@ class ST(Image):
             rim = scale * rim
 
             rate_mg_prior = Normal(
-                p.param(f"rate_mg_mu", torch.zeros(num_genes)).to(decoded),
+                get_param(f"rate_mg_mu", lambda: torch.zeros(num_genes)).to(
+                    decoded
+                ),
                 1e-8
-                + p.param(
+                + get_param(
                     f"rate_mg_sd",
-                    torch.ones(num_genes),
+                    lambda: torch.ones(num_genes),
                     constraint=constraints.positive,
                 ).to(decoded),
             )
@@ -393,24 +395,29 @@ class ST(Image):
         device = get("default_device")
         num_genes = len(dataset.genes)
 
-        for name in ("rate_g_effects", "logits_g_effects"):
+        def _sample_baseline(name):
             a = p.sample(
                 f"{name}-baseline",
                 Delta(
-                    p.param(f"{name}-baseline-value", torch.zeros(num_genes))
+                    get_param(
+                        f"{name}-baseline-value",
+                        lambda: torch.zeros(num_genes),
+                    )
                 ),
             ).to(device)
             b = p.sample(
                 f"{name}-covariate",
                 Normal(
-                    p.param(
+                    get_param(
                         f"{name}-covariate_mu",
-                        torch.zeros(dataset.data.design.shape[0], num_genes),
+                        lambda: torch.zeros(
+                            dataset.data.design.shape[0], num_genes
+                        ),
                     ).to(device),
                     1e-8
-                    + p.param(
+                    + get_param(
                         f"{name}-covariate_sd",
-                        1e-2
+                        lambda: 1e-2
                         * torch.ones(dataset.data.design.shape[0], num_genes),
                         constraint=constraints.positive,
                     ).to(device),
@@ -422,24 +429,32 @@ class ST(Image):
                 infer={"is_global": True},
             )
 
-        for n, factor in self.factors.items():
-            if factor.profile is None:
-                factor = FactorDefault(factor.scale, torch.zeros(num_genes))
+        for name in ("rate_g_effects", "logits_g_effects"):
+            _sample_baseline(name)
+
+        def _sample_factor(factor, name):
             p.sample(
-                _encode_factor_name(n),
+                _encode_factor_name(name),
                 Normal(
-                    p.param(
-                        f"{_encode_factor_name(n)}_mu", factor.profile.float()
+                    get_param(
+                        f"{_encode_factor_name(name)}_mu",
+                        # pylint: disable=unnecessary-lambda
+                        lambda: factor.profile.float(),
                     ).to(device),
                     1e-8
-                    + p.param(
-                        f"{_encode_factor_name(n)}_sd",
-                        1e-2 * torch.ones_like(factor.profile).float(),
+                    + get_param(
+                        f"{_encode_factor_name(name)}_sd",
+                        lambda: 1e-2 * torch.ones_like(factor.profile).float(),
                         constraint=constraints.positive,
                     ).to(device),
                 ),
                 infer={"is_global": True},
             )
+
+        for name, factor in self.factors.items():
+            if factor.profile is None:
+                factor = FactorDefault(factor.scale, torch.zeros(num_genes))
+            _sample_factor(factor, name)
 
     def guide(self, x):
         self._sample_globals()

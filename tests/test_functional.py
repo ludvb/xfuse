@@ -5,7 +5,7 @@ import os
 import pytest
 
 from hssl.session import Session, Unset, get
-from hssl.utility.modules import get_state_dict, load_state_dict
+from hssl.utility.modules import get_state_dict, reset_state
 
 
 @pytest.mark.parametrize(
@@ -36,16 +36,24 @@ def test_restore_session(shared_datadir, script_runner, mocker, tmp_path):
         str(shared_datadir / "test_restore_session.toml"),
     )
 
-    module_state = get_state_dict()
-    load_state_dict({})
+    state_dict = get_state_dict()
+    reset_state()
 
     def _mock_run(*_args, **_kwargs):
         with Session(panic=Unset):
             assert get("training_data").step > 1
-            new_module_state = get_state_dict()
+            new_state_dict = get_state_dict()
             assert all(
-                (new_module_state[k] == v).all()
-                for k, v in module_state.items()
+                (
+                    new_state_dict.modules[module_name][param_name]
+                    == param_value
+                ).all()
+                for module_name, module_state in state_dict.modules.items()
+                for param_name, param_value in module_state.items()
+            )
+            assert all(
+                (new_state_dict.params[param_name] == param_value).all()
+                for param_name, param_value in state_dict.params.items()
             )
 
     mocker.patch("hssl.__main__._run", _mock_run)
