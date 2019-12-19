@@ -41,7 +41,7 @@ def train(epochs: int = -1):
 
     messengers: List[Messenger] = [
         FactorPurger(
-            frequency=lambda e: (
+            period=lambda e: (
                 e % 100 == 0 and (epochs < 0 or e <= epochs - 100)
             ),
             num_samples=3,
@@ -49,7 +49,7 @@ def train(epochs: int = -1):
     ]
 
     if get("save_path") is not None:
-        messengers.append(Checkpointer(frequency=100000))
+        messengers.append(Checkpointer(period=1000))
 
         def _every(n):
             def _predicate(**_msg):

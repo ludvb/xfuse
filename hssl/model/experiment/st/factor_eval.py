@@ -94,13 +94,13 @@ class FactorPurger(Messenger):
         return instance
 
     def __init__(
-        self, frequency: Union[int, Callable[[int], bool]] = 1, **kwargs: Any
+        self, period: Union[int, Callable[[int], bool]] = 1, **kwargs: Any
     ):
         super().__init__()
         self._predicate = (
-            frequency
-            if callable(frequency)
-            else lambda epoch: epoch % cast(int, frequency) == 0
+            period
+            if callable(period)
+            else lambda epoch: epoch % cast(int, period) == 0
         )
         self._kwargs = kwargs
 

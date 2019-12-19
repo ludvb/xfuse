@@ -11,18 +11,18 @@ from . import Noop
 class Checkpointer(Messenger):
     r"""Saves the currently running session to disk at a fixed interval"""
 
-    def __new__(cls, frequency: Optional[int]):
-        if frequency is None:
+    def __new__(cls, period: Optional[int]):
+        if period is None:
             return Noop()
         return super().__new__(cls)
 
-    def __init__(self, frequency: int = 1):
+    def __init__(self, period: int = 1):
         super().__init__()
-        self._freq = frequency
+        self._period = period
 
     def _pyro_post_epoch(self, msg):
         epoch = msg["kwargs"]["epoch"]
-        if epoch % self._freq == 0:
+        if epoch % self._period == 0:
             with Session(
                 dataloader=Unset, log_file=Unset, panic=Unset, pyro_stack=[],
             ):
