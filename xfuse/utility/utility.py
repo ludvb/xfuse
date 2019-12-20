@@ -182,7 +182,7 @@ def design_matrix_from(
     )
     if len(design_table.columns) == 0:
         return pd.DataFrame(
-            np.zeros((0, len(design_table))), columns=design_table.index,
+            np.zeros((0, len(design_table))), columns=design_table.index
         )
 
     design_table = design_table.astype("category")

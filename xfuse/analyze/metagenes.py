@@ -54,9 +54,7 @@ def compute_metagene_summary(method: str = "pca") -> None:
             for n in experiment.factors
         ]
 
-    metagene_profile_fn = {
-        "ST": _metagene_profile_st,
-    }
+    metagene_profile_fn = {"ST": _metagene_profile_st}
 
     with Session(
         default_device=torch.device("cpu"), pyro_stack=[]
@@ -69,7 +67,7 @@ def compute_metagene_summary(method: str = "pca") -> None:
             ):
                 slide_name = os.path.basename(slide_path)
                 os.makedirs(
-                    os.path.join(output_dir, slide_name), exist_ok=True,
+                    os.path.join(output_dir, slide_name), exist_ok=True
                 )
                 imwrite(
                     os.path.join(output_dir, slide_name, "summary.png"),
@@ -123,7 +121,7 @@ def compute_metagene_summary(method: str = "pca") -> None:
                 )
             )
             metagene_profiles_.to_csv(
-                os.path.join(output_dir, f"{experiment}-metagenes.csv.gz"),
+                os.path.join(output_dir, f"{experiment}-metagenes.csv.gz")
             )
 
 

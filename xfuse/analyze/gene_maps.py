@@ -48,7 +48,7 @@ def compute_gene_maps(
     )
 
     def _compute_gene_map_st(
-        guide_trace, model_trace, data,  # pylint: disable=unused-argument
+        guide_trace, model_trace, data  # pylint: disable=unused-argument
     ):
         rate_im = model_trace.nodes["rim"]["value"]
         if not normalize:
@@ -77,9 +77,7 @@ def compute_gene_maps(
             [pyro.poutine.Trace, pyro.poutine.Trace, Dict[str, Any]],
             Iterator[Tuple[str, torch.Tensor]],
         ],
-    ] = {
-        "ST": _compute_gene_map_st,
-    }
+    ] = {"ST": _compute_gene_map_st}
 
     with Session(
         default_device=torch.device("cpu"), pyro_stack=[]

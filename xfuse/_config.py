@@ -96,7 +96,7 @@ _ANNOTATED_CONFIG = OrderedDict(
                                                 strategy
                                             ).parameters.items()
                                         ]
-                                    ),
+                                    )
                                 ),
                             )
                             for name, strategy in STRATEGIES.items()
@@ -154,10 +154,7 @@ _ANNOTATED_CONFIG = OrderedDict(
                                 comment=analysis.description,
                                 value=OrderedDict(
                                     [
-                                        (
-                                            param_name,
-                                            Item(value=param.default),
-                                        )
+                                        (param_name, Item(value=param.default))
                                         for param_name, param in signature(
                                             analysis.function
                                         ).parameters.items()
@@ -212,7 +209,7 @@ _ANNOTATED_CONFIG = OrderedDict(
                                             ),
                                         ),
                                     ]
-                                ),
+                                )
                             ),
                         ),
                         (
@@ -223,7 +220,7 @@ _ANNOTATED_CONFIG = OrderedDict(
                                         ("Id", Item(value=2)),
                                         ("Group", Item(value="Treatment")),
                                     ]
-                                ),
+                                )
                             ),
                         ),
                     ]

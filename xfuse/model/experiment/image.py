@@ -70,7 +70,7 @@ class Image(Experiment):
                 f"upsampler-{i}",
                 lambda: torch.nn.Sequential(
                     torch.nn.Conv2d(
-                        y.shape[1], y.shape[1] // 2, kernel_size=3, padding=1,
+                        y.shape[1], y.shape[1] // 2, kernel_size=3, padding=1
                     ),
                     torch.nn.BatchNorm2d(y.shape[1] // 2),
                     torch.nn.LeakyReLU(0.2, inplace=True),
@@ -143,12 +143,12 @@ class Image(Experiment):
             "img_mu",
             lambda: torch.nn.Sequential(
                 torch.nn.Conv2d(
-                    self.num_channels, self.num_channels, kernel_size=1,
+                    self.num_channels, self.num_channels, kernel_size=1
                 ),
                 torch.nn.BatchNorm2d(self.num_channels),
                 torch.nn.LeakyReLU(0.2, inplace=True),
                 torch.nn.Conv2d(
-                    self.num_channels, x["image"].shape[1], kernel_size=1,
+                    self.num_channels, x["image"].shape[1], kernel_size=1
                 ),
                 torch.nn.Tanh(),
             ),
@@ -157,12 +157,12 @@ class Image(Experiment):
             "img_sd",
             lambda: torch.nn.Sequential(
                 torch.nn.Conv2d(
-                    self.num_channels, self.num_channels, kernel_size=1,
+                    self.num_channels, self.num_channels, kernel_size=1
                 ),
                 torch.nn.BatchNorm2d(self.num_channels),
                 torch.nn.LeakyReLU(0.2, inplace=True),
                 torch.nn.Conv2d(
-                    self.num_channels, x["image"].shape[1], kernel_size=1,
+                    self.num_channels, x["image"].shape[1], kernel_size=1
                 ),
                 torch.nn.Softplus(),
             ),

@@ -18,11 +18,7 @@ from .model.experiment.st.factor_expansion_strategy import (
     STRATEGIES,
     ExpansionStrategy,
 )
-from .model.experiment.st import (
-    ExtraBaselines,
-    FactorDefault,
-    purge_factors,
-)
+from .model.experiment.st import ExtraBaselines, FactorDefault, purge_factors
 from .session import Session, Unset, get, require
 from .train import test_convergence, train
 from .utility.file import first_unique_filename

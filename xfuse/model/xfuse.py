@@ -80,7 +80,7 @@ class XFuse(torch.nn.Module):
                         (
                             # pylint: disable=not-callable
                             Normal(
-                                torch.tensor(0.0, device=find_device(x)), 1.0,
+                                torch.tensor(0.0, device=find_device(x)), 1.0
                             )
                             .expand([1, 1, 1, 1])
                             .to_event(3)
@@ -129,7 +129,7 @@ class XFuse(torch.nn.Module):
                 ).to(y)
                 with p.poutine.scale(scale=experiment.n / len(x)):
                     return p.sample(
-                        name, Normal(z_mu(y), 1e-8 + z_sd(y)).to_event(3),
+                        name, Normal(z_mu(y), 1e-8 + z_sd(y)).to_event(3)
                     )
 
             ys = experiment.guide(x)

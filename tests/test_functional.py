@@ -8,9 +8,7 @@ from xfuse.session import Session, Unset, get
 from xfuse.utility.modules import get_state_dict, reset_state
 
 
-@pytest.mark.parametrize(
-    "test_case", ["test_train_exit_status.1.toml"],
-)
+@pytest.mark.parametrize("test_case", ["test_train_exit_status.1.toml"])
 def test_train_exit_status(shared_datadir, script_runner, tmp_path, test_case):
     r"""Test CLI invocation"""
     save_path = tmp_path / "output_dir"

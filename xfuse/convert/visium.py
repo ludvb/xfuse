@@ -59,9 +59,7 @@ def run(
     spots = list(
         tissue_positions.loc[
             bc_matrix["matrix"]["barcodes"][()].astype(str)
-        ].apply(
-            lambda x: Spot(x=x["x"], y=x["y"], r=spot_radius), 1,
-        )
+        ].apply(lambda x: Spot(x=x["x"], y=x["y"], r=spot_radius), 1)
     )
 
     label = np.zeros(image.shape[:2]).astype(np.int16)

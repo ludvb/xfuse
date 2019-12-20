@@ -38,7 +38,7 @@ def _impute(
                 },
                 design=design.to_frame(),
             )
-        ),
+        )
     )
 
     data = next(iter(dataloader))
@@ -139,13 +139,11 @@ def compute_imputation(
                 index=pd.Index(np.unique(labels)[1:], name="label"),
             ).to_csv(
                 os.path.join(
-                    output_dir, os.path.basename(name), "imputed_counts.csv",
+                    output_dir, os.path.basename(name), "imputed_counts.csv"
                 )
             )
             imwrite(
-                os.path.join(
-                    output_dir, os.path.basename(name), "labels.tif",
-                ),
+                os.path.join(output_dir, os.path.basename(name), "labels.tif"),
                 labels,
             )
 
@@ -153,6 +151,6 @@ def compute_imputation(
 _register_analysis(
     name="imputation",
     analysis=Analysis(
-        description="Imputes expression data", function=compute_imputation,
+        description="Imputes expression data", function=compute_imputation
     ),
 )

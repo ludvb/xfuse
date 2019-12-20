@@ -18,7 +18,7 @@ __all__ = ["reduce_last_dimension", "visualize_factors"]
 
 
 def visualize_factors(
-    method: str = "pca", num_training_samples: Optional[int] = None,
+    method: str = "pca", num_training_samples: Optional[int] = None
 ) -> np.ndarray:
     r"""Creates visualizations of metagenes"""
     model = require("model")
@@ -41,7 +41,7 @@ def visualize_factors(
         )
         zero_label = torch.where(x["ST"]["data"][0].sum(1) == 0)[0] + 1
         mask = ~np.isin(
-            center_crop(x["ST"]["label"][0], activation.shape[:2]), zero_label,
+            center_crop(x["ST"]["label"][0], activation.shape[:2]), zero_label
         )
         return activation, mask
 
@@ -55,7 +55,7 @@ def visualize_factors(
                     for k, v in dataloader.dataset.data.slides.items()
                 },
                 design=dataloader.dataset.data.design,
-            ),
+            )
         ),
         batch_size=1,
     )
@@ -103,7 +103,7 @@ def visualize_factors(
 
     for activation, mask in zip(activations, masks):
         yield reduce_last_dimension(
-            x=activation, mask=mask, transformation=reduction.transform,
+            x=activation, mask=mask, transformation=reduction.transform
         )
 
 

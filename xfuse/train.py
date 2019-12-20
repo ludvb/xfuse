@@ -45,7 +45,7 @@ def train(epochs: int = -1):
                 e % 100 == 0 and (epochs < 0 or e <= epochs - 100)
             ),
             num_samples=3,
-        ),
+        )
     ]
 
     if get("save_path") is not None:

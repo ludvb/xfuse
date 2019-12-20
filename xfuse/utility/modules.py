@@ -14,9 +14,7 @@ class StateDict(NamedTuple):
 
 
 __MODULES: Dict[str, torch.nn.Module] = {}
-__STATE_DICT: StateDict = StateDict(
-    modules={}, params={},
-)
+__STATE_DICT: StateDict = StateDict(modules={}, params={})
 
 
 def get_module(

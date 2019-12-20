@@ -154,7 +154,7 @@ _convert.add_command(st)
 @click.command()
 @click.argument("target", type=click.Path(), default=f"{__package__}.toml")
 @click.argument(
-    "slides", type=click.Path(exists=True, dir_okay=False), nargs=-1,
+    "slides", type=click.Path(exists=True, dir_okay=False), nargs=-1
 )
 @_init
 def init(target, slides):

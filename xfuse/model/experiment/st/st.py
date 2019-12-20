@@ -130,7 +130,7 @@ class ST(Image):
     def _get_scale_decoder(self, in_channels):
         def _create_scale_decoder():
             decoder = torch.nn.Sequential(
-                torch.nn.Conv2d(in_channels, in_channels, kernel_size=1,),
+                torch.nn.Conv2d(in_channels, in_channels, kernel_size=1),
                 torch.nn.BatchNorm2d(in_channels),
                 torch.nn.LeakyReLU(0.2, inplace=True),
                 torch.nn.Conv2d(in_channels, 1, kernel_size=1),
@@ -147,7 +147,7 @@ class ST(Image):
     def _get_factor_decoder(self, in_channels, n):
         def _create_factor_decoder():
             decoder = torch.nn.Sequential(
-                torch.nn.Conv2d(in_channels, 1, kernel_size=1),
+                torch.nn.Conv2d(in_channels, 1, kernel_size=1)
             )
             torch.nn.init.constant_(decoder[-1].weight, 0.0)
             torch.nn.init.constant_(decoder[-1].bias, self.__factors[n][0])
@@ -378,7 +378,7 @@ class ST(Image):
             [
                 encode(_normalize(data, means, stdvs), label)
                 for data, means, stdvs, label in zip(
-                    x["data"], x["means"], x["stdvs"], x["label"],
+                    x["data"], x["means"], x["stdvs"], x["label"]
                 )
             ]
         )

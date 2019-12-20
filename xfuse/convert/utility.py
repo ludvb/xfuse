@@ -157,7 +157,7 @@ def write_data(
             counts.columns.values,
         )
         data_file.create_dataset(
-            "counts/index", counts.index.shape, int, counts.index.astype(int),
+            "counts/index", counts.index.shape, int, counts.index.astype(int)
         )
         data_file.create_dataset("image", image.shape, np.uint8, image)
         data_file.create_dataset("label", label.shape, np.int16, label)
