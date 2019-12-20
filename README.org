@@ -1,0 +1,15 @@
+#+TITLE: XFuse: Deep spatial data fusion
+
+[[https://github.com/ludvb/xfuse/actions?query=workflow%3Abuild][https://github.com/ludvb/xfuse/workflows/build/badge.svg]]
+
+* Installing
+
+  XFuse requires Python 3.7.
+  To install XFuse to your home directory, run
+  #+BEGIN_SRC sh
+    ./setup.py install --user
+  #+END_SRC
+
+* Usage
+
+  Coming soon!
