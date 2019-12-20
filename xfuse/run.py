@@ -91,7 +91,11 @@ def run(
 
     def _panic(_session, _err_type, _err, _tb):
         with Session(
-            dataloader=Unset, log_file=Unset, panic=Unset, pyro_stack=[],
+            dataloader=Unset,
+            default_device=Unset,
+            log_file=Unset,
+            panic=Unset,
+            pyro_stack=[],
         ):
             save_session(f"exception")
 
@@ -112,7 +116,11 @@ def run(
             with Session(factor_expansion_strategy=ExtraBaselines(0)):
                 purge_factors(xfuse, num_samples=10)
             with Session(
-                dataloader=Unset, log_file=Unset, panic=Unset, pyro_stack=[],
+                dataloader=Unset,
+                default_device=Unset,
+                log_file=Unset,
+                panic=Unset,
+                pyro_stack=[],
             ):
                 save_session(f"final")
 
