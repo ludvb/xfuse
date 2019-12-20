@@ -10,12 +10,12 @@ import pyro.distributions as distr
 import torch
 
 import pytest
-from hssl.convert.utility import write_data
-from hssl.data import Data, Dataset
-from hssl.data.slide import STSlide, FullSlide, Slide
-from hssl.data.utility.misc import make_dataloader
-from hssl.utility import design_matrix_from
-from hssl.utility.modules import reset_state
+from xfuse.convert.utility import write_data
+from xfuse.data import Data, Dataset
+from xfuse.data.slide import STSlide, FullSlide, Slide
+from xfuse.data.utility.misc import make_dataloader
+from xfuse.utility import design_matrix_from
+from xfuse.utility.modules import reset_state
 
 
 def pytest_configure(config):

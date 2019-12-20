@@ -4,8 +4,8 @@ import os
 
 import pytest
 
-from hssl.session import Session, Unset, get
-from hssl.utility.modules import get_state_dict, reset_state
+from xfuse.session import Session, Unset, get
+from xfuse.utility.modules import get_state_dict, reset_state
 
 
 @pytest.mark.parametrize(
@@ -19,7 +19,7 @@ def test_train_exit_status(shared_datadir, script_runner, tmp_path, test_case):
         f"--save-path={save_path}",
         str(shared_datadir / test_case),
     ]
-    ret = script_runner.run("hssl", *arguments)
+    ret = script_runner.run("xfuse", *arguments)
     assert ret.success
     assert "final.session" in os.listdir(save_path)
     assert "log" in os.listdir(save_path)
@@ -30,7 +30,7 @@ def test_restore_session(shared_datadir, script_runner, mocker, tmp_path):
     r"""Test session restore"""
 
     script_runner.run(
-        "hssl",
+        "xfuse",
         "run",
         f"--save-path={tmp_path}",
         str(shared_datadir / "test_restore_session.toml"),
@@ -56,10 +56,10 @@ def test_restore_session(shared_datadir, script_runner, mocker, tmp_path):
                 for param_name, param_value in state_dict.params.items()
             )
 
-    mocker.patch("hssl.__main__._run", _mock_run)
+    mocker.patch("xfuse.__main__._run", _mock_run)
 
     ret = script_runner.run(
-        "hssl",
+        "xfuse",
         "run",
         f"--save-path={tmp_path}",
         str(shared_datadir / "test_restore_session.toml"),

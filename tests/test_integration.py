@@ -4,17 +4,17 @@ import pyro.optim
 from torch.utils.tensorboard import SummaryWriter
 
 import pytest
-from hssl.handlers.stats import RMSE
-from hssl.model import XFuse
-from hssl.model.experiment.st import (
+from xfuse.handlers.stats import RMSE
+from xfuse.model import XFuse
+from xfuse.model.experiment.st import (
     ST,
     ExtraBaselines,
     FactorDefault,
     RetractAndSplit,
     purge_factors,
 )
-from hssl.session import Session, get
-from hssl.train import train
+from xfuse.session import Session, get
+from xfuse.train import train
 
 
 @pytest.mark.fix_rng

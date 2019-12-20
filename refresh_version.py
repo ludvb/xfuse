@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-r"""writes hssl/__version__ to correspond to the current git version"""
+r"""writes xfuse/__version__ to correspond to the current git version"""
 
 import os.path as osp
 import re
@@ -37,7 +37,9 @@ try:
 except (FileNotFoundError, sp.CalledProcessError):
     DIFF = ""
 
-with open(osp.join(osp.dirname(__file__), "hssl", "__version__.py"), "w") as f:
+with open(
+    osp.join(osp.dirname(__file__), "xfuse", "__version__.py"), "w"
+) as f:
     f.write(
         "".join(
             map(

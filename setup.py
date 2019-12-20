@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-r"""hssl setup script"""
+r"""xfuse setup script"""
 
 import os.path as osp
 from subprocess import run

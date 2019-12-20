@@ -174,7 +174,7 @@ cli.add_command(init)
 @click.option(
     "--save-path",
     type=click.Path(),
-    default=f"hssl-{dt.now().isoformat()}",
+    default=f"xfuse-{dt.now().isoformat()}",
     help="The output path",
     show_default=True,
 )
