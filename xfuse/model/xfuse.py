@@ -103,19 +103,27 @@ class XFuse(torch.nn.Module):
                 z_mu = get_module(
                     f"{name}-mu",
                     lambda: torch.nn.Sequential(
-                        torch.nn.Conv2d(y.shape[1], y.shape[1], 1),
+                        torch.nn.Conv2d(
+                            y.shape[1], y.shape[1], kernel_size=3, padding=1
+                        ),
                         torch.nn.BatchNorm2d(y.shape[1]),
                         torch.nn.LeakyReLU(0.2, inplace=True),
-                        torch.nn.Conv2d(y.shape[1], y.shape[1], 1),
+                        torch.nn.Conv2d(
+                            y.shape[1], y.shape[1], kernel_size=3, padding=1
+                        ),
                     ),
                 ).to(y)
                 z_sd = get_module(
                     f"{name}-sd",
                     lambda: torch.nn.Sequential(
-                        torch.nn.Conv2d(y.shape[1], y.shape[1], 1),
+                        torch.nn.Conv2d(
+                            y.shape[1], y.shape[1], kernel_size=3, padding=1
+                        ),
                         torch.nn.BatchNorm2d(y.shape[1]),
                         torch.nn.LeakyReLU(0.2, inplace=True),
-                        torch.nn.Conv2d(y.shape[1], y.shape[1], 1),
+                        torch.nn.Conv2d(
+                            y.shape[1], y.shape[1], kernel_size=3, padding=1
+                        ),
                         torch.nn.Softplus(),
                     ),
                 ).to(y)

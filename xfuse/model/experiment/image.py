@@ -39,6 +39,11 @@ class Image(Experiment):
                     ),
                     torch.nn.BatchNorm2d(y.shape[1]),
                     torch.nn.LeakyReLU(0.2, inplace=True),
+                    torch.nn.Conv2d(
+                        y.shape[1], y.shape[1], kernel_size=3, padding=1
+                    ),
+                    torch.nn.BatchNorm2d(y.shape[1]),
+                    torch.nn.LeakyReLU(0.2, inplace=True),
                 ),
             ).to(y)
             return decoder(y)
@@ -78,29 +83,6 @@ class Image(Experiment):
         for i, z in zip(reversed(range(1, self.depth)), zs[::-1][1:]):
             y = _decode(_combine(_upsample(y, i), z, i), i)
 
-        postdecoder = get_module(
-            "postdecoder",
-            lambda: torch.nn.Sequential(
-                torch.nn.Conv2d(
-                    self.num_channels,
-                    self.num_channels,
-                    kernel_size=3,
-                    padding=1,
-                ),
-                torch.nn.BatchNorm2d(self.num_channels),
-                torch.nn.LeakyReLU(0.2, inplace=True),
-                torch.nn.Conv2d(
-                    self.num_channels,
-                    self.num_channels,
-                    kernel_size=3,
-                    padding=1,
-                ),
-                torch.nn.BatchNorm2d(self.num_channels),
-                torch.nn.LeakyReLU(0.2, inplace=True),
-            ).to(y),
-        ).to(y)
-        y = postdecoder(y)
-
         return y
 
     def _encode(self, x):
@@ -127,7 +109,11 @@ class Image(Experiment):
                 f"downsampler-{i}",
                 lambda: torch.nn.Sequential(
                     torch.nn.Conv2d(
-                        x.shape[1], 2 * x.shape[1], kernel_size=2, stride=2
+                        x.shape[1],
+                        2 * x.shape[1],
+                        kernel_size=4,
+                        stride=2,
+                        padding=1,
                     ),
                     torch.nn.BatchNorm2d(2 * x.shape[1]),
                     torch.nn.LeakyReLU(0.2, inplace=True),
