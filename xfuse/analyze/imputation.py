@@ -66,7 +66,11 @@ def _impute(
 
     model_ = model.model
     if normalize_scale:
-        model_ = pyro.poutine.condition(model_, {"scale": torch.tensor(1.0)},)
+        model_ = pyro.poutine.condition(
+            model_,
+            # pylint: disable=not-callable
+            {"scale": torch.tensor(1.0)},
+        )
 
     with pyro.poutine.replay(trace=guide_trace.trace):
         with pyro.poutine.trace() as model_trace:

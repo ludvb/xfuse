@@ -9,7 +9,7 @@ from ..session import get
 
 class StateDict(NamedTuple):
     r"""Data structure for the states of modules and non-module parameters"""
-    modules: Dict[str, OrderedDict[str, torch.Tensor]]
+    modules: Dict[str, OrderedDict[str, torch.Tensor]]  # type: ignore
     params: Dict[str, torch.Tensor]
 
 
