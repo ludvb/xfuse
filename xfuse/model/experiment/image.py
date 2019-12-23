@@ -56,7 +56,9 @@ class Image(Experiment):
         def _upsample(y, i):
             upsampler = get_module(
                 f"upsampler-{i}",
-                lambda: torch.nn.Sequential(torch.nn.Upsample(scale_factor=2)),
+                lambda: torch.nn.Sequential(
+                    torch.nn.Upsample(scale_factor=2),
+                ),
             ).to(y)
             return upsampler(y)
 
