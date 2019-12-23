@@ -82,7 +82,7 @@ def run(
 
     optimizer = get("optimizer")
     if optimizer is None:
-        optimizer = pyro.optim.ClippedAdam({"lr": learning_rate})
+        optimizer = pyro.optim.Adam({"lr": learning_rate})
 
     def _panic(_session, _err_type, _err, _tb):
         with Session(
