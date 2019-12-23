@@ -57,19 +57,21 @@ class Image(Experiment):
                     torch.nn.LeakyReLU(0.2, inplace=True),
                 ),
             ).to(y)
-            z = center_crop(z, [None, None, *y.shape[-2:]])
+            y = center_crop(y, [None, None, *z.shape[-2:]])
             return combiner(torch.cat([y, z], 1))
 
         def _upsample(y, i):
             upsampler = get_module(
                 f"upsampler-{i}",
                 lambda: torch.nn.Sequential(
+                    torch.nn.Upsample(
+                        scale_factor=2.0, mode="bilinear", align_corners=False
+                    ),
                     torch.nn.Conv2d(
-                        y.shape[1], y.shape[1] // 2, kernel_size=3, padding=1
+                        y.shape[1], y.shape[1] // 2, kernel_size=5, padding=2
                     ),
                     torch.nn.BatchNorm2d(y.shape[1] // 2),
                     torch.nn.LeakyReLU(0.2, inplace=True),
-                    torch.nn.Upsample(scale_factor=2),
                 ),
             ).to(y)
             return upsampler(y)
@@ -77,29 +79,6 @@ class Image(Experiment):
         y = _decode(zs[-1], self.depth)
         for i, z in zip(reversed(range(1, self.depth)), zs[::-1][1:]):
             y = _decode(_combine(_upsample(y, i), z, i), i)
-
-        postdecoder = get_module(
-            "postdecoder",
-            lambda: torch.nn.Sequential(
-                torch.nn.Conv2d(
-                    self.num_channels,
-                    self.num_channels,
-                    kernel_size=3,
-                    padding=1,
-                ),
-                torch.nn.BatchNorm2d(self.num_channels),
-                torch.nn.LeakyReLU(0.2, inplace=True),
-                torch.nn.Conv2d(
-                    self.num_channels,
-                    self.num_channels,
-                    kernel_size=3,
-                    padding=1,
-                ),
-                torch.nn.BatchNorm2d(self.num_channels),
-                torch.nn.LeakyReLU(0.2, inplace=True),
-            ).to(y),
-        ).to(y)
-        y = postdecoder(y)
 
         return y
 
@@ -127,7 +106,11 @@ class Image(Experiment):
                 f"downsampler-{i}",
                 lambda: torch.nn.Sequential(
                     torch.nn.Conv2d(
-                        x.shape[1], 2 * x.shape[1], kernel_size=2, stride=2
+                        x.shape[1],
+                        2 * x.shape[1],
+                        kernel_size=4,
+                        stride=2,
+                        padding=2,
                     ),
                     torch.nn.BatchNorm2d(2 * x.shape[1]),
                     torch.nn.LeakyReLU(0.2, inplace=True),
