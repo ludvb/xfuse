@@ -10,7 +10,7 @@ from ._config import _ANNOTATED_CONFIG as CONFIG  # type: ignore
 from .analyze import analyses as _analyses
 from .data import Data, Dataset
 from .data.slide import RandomSlide, Slide, STSlide
-from .data.utility.misc import make_dataloader, pixel_scale
+from .data.utility.misc import make_dataloader
 from .logging import INFO, WARNING, log
 from .model import XFuse
 from .model.experiment.st import ST as STExperiment
@@ -76,7 +76,6 @@ def run(
             depth=network_depth,
             num_channels=network_width,
             factors=[FactorDefault(0.0, None)],
-            default_scale=pixel_scale(dataset)["ST"],
             encode_expression=encode_expression,
         )
         xfuse = XFuse(experiments=[st_experiment]).to(get("default_device"))

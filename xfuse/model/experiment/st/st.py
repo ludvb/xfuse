@@ -15,6 +15,7 @@ from pyro.distributions import (  # pylint: disable=no-name-in-module
 )
 from scipy.ndimage.morphology import binary_fill_holes, distance_transform_edt
 
+from ....data.utility.misc import pixel_scale
 from ....logging import DEBUG, INFO, log
 from ....session import get, require
 from ....utility import center_crop, sparseonehot
@@ -44,7 +45,6 @@ class ST(Image):
         self,
         *args,
         factors: List[FactorDefault] = [],
-        default_scale: float = 1.0,
         encode_expression: bool = False,
         **kwargs,
     ):
@@ -55,7 +55,6 @@ class ST(Image):
         for factor in factors:
             self.add_factor(factor)
 
-        self.__default_scale = default_scale
         self.__encode_expression = encode_expression
 
     @property
@@ -128,7 +127,9 @@ class ST(Image):
                     del optim.optim_objs[param]
 
     def _get_scale_decoder(self, in_channels):
+        # pylint: disable=no-self-use
         def _create_scale_decoder():
+            dataset = require("dataloader").dataset
             decoder = torch.nn.Sequential(
                 torch.nn.Conv2d(in_channels, in_channels, kernel_size=1),
                 torch.nn.BatchNorm2d(in_channels),
@@ -138,7 +139,8 @@ class ST(Image):
             )
             torch.nn.init.constant_(decoder[-2].weight, 0.0)
             torch.nn.init.constant_(
-                decoder[-2].bias, np.log(np.exp(self.__default_scale) - 1)
+                decoder[-2].bias,
+                np.log(np.exp(pixel_scale(dataset)["ST"]) - 1),
             )
             return decoder
 
