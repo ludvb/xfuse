@@ -135,7 +135,7 @@ class ST(Image):
                 torch.nn.Conv2d(in_channels, in_channels, kernel_size=1),
                 torch.nn.BatchNorm2d(in_channels),
                 torch.nn.LeakyReLU(0.2, inplace=True),
-                torch.nn.Conv2d(in_channels, 1, 1),
+                torch.nn.Conv2d(in_channels, 1, kernel_size=3, padding=1),
                 torch.nn.Softplus(),
             )
             torch.nn.init.constant_(decoder[-2].weight, 0.0)
@@ -160,7 +160,9 @@ class ST(Image):
             get_module(
                 "factor_shared",
                 lambda: torch.nn.Sequential(
-                    torch.nn.Conv2d(in_channels, in_channels, 1),
+                    torch.nn.Conv2d(
+                        in_channels, in_channels, kernel_size=3, padding=1
+                    ),
                     torch.nn.BatchNorm2d(in_channels),
                     torch.nn.LeakyReLU(0.2, inplace=True),
                 ),
