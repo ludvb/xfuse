@@ -10,23 +10,21 @@ from ...session import get
 from ...utility import center_crop
 from ..dataset import Dataset
 
-__all__ = ["make_dataloader", "pixel_scale"]
+__all__ = ["make_dataloader", "spot_size"]
 
 
-def pixel_scale(dataset: Dataset) -> Dict[str, float]:
-    r"""Computes the mean count per gene and pixel in the :class:`Dataset`"""
+def spot_size(dataset: Dataset) -> Dict[str, float]:
+    r"""Computes the mean spot size in the :class:`Dataset`"""
 
-    def _compute_scale(x):
+    def _compute_size(x):
         if x["type"] == "ST":
-            spot_size = np.bincount(x["label"].flatten().cpu().numpy())[1:]
-            mean_counts = x["data"].mean(1).cpu().numpy()
-            return (mean_counts / spot_size).mean()
+            return np.bincount(x["label"].flatten().cpu().numpy())[1:]
         raise NotImplementedError()
 
     return {
-        k: np.mean([v[1] for v in vs])
+        k: np.concatenate([v[1] for v in vs]).mean()
         for k, vs in it.groupby(
-            [(x["type"], _compute_scale(x)) for x in dataset],
+            [(x["type"], _compute_size(x)) for x in dataset],
             key=lambda x: x[0],
         )
     }

@@ -14,8 +14,9 @@ from pyro.distributions import (  # pylint: disable=no-name-in-module
     Normal,
 )
 from scipy.ndimage.morphology import binary_fill_holes, distance_transform_edt
+from scipy.sparse import vstack
 
-from ....data.utility.misc import pixel_scale
+from ....data.utility.misc import spot_size
 from ....logging import DEBUG, INFO, log
 from ....session import get, require
 from ....utility import center_crop, sparseonehot
@@ -140,7 +141,7 @@ class ST(Image):
             torch.nn.init.constant_(decoder[-2].weight, 0.0)
             torch.nn.init.constant_(
                 decoder[-2].bias,
-                np.log(np.exp(pixel_scale(dataset)["ST"]) - 1),
+                np.log(np.exp(1 / spot_size(dataset)["ST"]) - 1),
             )
             return decoder
 
@@ -393,43 +394,81 @@ class ST(Image):
         device = get("default_device")
         num_genes = len(dataset.genes)
 
-        def _sample_baseline(name):
-            a = p.sample(
-                f"{name}-baseline",
-                Delta(
-                    get_param(
-                        f"{name}-baseline-value",
-                        lambda: torch.zeros(num_genes),
-                    )
-                ),
-            ).to(device)
-            b = p.sample(
-                f"{name}-covariate",
-                Normal(
-                    get_param(
-                        f"{name}-covariate_mu",
-                        lambda: torch.zeros(
-                            dataset.data.design.shape[0], num_genes
-                        ),
-                    ).to(device),
-                    1e-8
-                    + get_param(
-                        f"{name}-covariate_sd",
-                        lambda: 1e-2
-                        * torch.ones(dataset.data.design.shape[0], num_genes),
-                        constraint=constraints.positive,
-                    ).to(device),
-                ),
-            ).to(device)
-            p.sample(
-                name,
-                Delta(torch.cat([a.unsqueeze(0), b])),
-                infer={"is_global": True},
+        # Sample rate coefficients
+        def _init_gene_baselines():
+            data = vstack(
+                [slide.data.counts for slide in dataset.data.slides.values()]
             )
+            return torch.as_tensor(data.mean(0)).float().squeeze().log()
 
-        for name in ("rate_g_effects", "logits_g_effects"):
-            _sample_baseline(name)
+        a = p.sample(
+            f"rate_g_effects-baseline",
+            Delta(
+                get_param(
+                    f"rate_g_effects-baseline-value", _init_gene_baselines
+                )
+            ),
+        ).to(device)
+        b = p.sample(
+            f"rate_g_effects-covariate",
+            Normal(
+                get_param(
+                    f"rate_g_effects-covariate_mu",
+                    lambda: torch.zeros(
+                        dataset.data.design.shape[0], num_genes
+                    ),
+                ).to(device),
+                1e-8
+                + get_param(
+                    f"rate_g_effects-covariate_sd",
+                    lambda: 1e-2
+                    * torch.ones(dataset.data.design.shape[0], num_genes),
+                    constraint=constraints.positive,
+                ).to(device),
+            ),
+        ).to(device)
+        p.sample(
+            "rate_g_effects",
+            Delta(torch.cat([a.unsqueeze(0), b])),
+            infer={"is_global": True},
+        )
 
+        # Sample logits coefficients
+        a = p.sample(
+            f"logits_g_effects-baseline",
+            Delta(
+                get_param(
+                    f"logits_g_effects-baseline-value",
+                    # pylint: disable=unnecessary-lambda
+                    lambda: (0.5 * torch.ones(num_genes)).log(),
+                )
+            ),
+        ).to(device)
+        b = p.sample(
+            f"logits_g_effects-covariate",
+            Normal(
+                get_param(
+                    f"logits_g_effects-covariate_mu",
+                    lambda: torch.zeros(
+                        dataset.data.design.shape[0], num_genes
+                    ),
+                ).to(device),
+                1e-8
+                + get_param(
+                    f"logits_g_effects-covariate_sd",
+                    lambda: 1e-2
+                    * torch.ones(dataset.data.design.shape[0], num_genes),
+                    constraint=constraints.positive,
+                ).to(device),
+            ),
+        ).to(device)
+        p.sample(
+            "logits_g_effects",
+            Delta(torch.cat([a.unsqueeze(0), b])),
+            infer={"is_global": True},
+        )
+
+        # Sample factor profiles
         def _sample_factor(factor, name):
             p.sample(
                 _encode_factor_name(name),
