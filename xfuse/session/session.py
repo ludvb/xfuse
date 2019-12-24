@@ -56,7 +56,7 @@ class Session:
                 )
                 log(ERROR, "session panic! %s", str(err))
                 panic_handler = get("panic")
-                if panic_handler is not Unset:
+                if not isinstance(panic_handler, Unset):
                     panic_handler(get_session(), err_type, err, tb)
         else:
             for session in _SESSION_STACK:

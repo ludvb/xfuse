@@ -38,7 +38,7 @@ def test_restore_session(shared_datadir, script_runner, mocker, tmp_path):
     reset_state()
 
     def _mock_run(*_args, **_kwargs):
-        with Session(panic=Unset):
+        with Session(panic=Unset()):
             assert get("training_data").step > 1
             new_state_dict = get_state_dict()
             assert all(

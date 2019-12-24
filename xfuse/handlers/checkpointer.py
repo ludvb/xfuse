@@ -24,10 +24,10 @@ class Checkpointer(Messenger):
         epoch = msg["kwargs"]["epoch"]
         if epoch % self._period == 0:
             with Session(
-                dataloader=Unset,
-                default_device=Unset,
-                log_file=Unset,
-                panic=Unset,
+                dataloader=Unset(),
+                default_device=Unset(),
+                log_file=Unset(),
+                panic=Unset(),
                 pyro_stack=[],
             ):
                 save_session(os.path.join("checkpoints", f"epoch-{epoch:08d}"))

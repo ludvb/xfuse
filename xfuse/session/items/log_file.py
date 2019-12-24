@@ -1,6 +1,6 @@
 import os
 from logging import StreamHandler
-from typing import Optional, Type, Union
+from typing import Optional, Union
 
 from ...logging import DEBUG, LOGGER, Formatter, log
 from .. import SessionItem, Unset, register_session_item
@@ -9,7 +9,7 @@ _LOG_HANDLER = None
 _FILE_STREAM = None
 
 
-def _setter(path: Optional[Union[str, Type[Unset]]]):
+def _setter(path: Optional[Union[str, Unset]]):
     # pylint: disable=global-statement
     global _FILE_STREAM, _LOG_HANDLER
     if _LOG_HANDLER is not None:
