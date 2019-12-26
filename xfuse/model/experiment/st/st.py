@@ -7,7 +7,7 @@ import numpy as np
 import pyro as p
 import torch
 import torch.distributions.constraints as constraints
-from batchrenorm import BatchRenorm2d
+from actnorm import ActNorm2d
 from pyro.contrib.autoname import scope
 from pyro.distributions import (  # pylint: disable=no-name-in-module
     Delta,
@@ -134,7 +134,7 @@ class ST(Image):
             dataset = require("dataloader").dataset
             decoder = torch.nn.Sequential(
                 torch.nn.Conv2d(in_channels, in_channels, kernel_size=1),
-                BatchRenorm2d(in_channels),
+                ActNorm2d(in_channels),
                 torch.nn.LeakyReLU(0.2, inplace=True),
                 torch.nn.Conv2d(in_channels, 1, kernel_size=1),
                 torch.nn.Softplus(),
@@ -162,7 +162,7 @@ class ST(Image):
                 "factor_shared",
                 lambda: torch.nn.Sequential(
                     torch.nn.Conv2d(in_channels, in_channels, kernel_size=1),
-                    BatchRenorm2d(in_channels),
+                    ActNorm2d(in_channels),
                     torch.nn.LeakyReLU(0.2, inplace=True),
                 ),
             ),
