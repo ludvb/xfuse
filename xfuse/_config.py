@@ -54,6 +54,13 @@ _ANNOTATED_CONFIG = OrderedDict(
                             ),
                         ),
                         (
+                            "min_counts",
+                            Item(
+                                value=1,
+                                comment="Exclude all genes with fewer reads than this value.",
+                            ),
+                        ),
+                        (
                             "version",
                             Item(
                                 value=__version__,

@@ -35,6 +35,7 @@ def run(
     network_width: int = CONFIG["xfuse"].value["network_width"].value,
     encode_expression: bool = CONFIG["xfuse"].value["encode_expression"].value,
     genes: List[str] = CONFIG["xfuse"].value["genes"].value,
+    min_counts: int = CONFIG["xfuse"].value["min_counts"].value,
     patch_size: int = CONFIG["optimization"].value["patch_size"].value,
     batch_size: int = CONFIG["optimization"].value["batch_size"].value,
     epochs: int = CONFIG["optimization"].value["epochs"].value,
@@ -67,6 +68,7 @@ def run(
         data=Data(slides=slides, design=design),
         genes=genes if genes != [] else None,
         unify_genes=True,
+        min_counts=min_counts,
     )
     dataloader = make_dataloader(dataset, batch_size=batch_size, shuffle=True)
 
