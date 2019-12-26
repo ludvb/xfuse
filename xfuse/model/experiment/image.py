@@ -77,8 +77,8 @@ class Image(Experiment):
             ).to(y)
             return upsampler(y)
 
-        y = _decode(zs[-1], self.depth)
-        for i, z in zip(reversed(range(1, self.depth)), zs[::-1][1:]):
+        y = _decode(zs[-1], self.depth - 1)
+        for i, z in zip(reversed(range(self.depth - 1)), zs[::-1][1:]):
             y = _decode(_combine(_upsample(y, i), z, i), i)
 
         return y
@@ -131,7 +131,7 @@ class Image(Experiment):
         ).to(x)
 
         ys = [_encode(preencoder(x), 0)]
-        for i in range(1, self.depth + 1):
+        for i in range(1, self.depth):
             ys.append(_encode(_downsample(ys[-1], i), i))
 
         return ys
