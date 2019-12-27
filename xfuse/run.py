@@ -97,7 +97,7 @@ def run(
         optimizer = pyro.optim.LambdaLR(
             {
                 "optimizer": torch.optim.Adam,
-                "optim_args": {"lr": learning_rate},
+                "optim_args": {"lr": learning_rate, "amsgrad": True},
                 "lr_lambda": __OptimizerStep(warmup_epochs),
             }
         )
