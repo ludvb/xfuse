@@ -84,6 +84,8 @@ def train(epochs: int = -1):
 
     @effectful(type="epoch")
     def _epoch(*, epoch):
+        if isinstance(optim, pyro.optim.PyroLRScheduler):
+            optim.step(epoch=epoch)
         progress = tqdm(dataloader, position=0, dynamic_ncols=True)
         elbo = []
         for x in progress:

@@ -262,6 +262,7 @@ def run(project_file, save_path, session):
             batch_size=config["optimization"]["batch_size"],
             epochs=config["optimization"]["epochs"],
             learning_rate=config["optimization"]["learning_rate"],
+            warmup_epochs=config["optimization"]["warmup_epochs"],
             slide_options=slide_options,
         )
 

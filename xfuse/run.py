@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional
 import h5py
 import pandas as pd
 import pyro
+import torch
 
 from ._config import _ANNOTATED_CONFIG as CONFIG  # type: ignore
 from .analyze import analyses as _analyses
@@ -25,6 +26,14 @@ from .utility.file import first_unique_filename
 from .utility.session import save_session
 
 
+class __OptimizerStep:  # pylint: disable=invalid-name
+    def __init__(self, warmup_epochs: int):
+        self.warmup_epochs = warmup_epochs
+
+    def __call__(self, epoch):
+        return min(1.0, epoch / self.warmup_epochs)
+
+
 def run(
     design: pd.DataFrame,
     analyses: Dict[str, Dict[str, Any]] = None,
@@ -40,6 +49,7 @@ def run(
     batch_size: int = CONFIG["optimization"].value["batch_size"].value,
     epochs: int = CONFIG["optimization"].value["epochs"].value,
     learning_rate: float = CONFIG["optimization"].value["learning_rate"].value,
+    warmup_epochs: int = CONFIG["optimization"].value["warmup_epochs"].value,
     slide_options: Optional[Dict[str, Any]] = None,
 ):
     r"""Runs an analysis"""
@@ -84,7 +94,13 @@ def run(
 
     optimizer = get("optimizer")
     if optimizer is None:
-        optimizer = pyro.optim.Adam({"lr": learning_rate})
+        optimizer = pyro.optim.LambdaLR(
+            {
+                "optimizer": torch.optim.Adam,
+                "optim_args": {"lr": learning_rate},
+                "lr_lambda": __OptimizerStep(warmup_epochs),
+            }
+        )
 
     def _panic(_session, _err_type, _err, _tb):
         with Session(

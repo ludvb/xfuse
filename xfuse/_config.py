@@ -126,6 +126,7 @@ _ANNOTATED_CONFIG = OrderedDict(
                         ("batch_size", Item(value=4)),
                         ("epochs", Item(value=-1)),
                         ("learning_rate", Item(value=1e-4)),
+                        ("warmup_epochs", Item(value=1000)),
                         (
                             "patch_size",
                             Item(
