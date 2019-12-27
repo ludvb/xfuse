@@ -40,7 +40,12 @@ def save_session(filename_prefix: str) -> None:
         return True
 
     session = Session(
-        **{k: v for k, v in iter(get_session()) if _can_pickle(k, v)}
+        **{
+            k: v
+            for k, v in iter(get_session())
+            if v is not None
+            if _can_pickle(k, v)
+        }
     )
 
     log(INFO, "saving session to %s", path)

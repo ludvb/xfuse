@@ -20,7 +20,7 @@ from .model.experiment.st.factor_expansion_strategy import (
     ExpansionStrategy,
 )
 from .model.experiment.st import ExtraBaselines, FactorDefault, purge_factors
-from .session import Session, Unset, get, require
+from .session import Session, get, require
 from .train import test_convergence, train
 from .utility.file import first_unique_filename
 from .utility.session import save_session
@@ -104,10 +104,10 @@ def run(
 
     def _panic(_session, _err_type, _err, _tb):
         with Session(
-            dataloader=Unset(),
-            default_device=Unset(),
-            log_file=Unset(),
-            panic=Unset(),
+            dataloader=None,
+            default_device=None,
+            log_file=None,
+            panic=None,
             pyro_stack=[],
         ):
             save_session(f"exception")
@@ -129,10 +129,10 @@ def run(
             with Session(factor_expansion_strategy=ExtraBaselines(0)):
                 purge_factors(xfuse, num_samples=10)
             with Session(
-                dataloader=Unset(),
-                default_device=Unset(),
-                log_file=Unset(),
-                panic=Unset(),
+                dataloader=None,
+                default_device=None,
+                log_file=None,
+                panic=None,
                 pyro_stack=[],
             ):
                 save_session(f"final")

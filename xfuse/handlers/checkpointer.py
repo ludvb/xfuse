@@ -3,7 +3,7 @@ from typing import Optional
 
 from pyro.poutine.messenger import Messenger
 
-from ..session import Session, Unset
+from ..session import Session
 from ..utility.session import save_session
 from . import Noop
 
@@ -24,10 +24,10 @@ class Checkpointer(Messenger):
         epoch = msg["kwargs"]["epoch"]
         if epoch % self._period == 0:
             with Session(
-                dataloader=Unset(),
-                default_device=Unset(),
-                log_file=Unset(),
-                panic=Unset(),
+                dataloader=None,
+                default_device=None,
+                log_file=None,
+                panic=None,
                 pyro_stack=[],
             ):
                 save_session(os.path.join("checkpoints", f"epoch-{epoch:08d}"))
