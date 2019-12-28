@@ -1,0 +1,27 @@
+default_language_version:
+  python: python3.7
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v2.4.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+
+  - repo: https://github.com/psf/black
+    rev: 19.3b0
+    hooks:
+      - id: black
+
+  - repo: local
+    hooks:
+      - id: sync-version
+        name: sync-version
+        stages: [commit]
+        entry: ./scripts/sync_version.py
+        language: python
+        files: pyproject.toml
+        additional_dependencies:
+          - tomlkit ~= 0.5.8

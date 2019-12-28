@@ -1,18 +1,32 @@
 name: build
 
-on: [push]
+on: [push, pull_request]
 jobs:
-  build:
+  linting:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v1
-    - name: Set up Python 3.7
-      uses: actions/setup-python@v1
-      with:
-        python-version: 3.7
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install .
-    - name: Run tests
-      run: ./setup.py test
+      - uses: actions/checkout@v1
+      - name: Set up Python 3.7
+        uses: actions/setup-python@v1
+        with:
+          python-version: 3.7
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install poetry==1.0.0
+          poetry install
+      - name: Linting
+        run: |
+          poetry run pre-commit run --all-files
+          poetry run mypy xfuse tests scripts
+          poetry run pylint xfuse tests scripts
+      - name: Testing
+        run: |
+          poetry run pytest --cov=./xfuse --cov-report=xml
+      - name: Upload coverage report
+        uses: codecov/codecov-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: ./coverage.xml
+          flags: unittests
+          fail_ci_if_error: true
