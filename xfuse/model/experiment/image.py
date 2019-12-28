@@ -1,6 +1,6 @@
 import pyro
 import torch
-from actnorm import ActNorm2d
+from batchrenorm import BatchRenorm2d
 from pyro.distributions import Normal  # pylint: disable=no-name-in-module
 
 from ...utility import center_crop
@@ -33,12 +33,12 @@ class Image(Experiment):
                     torch.nn.Conv2d(
                         y.shape[1], y.shape[1], kernel_size=3, padding=1
                     ),
-                    ActNorm2d(y.shape[1]),
+                    BatchRenorm2d(y.shape[1]),
                     torch.nn.LeakyReLU(0.2, inplace=True),
                     torch.nn.Conv2d(
                         y.shape[1], y.shape[1], kernel_size=3, padding=1
                     ),
-                    ActNorm2d(y.shape[1]),
+                    BatchRenorm2d(y.shape[1]),
                     torch.nn.LeakyReLU(0.2, inplace=True),
                 ),
             ).to(y)
@@ -54,7 +54,7 @@ class Image(Experiment):
                         kernel_size=3,
                         padding=1,
                     ),
-                    ActNorm2d(z.shape[1]),
+                    BatchRenorm2d(z.shape[1]),
                     torch.nn.LeakyReLU(0.2, inplace=True),
                 ),
             ).to(y)
@@ -71,7 +71,7 @@ class Image(Experiment):
                     torch.nn.Conv2d(
                         y.shape[1], y.shape[1] // 2, kernel_size=5, padding=2
                     ),
-                    ActNorm2d(y.shape[1] // 2),
+                    BatchRenorm2d(y.shape[1] // 2),
                     torch.nn.LeakyReLU(0.2, inplace=True),
                 ),
             ).to(y)
@@ -91,12 +91,12 @@ class Image(Experiment):
                     torch.nn.Conv2d(
                         x.shape[1], x.shape[1], kernel_size=3, padding=1
                     ),
-                    ActNorm2d(x.shape[1]),
+                    BatchRenorm2d(x.shape[1]),
                     torch.nn.LeakyReLU(0.2, inplace=True),
                     torch.nn.Conv2d(
                         x.shape[1], x.shape[1], kernel_size=3, padding=1
                     ),
-                    ActNorm2d(x.shape[1]),
+                    BatchRenorm2d(x.shape[1]),
                     torch.nn.LeakyReLU(0.2, inplace=True),
                 ).to(x),
             ).to(x)
@@ -113,7 +113,7 @@ class Image(Experiment):
                         stride=2,
                         padding=2,
                     ),
-                    ActNorm2d(2 * x.shape[1]),
+                    BatchRenorm2d(2 * x.shape[1]),
                     torch.nn.LeakyReLU(0.2, inplace=True),
                 ).to(x),
             ).to(x)
@@ -125,7 +125,7 @@ class Image(Experiment):
                 torch.nn.Conv2d(
                     x.shape[1], self.num_channels, kernel_size=3, padding=1
                 ),
-                ActNorm2d(self.num_channels),
+                BatchRenorm2d(self.num_channels),
                 torch.nn.LeakyReLU(0.2, inplace=True),
             ).to(x),
         ).to(x)
@@ -142,7 +142,7 @@ class Image(Experiment):
                 torch.nn.Conv2d(
                     self.num_channels, self.num_channels, kernel_size=1
                 ),
-                ActNorm2d(self.num_channels),
+                BatchRenorm2d(self.num_channels),
                 torch.nn.LeakyReLU(0.2, inplace=True),
                 torch.nn.Conv2d(
                     self.num_channels, x["image"].shape[1], kernel_size=1
@@ -159,7 +159,7 @@ class Image(Experiment):
                 torch.nn.Conv2d(
                     self.num_channels, self.num_channels, kernel_size=1
                 ),
-                ActNorm2d(self.num_channels),
+                BatchRenorm2d(self.num_channels),
                 torch.nn.LeakyReLU(0.2, inplace=True),
                 torch.nn.Conv2d(
                     self.num_channels, x["image"].shape[1], kernel_size=1
