@@ -137,9 +137,8 @@ class Image(Experiment):
         return ys
 
     def _sample_image(self, x, decoded):
-        img_mu = get_module(
-            "img_mu",
-            lambda: torch.nn.Sequential(
+        def _create_mu_decoder():
+            decoder = torch.nn.Sequential(
                 torch.nn.Conv2d(
                     self.num_channels, self.num_channels, kernel_size=1
                 ),
@@ -149,11 +148,14 @@ class Image(Experiment):
                     self.num_channels, x["image"].shape[1], kernel_size=1
                 ),
                 torch.nn.Tanh(),
-            ),
-        ).to(decoded)
-        img_sd = get_module(
-            "img_sd",
-            lambda: torch.nn.Sequential(
+            ).to(decoded)
+            torch.nn.init.constant_(decoder[-2].weight, 0.0)
+            mean = x["image"].mean((0, 2, 3))
+            decoder[-2].bias.data = ((1 + mean) / (1 - mean)).log() / 2
+            return decoder
+
+        def _create_sd_decoder():
+            decoder = torch.nn.Sequential(
                 torch.nn.Conv2d(
                     self.num_channels, self.num_channels, kernel_size=1
                 ),
@@ -163,8 +165,14 @@ class Image(Experiment):
                     self.num_channels, x["image"].shape[1], kernel_size=1
                 ),
                 torch.nn.Softplus(),
-            ),
-        ).to(decoded)
+            )
+            torch.nn.init.constant_(decoder[-2].weight, 0.0)
+            std = x["image"].std((0, 2, 3))
+            decoder[-2].bias.data = (std.exp() - 1).log()
+            return decoder
+
+        img_mu = get_module("img_mu", _create_mu_decoder).to(decoded)
+        img_sd = get_module("img_sd", _create_sd_decoder).to(decoded)
         mu = img_mu(decoded)
         sd = img_sd(decoded)
 
