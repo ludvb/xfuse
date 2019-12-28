@@ -15,11 +15,15 @@ from .data.utility.misc import make_dataloader
 from .logging import INFO, WARNING, log
 from .model import XFuse
 from .model.experiment.st import ST as STExperiment
-from .model.experiment.st.factor_expansion_strategy import (
+from .model.experiment.st.metagene_expansion_strategy import (
     STRATEGIES,
     ExpansionStrategy,
 )
-from .model.experiment.st import ExtraBaselines, FactorDefault, purge_factors
+from .model.experiment.st import (
+    ExtraBaselines,
+    MetageneDefault,
+    purge_metagenes,
+)
 from .session import Session, get, require
 from .train import test_convergence, train
 from .utility.file import first_unique_filename
@@ -87,7 +91,7 @@ def run(
         st_experiment = STExperiment(
             depth=network_depth,
             num_channels=network_width,
-            factors=[FactorDefault(0.0, None)],
+            metagenes=[MetageneDefault(0.0, None)],
             encode_expression=encode_expression,
         )
         xfuse = XFuse(experiments=[st_experiment]).to(get("default_device"))
@@ -114,7 +118,7 @@ def run(
 
     with Session(
         model=xfuse,
-        factor_expansion_strategy=expansion_strategy,
+        metagene_expansion_strategy=expansion_strategy,
         optimizer=optimizer,
         dataloader=dataloader,
         panic=_panic,
@@ -126,8 +130,8 @@ def run(
         )
         if not has_converged:
             train(epochs)
-            with Session(factor_expansion_strategy=ExtraBaselines(0)):
-                purge_factors(xfuse, num_samples=10)
+            with Session(metagene_expansion_strategy=ExtraBaselines(0)):
+                purge_metagenes(xfuse, num_samples=10)
             with Session(
                 dataloader=None,
                 default_device=None,

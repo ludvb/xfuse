@@ -6,21 +6,21 @@ import torch
 from ...logging import WARNING, log
 from ...model.experiment.st import ST
 from ...session import require
-from ...utility.visualization import reduce_last_dimension, visualize_factors
+from ...utility.visualization import reduce_last_dimension, visualize_metagenes
 from .. import Noop
 from .stats_handler import StatsHandler
 
 __all__ = [
-    "FactorActivationHistogram",
-    "FactorActivationMaps",
-    "FactorActivationMean",
-    "FactorActivationSummary",
-    "FactorActivationFullSummary",
+    "MetageneHistogram",
+    "MetageneMaps",
+    "MetageneMean",
+    "MetageneSummary",
+    "MetageneFullSummary",
 ]
 
 
-class FactorActivation(StatsHandler):
-    r"""Abstract class for factor activation trackers"""
+class Metagene(StatsHandler):
+    r"""Abstract class for metagene trackers"""
 
     _experiment: ST
 
@@ -44,57 +44,49 @@ class FactorActivation(StatsHandler):
         return type == "sample" and name[-3:] == "rim"
 
     @abstractmethod
-    def _handle_factor_activation(self, name, activation):
+    def _handle_metagene(self, name, metagene):
         pass
 
     def _handle(self, fn, **_):
         # pylint: disable=arguments-differ
-        for name, factor in zip(
-            self._experiment.factors, fn.mean.permute(1, 0, 2, 3)
+        for name, metagene in zip(
+            self._experiment.metagenes, fn.mean.permute(1, 0, 2, 3)
         ):
-            self._handle_factor_activation(name, factor)
+            self._handle_metagene(name, metagene)
 
 
-class FactorActivationHistogram(FactorActivation):
-    r"""
-    Factor activation tracker, summarizing factor activities in a histogram
-    """
+class MetageneHistogram(Metagene):
+    r"""Summarizes the spatial activation of each metagene in a histogram"""
 
-    def _handle_factor_activation(self, name, activation):
+    def _handle_metagene(self, name, metagene):
         # pylint: disable=no-member
-        self.add_histogram(f"activation/factor{name}", activation.flatten())
+        self.add_histogram(
+            f"metagenes/histogram/metagene-{name}", metagene.flatten()
+        )
 
 
-class FactorActivationMaps(FactorActivation):
-    r"""
-    Factor activation tracker, summarizing factor activities in spatial
-    activation maps
-    """
+class MetageneMaps(Metagene):
+    r"""Plots the spatial activation of each metagene"""
 
-    def _handle_factor_activation(self, name, activation):
+    def _handle_metagene(self, name, metagene):
         # pylint: disable=no-member
         self.add_images(
-            f"activation/maps/factor{name}",
-            activation.unsqueeze(1),
+            f"metagenes/maps/metagene-{name}",
+            metagene.unsqueeze(1),
             dataformats="NCHW",
         )
 
 
-class FactorActivationMean(FactorActivation):
-    r"""
-    Factor activation tracker, summarizing factor activity means
-    """
+class MetageneMean(Metagene):
+    r"""Summarizes the mean spatial activation of each metagene"""
 
-    def _handle_factor_activation(self, name, activation):
+    def _handle_metagene(self, name, metagene):
         # pylint: disable=no-member
-        self.add_scalar(f"activation/mean/factor{name}", activation.mean())
+        self.add_scalar(f"metagenes/mean/metagene-{name}", metagene.mean())
 
 
-class FactorActivationSummary(StatsHandler):
-    r"""
-    Factor activation tracker, summarizing factor activities in a spatial
-    activation map
-    """
+class MetageneSummary(StatsHandler):
+    r"""Plots summarized spatial activations of all metagenes"""
 
     def _select_msg(self, type, name, value, **msg):
         # pylint: disable=arguments-differ
@@ -111,7 +103,7 @@ class FactorActivationSummary(StatsHandler):
         # pylint: disable=no-member
         try:
             self.add_images(
-                "activation-summary/training-batch",
+                "metagenes/summary/training-batch",
                 reduce_last_dimension(fn.mean.permute(0, 2, 3, 1)),
                 dataformats="NHWC",
             )
@@ -119,11 +111,8 @@ class FactorActivationSummary(StatsHandler):
             pass
 
 
-class FactorActivationFullSummary(StatsHandler):
-    r"""
-    Factor activation tracker, summarizing factor activities in a spatial
-    activation map
-    """
+class MetageneFullSummary(StatsHandler):
+    r"""Plots summarized spatial activations of all metagenes in each sample"""
 
     def _select_msg(self, type, **_):
         # pylint: disable=arguments-differ
@@ -133,11 +122,11 @@ class FactorActivationFullSummary(StatsHandler):
     def _handle(self, **msg):
         try:
             with pyro.poutine.block():
-                for i, factor_activation in enumerate(visualize_factors()):
+                for i, metagene in enumerate(visualize_metagenes()):
                     # pylint: disable=no-member
                     self.add_image(
-                        f"activation-summary/sample{i}",
-                        torch.as_tensor(factor_activation),
+                        f"metagenes/summary/sample-{i}",
+                        torch.as_tensor(metagene),
                         dataformats="HWC",
                     )
         except ValueError:

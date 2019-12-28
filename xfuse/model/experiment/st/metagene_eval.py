@@ -14,26 +14,26 @@ from ...utility import compare
 from . import ST
 
 
-def purge_factors(xfuse: XFuse, num_samples: int = 1) -> None:
+def purge_metagenes(xfuse: XFuse, num_samples: int = 1) -> None:
     r"""
-    Purges superfluous factors and adds new ones based on the
-    `factor_expansion_strategy` of the current :class:`Session`
+    Purges superfluous metagenes and adds new ones based on the
+    `metagene_expansion_strategy` of the current :class:`Session`
     """
 
-    log(INFO, "evaluating factors")
+    log(INFO, "evaluating metagenes")
 
     def _xfuse_without(n):
         reduced_xfuse = deepcopy(xfuse)
-        reduced_xfuse.get_experiment("ST").remove_factor(
+        reduced_xfuse.get_experiment("ST").remove_metagene(
             n, remove_params=False
         )
         return reduced_xfuse
 
     with Session(log_level=WARNING):
         st_experiment = cast(ST, xfuse.get_experiment("ST"))
-        factors = st_experiment.factors
+        metagenes = st_experiment.metagenes
         reduced_models, ns = zip(
-            *[(_xfuse_without(n).model, n) for n in factors]
+            *[(_xfuse_without(n).model, n) for n in metagenes]
         )
 
         def _eval_on(x):
@@ -57,23 +57,23 @@ def purge_factors(xfuse: XFuse, num_samples: int = 1) -> None:
 
     log(
         INFO,
-        "contributing factors: %s",
+        "contributing metagenes: %s",
         ", ".join(contrib) if contrib != [] else "-",
     )
     log(
         INFO,
-        "non-contributing factors: %s",
+        "non-contributing metagenes: %s",
         ", ".join(noncontrib) if noncontrib != [] else "-",
     )
 
-    expand_factors = get("factor_expansion_strategy")
-    expand_factors(xfuse.get_experiment("ST"), contrib, noncontrib)
+    expand_metagenes = get("metagene_expansion_strategy")
+    expand_metagenes(xfuse.get_experiment("ST"), contrib, noncontrib)
 
 
-class FactorPurger(Messenger):
+class MetagenePurger(Messenger):
     r"""
-    Runs :func:`purge_factors` at a fixed interval to purge superfluous factors
-    or add new ones
+    Runs :func:`purge_metagenes` at a fixed interval to purge superfluous
+    metagenes or add new ones
     """
 
     _model: XFuse
@@ -115,4 +115,4 @@ class FactorPurger(Messenger):
     def _pyro_post_epoch(self, msg) -> None:
         if self._predicate(msg["kwargs"]["epoch"]):
             with Session(pyro_stack=[]):
-                purge_factors(self._model, **self._kwargs)
+                purge_metagenes(self._model, **self._kwargs)

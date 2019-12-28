@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from .handlers import Checkpointer, stats
 from .logging import DEBUG, log
-from .model.experiment.st import FactorPurger
+from .model.experiment.st import MetagenePurger
 from .session import get, require
 from .utility import to_device
 
@@ -40,7 +40,7 @@ def train(epochs: int = -1):
     training_data = get("training_data")
 
     messengers: List[Messenger] = [
-        FactorPurger(
+        MetagenePurger(
             period=lambda e: (
                 e % 100 == 0 and (epochs < 0 or e <= epochs - 100)
             ),
@@ -64,11 +64,11 @@ def train(epochs: int = -1):
         messengers.extend(
             [
                 stats.ELBO(writer, _every(1)),
-                stats.FactorActivationHistogram(writer, _every(10)),
-                stats.FactorActivationMaps(writer, _every(100)),
-                stats.FactorActivationMean(writer, _every(1)),
-                stats.FactorActivationSummary(writer, _every(100)),
-                stats.FactorActivationFullSummary(writer, _every(1000)),
+                stats.MetageneHistogram(writer, _every(10)),
+                stats.MetageneMaps(writer, _every(100)),
+                stats.MetageneMean(writer, _every(1)),
+                stats.MetageneSummary(writer, _every(100)),
+                stats.MetageneFullSummary(writer, _every(1000)),
                 stats.Image(writer, _every(100)),
                 stats.Latent(writer, _every(100)),
                 stats.LogLikelihood(writer, _every(1)),

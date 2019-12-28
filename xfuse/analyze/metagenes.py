@@ -9,9 +9,9 @@ from pyro.poutine.messenger import Messenger
 from tifffile import imwrite
 
 from ..logging import WARNING, log
-from ..model.experiment.st.st import ST, _encode_factor_name
+from ..model.experiment.st.st import ST, _encode_metagene_name
 from ..session import Session, require
-from ..utility.visualization import visualize_factors
+from ..utility.visualization import visualize_metagenes
 from .analyze import Analysis, _register_analysis
 
 __all__ = ["compute_metagene_summary"]
@@ -50,8 +50,8 @@ def compute_metagene_summary(method: str = "pca") -> None:
             # pylint: disable=protected-access
             experiment._sample_globals()
         return [
-            trace.trace.nodes[_encode_factor_name(n)]["fn"]
-            for n in experiment.factors
+            trace.trace.nodes[_encode_metagene_name(n)]["fn"]
+            for n in experiment.metagenes
         ]
 
     metagene_profile_fn = {"ST": _metagene_profile_st}
@@ -60,9 +60,9 @@ def compute_metagene_summary(method: str = "pca") -> None:
         default_device=torch.device("cpu"), pyro_stack=[]
     ), torch.no_grad():
         with __ActivationTracker() as activation_tracker:
-            for slide_path, summarization, factors in zip(
+            for slide_path, summarization, metagenes in zip(
                 dataloader.dataset.data.design.columns,
-                visualize_factors(method),
+                visualize_metagenes(method),
                 activation_tracker.activations,
             ):
                 slide_name = os.path.basename(slide_path)
@@ -74,15 +74,15 @@ def compute_metagene_summary(method: str = "pca") -> None:
                     summarization,
                 )
                 mask = summarization.sum(-1) != 0.0
-                for n, factor in enumerate(factors, 1):
-                    factor = -factor.detach().cpu().numpy()
-                    factor[~mask] = factor[mask].max()
-                    factor = _normalize(factor)
+                for n, metagene in enumerate(metagenes, 1):
+                    metagene = -metagene.detach().cpu().numpy()
+                    metagene[~mask] = metagene[mask].max()
+                    metagene = _normalize(metagene)
                     imwrite(
                         os.path.join(
-                            output_dir, slide_name, f"factor-{n}.png"
+                            output_dir, slide_name, f"metagene-{n}.png"
                         ),
-                        factor,
+                        metagene,
                     )
 
         for experiment in model.experiments.keys():

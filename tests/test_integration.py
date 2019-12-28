@@ -9,9 +9,9 @@ from xfuse.model import XFuse
 from xfuse.model.experiment.st import (
     ST,
     ExtraBaselines,
-    FactorDefault,
+    MetageneDefault,
     RetractAndSplit,
-    purge_factors,
+    purge_metagenes,
 )
 from xfuse.session import Session, get
 from xfuse.train import train
@@ -25,7 +25,7 @@ def test_toydata(tmp_path, mocker, toydata, encode_expression):
     st_experiment = ST(
         depth=2,
         num_channels=4,
-        factors=[FactorDefault(0.0, None) for _ in range(3)],
+        metagenes=[MetageneDefault(0.0, None) for _ in range(3)],
         encode_expression=encode_expression,
     )
     xfuse = XFuse(experiments=[st_experiment])
@@ -50,7 +50,7 @@ def pretrained_toy_model(toydata):
     st_experiment = ST(
         depth=2,
         num_channels=4,
-        factors=[FactorDefault(0.0, None) for _ in range(1)],
+        metagenes=[MetageneDefault(0.0, None) for _ in range(1)],
     )
     xfuse = XFuse(experiments=[st_experiment])
     with Session(
@@ -64,28 +64,28 @@ def pretrained_toy_model(toydata):
 
 @pytest.mark.fix_rng
 @pytest.mark.parametrize(
-    "expansion_strategies,compute_expected_factors",
+    "expansion_strategies,compute_expected_metagenes",
     [
         ((ExtraBaselines(5),), lambda n: (n + 5, n)),
         ((RetractAndSplit(),) * 2, lambda n: (2 * n, n)),
     ],
 )
-def test_factor_expansion(
+def test_metagene_expansion(
     # pylint: disable=redefined-outer-name
     toydata,
     pretrained_toy_model,
     expansion_strategies,
-    compute_expected_factors,
+    compute_expected_metagenes,
 ):
-    r"""Test factor expansion dynamics"""
+    r"""Test metagene expansion dynamics"""
     st_experiment = pretrained_toy_model.get_experiment("ST")
-    num_start_factors = len(st_experiment.factors)
+    num_start_metagenes = len(st_experiment.metagenes)
 
-    for expansion_strategy, expected_factors in zip(
-        expansion_strategies, compute_expected_factors(num_start_factors)
+    for expansion_strategy, expected_metagenes in zip(
+        expansion_strategies, compute_expected_metagenes(num_start_metagenes)
     ):
         with Session(
-            factor_expansion_strategy=expansion_strategy, dataloader=toydata
+            metagene_expansion_strategy=expansion_strategy, dataloader=toydata
         ):
-            purge_factors(pretrained_toy_model, num_samples=10)
-        assert len(st_experiment.factors) == expected_factors
+            purge_metagenes(pretrained_toy_model, num_samples=10)
+        assert len(st_experiment.metagenes) == expected_metagenes

@@ -9,7 +9,7 @@ import tomlkit
 from . import __version__
 from .analyze import analyses
 from .logging import WARNING, log
-from .model.experiment.st.factor_expansion_strategy import STRATEGIES
+from .model.experiment.st.metagene_expansion_strategy import STRATEGIES
 
 
 class Item(NamedTuple):
@@ -79,7 +79,7 @@ _ANNOTATED_CONFIG = OrderedDict(
         (
             "expansion_strategy",
             Item(
-                comment="This section contains configuration options for the factor expansion strategy.",
+                comment="This section contains configuration options for the metagene expansion strategy.",
                 value=OrderedDict(
                     [
                         (

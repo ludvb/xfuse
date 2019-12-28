@@ -25,15 +25,15 @@ from ....utility.modules import get_module, get_param
 from ..image import Image
 
 
-class FactorDefault(NamedTuple):
-    r"""Factor initialization template"""
+class MetageneDefault(NamedTuple):
+    r"""Metagene initialization template"""
 
     scale: float
     profile: Optional[torch.Tensor]
 
 
-def _encode_factor_name(n: str):
-    return f"!!factor!{n}!!"
+def _encode_metagene_name(n: str):
+    return f"!!metagene!{n}!!"
 
 
 class ST(Image):
@@ -46,51 +46,51 @@ class ST(Image):
     def __init__(
         self,
         *args,
-        factors: List[FactorDefault] = [],
+        metagenes: List[MetageneDefault] = [],
         encode_expression: bool = False,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
 
-        self.__factors: Dict[str, FactorDefault] = {}
-        self.__factor_queue: List[str] = []
-        for factor in factors:
-            self.add_factor(factor)
+        self.__metagenes: Dict[str, MetageneDefault] = {}
+        self.__metagene_queue: List[str] = []
+        for metagene in metagenes:
+            self.add_metagene(metagene)
 
         self.__encode_expression = encode_expression
 
     @property
-    def factors(self) -> Dict[str, FactorDefault]:
-        r"""Factor initialization templates"""
-        return deepcopy(self.__factors)
+    def metagenes(self) -> Dict[str, MetageneDefault]:
+        r"""Metagene initialization templates"""
+        return deepcopy(self.__metagenes)
 
-    def add_factor(self, factor: Optional[FactorDefault] = None):
+    def add_metagene(self, metagene: Optional[MetageneDefault] = None):
         r"""
-        Adds a new factor, optionally initialized from a
-        :class:`FactorDefault`.
+        Adds a new metagene, optionally initialized from a
+        :class:`MetageneDefault`.
         """
-        if factor is None:
-            factor = FactorDefault(0.0, None)
+        if metagene is None:
+            metagene = MetageneDefault(0.0, None)
 
-        if self.__factor_queue != []:
-            new_factor = self.__factor_queue.pop()
+        if self.__metagene_queue != []:
+            new_metagene = self.__metagene_queue.pop()
         else:
-            new_factor = f"{len(self.__factors) + 1:d}"
-        assert new_factor not in self.__factors
+            new_metagene = f"{len(self.__metagenes) + 1:d}"
+        assert new_metagene not in self.__metagenes
 
-        log(INFO, "adding factor: %s", new_factor)
-        self.__factors.setdefault(new_factor, factor)
+        log(INFO, "adding metagene: %s", new_metagene)
+        self.__metagenes.setdefault(new_metagene, metagene)
 
-        return new_factor
+        return new_metagene
 
-    def split_factor(self, factor: str):
-        r"""Adds a new factor by splitting an already existing factor."""
-        new_factor = self.add_factor(self.factors[factor])
+    def split_metagene(self, metagene: str):
+        r"""Adds a new metagene by splitting an already existing metagene."""
+        new_metagene = self.add_metagene(self.metagenes[metagene])
 
-        log(INFO, "copying factor: %s -> %s", factor, new_factor)
+        log(INFO, "copying metagene: %s -> %s", metagene, new_metagene)
 
-        name = _encode_factor_name(factor)
-        new_name = _encode_factor_name(new_factor)
+        name = _encode_metagene_name(metagene)
+        new_name = _encode_metagene_name(new_metagene)
 
         store = p.get_param_store()
 
@@ -103,25 +103,25 @@ class ST(Image):
                 store._constraints[pname],  # pylint: disable=protected-access
             )
 
-        return new_factor
+        return new_metagene
 
-    def remove_factor(self, n, remove_params=False):
-        r"""Removes a factor"""
-        log(INFO, "removing factor: %s", n)
+    def remove_metagene(self, n, remove_params=False):
+        r"""Removes a metagene"""
+        log(INFO, "removing metagene: %s", n)
 
         try:
-            self.__factors.pop(n)
+            self.__metagenes.pop(n)
         except KeyError:
             raise ValueError(
-                f"attempted to remove factor {n}, which doesn't exist!"
+                f"attempted to remove metagene {n}, which doesn't exist!"
             )
 
-        self.__factor_queue.append(n)
+        self.__metagene_queue.append(n)
 
         if remove_params:
             store = p.get_param_store()
             optim = get("optimizer")
-            pname = _encode_factor_name(n)
+            pname = _encode_metagene_name(n)
             for x in [p for p in store.keys() if pname in p]:
                 param = store[x].unconstrained()
                 del store[x]
@@ -148,25 +148,25 @@ class ST(Image):
 
         return get_module("scale", _create_scale_decoder)
 
-    def _get_factor_decoder(self, in_channels, n):
-        def _create_factor_decoder():
+    def _get_metagene_decoder(self, in_channels, n):
+        def _create_metagene_decoder():
             decoder = torch.nn.Sequential(
                 torch.nn.Conv2d(in_channels, 1, kernel_size=1)
             )
             torch.nn.init.constant_(decoder[-1].weight, 0.0)
-            torch.nn.init.constant_(decoder[-1].bias, self.__factors[n][0])
+            torch.nn.init.constant_(decoder[-1].bias, self.__metagenes[n][0])
             return decoder
 
         return torch.nn.Sequential(
             get_module(
-                "factor_shared",
+                "metagene_shared",
                 lambda: torch.nn.Sequential(
                     torch.nn.Conv2d(in_channels, in_channels, kernel_size=1),
                     ActNorm2d(in_channels),
                     torch.nn.LeakyReLU(0.2, inplace=True),
                 ),
             ),
-            get_module(_encode_factor_name(n), _create_factor_decoder),
+            get_module(_encode_metagene_name(n), _create_metagene_decoder),
         )
 
     def model(self, x, zs):
@@ -188,13 +188,13 @@ class ST(Image):
             ),
         )
 
-        if len(self.factors) > 0:
+        if len(self.metagenes) > 0:
             rim = torch.cat(
                 [
-                    self._get_factor_decoder(decoded.shape[1], n).to(decoded)(
+                    self._get_metagene_decoder(decoded.shape[1], n).to(
                         decoded
-                    )
-                    for n in self.factors
+                    )(decoded)
+                    for n in self.metagenes
                 ],
                 dim=1,
             )
@@ -216,8 +216,8 @@ class ST(Image):
             )
             rate_mg = torch.stack(
                 [
-                    p.sample(_encode_factor_name(n), rate_mg_prior)
-                    for n in self.factors
+                    p.sample(_encode_metagene_name(n), rate_mg_prior)
+                    for n in self.metagenes
                 ]
             )
             rate_mg = p.sample("rate_mg", Delta(rate_mg))
@@ -469,30 +469,33 @@ class ST(Image):
             infer={"is_global": True},
         )
 
-        # Sample factor profiles
-        def _sample_factor(factor, name):
+        # Sample metagene profiles
+        def _sample_metagene(metagene, name):
             p.sample(
-                _encode_factor_name(name),
+                _encode_metagene_name(name),
                 Normal(
                     get_param(
-                        f"{_encode_factor_name(name)}_mu",
+                        f"{_encode_metagene_name(name)}_mu",
                         # pylint: disable=unnecessary-lambda
-                        lambda: factor.profile.float(),
+                        lambda: metagene.profile.float(),
                     ).to(device),
                     1e-8
                     + get_param(
-                        f"{_encode_factor_name(name)}_sd",
-                        lambda: 1e-2 * torch.ones_like(factor.profile).float(),
+                        f"{_encode_metagene_name(name)}_sd",
+                        lambda: 1e-2
+                        * torch.ones_like(metagene.profile).float(),
                         constraint=constraints.positive,
                     ).to(device),
                 ),
                 infer={"is_global": True},
             )
 
-        for name, factor in self.factors.items():
-            if factor.profile is None:
-                factor = FactorDefault(factor.scale, torch.zeros(num_genes))
-            _sample_factor(factor, name)
+        for name, metagene in self.metagenes.items():
+            if metagene.profile is None:
+                metagene = MetageneDefault(
+                    metagene.scale, torch.zeros(num_genes)
+                )
+            _sample_metagene(metagene, name)
 
     def guide(self, x):
         self._sample_globals()

@@ -14,10 +14,10 @@ from ..session import Session, require
 from ..utility import center_crop
 
 
-__all__ = ["reduce_last_dimension", "visualize_factors"]
+__all__ = ["reduce_last_dimension", "visualize_metagenes"]
 
 
-def visualize_factors(
+def visualize_metagenes(
     method: str = "pca", num_training_samples: Optional[int] = None
 ) -> np.ndarray:
     r"""Creates visualizations of metagenes"""
@@ -69,7 +69,8 @@ def visualize_factors(
             if data_type not in compute_fn:
                 log(
                     WARNING,
-                    'Factor visualization for data type "%s" not implemented',
+                    'Metagene visualization for data type "%s" not'
+                    " implemented",
                     data_type,
                 )
             with torch.no_grad():

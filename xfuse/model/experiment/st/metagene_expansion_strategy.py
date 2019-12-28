@@ -7,18 +7,18 @@ import torch
 
 from ....logging import DEBUG, log
 from ....session import SessionItem, register_session_item
-from . import ST, FactorDefault
+from . import ST, MetageneDefault
 
 
 class ExpansionStrategy(ABC):
-    r"""Abstract base class for factor expansion strategies"""
+    r"""Abstract base class for metagene expansion strategies"""
 
     @abstractmethod
     def __call__(
         self,
         experiment: ST,
-        contributing_factors: List[str],
-        noncontributing_factors: List[str],
+        contributing_metagenes: List[str],
+        noncontributing_metagenes: List[str],
     ) -> None:
         pass
 
@@ -26,22 +26,22 @@ class ExpansionStrategy(ABC):
 class ExtraBaselines(ExpansionStrategy):
     r"""
     An :class:`ExpansionStrategy` that always keeps a fixed number of "extra",
-    non-contributing factors around.
+    non-contributing metagenes around.
     """
 
-    def __init__(self, extra_factors: int = 1):
-        self.extra_factors = extra_factors
+    def __init__(self, extra_metagenes: int = 1):
+        self.extra_metagenes = extra_metagenes
 
     def __call__(
         self,
         experiment: ST,
-        contributing_factors: List[str],
-        noncontributing_factors: List[str],
+        contributing_metagenes: List[str],
+        noncontributing_metagenes: List[str],
     ) -> None:
         defaults = [
-            factor.profile
-            for factor in experiment.factors.values()
-            if factor.profile is not None
+            metagene.profile
+            for metagene in experiment.metagenes.values()
+            if metagene.profile is not None
         ]
         if defaults == []:
             default = None
@@ -49,17 +49,17 @@ class ExtraBaselines(ExpansionStrategy):
             default = torch.stack(defaults).mean(0).detach()
 
         scale_biases = [
-            experiment._get_factor_decoder(1, n)[-1][-1].bias.squeeze()
-            for n in experiment.factors.keys()
+            experiment._get_metagene_decoder(1, n)[-1][-1].bias.squeeze()
+            for n in experiment.metagenes.keys()
         ]
         scale = torch.stack(scale_biases).min().item()
 
-        for _ in range(self.extra_factors - len(noncontributing_factors)):
-            experiment.add_factor(FactorDefault(scale, default))
-        for n in noncontributing_factors[
-            : len(noncontributing_factors) - self.extra_factors
+        for _ in range(self.extra_metagenes - len(noncontributing_metagenes)):
+            experiment.add_metagene(MetageneDefault(scale, default))
+        for n in noncontributing_metagenes[
+            : len(noncontributing_metagenes) - self.extra_metagenes
         ]:
-            experiment.remove_factor(n, remove_params=False)
+            experiment.remove_metagene(n, remove_params=False)
 
 
 class _Node:
@@ -107,8 +107,8 @@ def _show(root: _Node) -> str:
 
 class RetractAndSplit(ExpansionStrategy):
     r"""
-    An :class:`ExpansionStrategy` that splits contributing factors and merges
-    back previously split, non-contributing factors
+    An :class:`ExpansionStrategy` that splits contributing metagenes and merges
+    back previously split, non-contributing metagenes
     """
 
     def __init__(self):
@@ -117,11 +117,11 @@ class RetractAndSplit(ExpansionStrategy):
     def __call__(
         self,
         experiment: ST,
-        contributing_factors: List[str],
-        noncontributing_factors: List[str],
+        contributing_metagenes: List[str],
+        noncontributing_metagenes: List[str],
     ) -> None:
-        contrib = set(contributing_factors)
-        noncontrib = set(noncontributing_factors)
+        contrib = set(contributing_metagenes)
+        noncontrib = set(noncontributing_metagenes)
 
         def _set_contributing(x: _Leaf):
             x.contributing = x.name in contrib
@@ -169,7 +169,7 @@ class RetractAndSplit(ExpansionStrategy):
             if isinstance(root, _Leaf):
                 if root.contributing:
                     return _Split(
-                        root, _Leaf(experiment.split_factor(root.name))
+                        root, _Leaf(experiment.split_metagene(root.name))
                     )
                 return root
             raise NotImplementedError()
@@ -214,7 +214,7 @@ class RetractAndSplit(ExpansionStrategy):
                 self._root_nodes.add(_Leaf(x, True))
         for x in noncontrib:
             if x not in forest:
-                experiment.remove_factor(x, remove_params=True)
+                experiment.remove_metagene(x, remove_params=True)
 
         self._root_nodes = set(
             map(_extend_contributing_branches, self._root_nodes)
@@ -229,8 +229,8 @@ def _setter(x):
 
 
 register_session_item(
-    "factor_expansion_strategy",
-    SessionItem(setter=_setter, default=ExtraBaselines(extra_factors=1)),
+    "metagene_expansion_strategy",
+    SessionItem(setter=_setter, default=ExtraBaselines(extra_metagenes=1)),
 )
 
 
