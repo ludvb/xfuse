@@ -1,7 +1,6 @@
 from typing import Dict, List
 
 import pyro as p
-from batchrenorm import BatchRenorm2d
 from pyro.distributions import Normal  # pylint: disable=no-name-in-module
 from pyro.poutine.messenger import Messenger
 
@@ -105,7 +104,7 @@ class XFuse(torch.nn.Module):
                     f"{name}-mu",
                     lambda: torch.nn.Sequential(
                         torch.nn.Conv2d(y.shape[1], y.shape[1], 1),
-                        BatchRenorm2d(y.shape[1]),
+                        torch.nn.BatchNorm2d(y.shape[1]),
                         torch.nn.LeakyReLU(0.2, inplace=True),
                         torch.nn.Conv2d(y.shape[1], y.shape[1], 1),
                     ),
@@ -114,7 +113,7 @@ class XFuse(torch.nn.Module):
                     f"{name}-sd",
                     lambda: torch.nn.Sequential(
                         torch.nn.Conv2d(y.shape[1], y.shape[1], 1),
-                        BatchRenorm2d(y.shape[1]),
+                        torch.nn.BatchNorm2d(y.shape[1]),
                         torch.nn.LeakyReLU(0.2, inplace=True),
                         torch.nn.Conv2d(y.shape[1], y.shape[1], 1),
                         torch.nn.Softplus(),
