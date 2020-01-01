@@ -1,8 +1,10 @@
-from functools import partial
+from functools import partial, reduce
+from operator import add
 import os
 from typing import Any, Dict, List, Optional
 
 import h5py
+import numpy as np
 import pandas as pd
 import pyro
 import torch
@@ -78,13 +80,31 @@ def run(
         )
         for slide in design.columns
     }
-    dataset = Dataset(
-        data=Data(slides=slides, design=design),
-        genes=genes if genes != [] else None,
-        unify_genes=True,
-        min_counts=min_counts,
-    )
+    dataset = Dataset(data=Data(slides=slides, design=design))
     dataloader = make_dataloader(dataset, batch_size=batch_size, shuffle=True)
+
+    genes = get("genes")
+    if genes is None:
+        summed_counts = reduce(
+            add,
+            [
+                np.array(slide.data.counts.sum(0)).flatten()
+                for slide in dataset.data.slides.values()
+            ],
+        )
+        filtered_genes = set(
+            g for g, x in zip(dataset.genes, summed_counts) if x < min_counts
+        )
+        if len(filtered_genes) > 0:
+            log(
+                INFO,
+                "The following %d genes have less than %d counts and will"
+                " therefore be excluded: %s",
+                len(filtered_genes),
+                min_counts,
+                ", ".join(sorted(filtered_genes)),
+            )
+        genes = [g for g in dataset.genes if g not in filtered_genes]
 
     xfuse = get("model")
     if xfuse is None:
@@ -118,6 +138,7 @@ def run(
 
     with Session(
         model=xfuse,
+        genes=genes,
         metagene_expansion_strategy=expansion_strategy,
         optimizer=optimizer,
         dataloader=dataloader,
@@ -143,6 +164,7 @@ def run(
 
     with Session(
         model=xfuse,
+        genes=genes,
         dataloader=dataloader,
         save_path=first_unique_filename(
             os.path.join(require("save_path"), "analyses")

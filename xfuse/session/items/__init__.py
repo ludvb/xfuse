@@ -1,6 +1,7 @@
 from .dataloader import *
 from .default_device import *
 from .eval import *
+from .genes import *
 from .log_file import *
 from .log_level import *
 from .model import *

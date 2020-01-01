@@ -1,14 +1,12 @@
 from functools import reduce
-from operator import add
-from typing import Dict, List, NamedTuple, Optional
-from warnings import warn
+from typing import Dict, NamedTuple
 
 import numpy as np
 import pandas as pd
 import torch
 
 from .slide import Slide
-from ..logging import INFO, log
+from ..session import get
 
 __all__ = ["Data", "Dataset"]
 
@@ -26,17 +24,13 @@ class Dataset(torch.utils.data.Dataset):
     instance
     """
 
-    def __init__(
-        self,
-        data: Data,
-        genes: Optional[List[str]] = None,
-        min_counts: Optional[int] = None,
-        unify_genes: bool = False,
-    ):
+    def __init__(self, data: Data):
         self._data = data
 
-        if genes is None:
-            genes = list(
+        if get("genes"):
+            self.genes = get("genes")
+        else:
+            self.genes = list(
                 sorted(
                     reduce(
                         set.union,  # type: ignore
@@ -47,60 +41,6 @@ class Dataset(torch.utils.data.Dataset):
                     )
                 )
             )
-        elif not unify_genes:
-            warn(
-                UserWarning(
-                    " ".join(
-                        [
-                            "Passing a list of `genes` to `Dataset` implies"
-                            " `unify_genes=True`.",
-                            "Set `unify_genes=True` explicitly to disable this"
-                            " warning.",
-                        ]
-                    )
-                )
-            )
-            unify_genes = True
-
-        self.__genes = genes
-        for slide in self.data.slides.values():
-            if unify_genes:
-                slide.data.genes = self.__genes
-            elif slide.data.genes != self.__genes:
-                raise ValueError(
-                    " ".join(
-                        [
-                            "Slide uses incongruent set of genes.",
-                            "Unify genes by passing `unify_genes=True`.",
-                        ]
-                    )
-                )
-
-        if min_counts:
-            summed_counts = reduce(
-                add,
-                [
-                    np.array(slide.data.counts.sum(0)).flatten()
-                    for slide in self.data.slides.values()
-                ],
-            )
-            filtered_genes = set(
-                g for g, x in zip(genes, summed_counts) if x < min_counts
-            )
-            if filtered_genes != []:
-                log(
-                    INFO,
-                    "The following %d genes have less than %d counts and will"
-                    " therefore be excluded: %s",
-                    len(filtered_genes),
-                    min_counts,
-                    ", ".join(sorted(filtered_genes)),
-                )
-                self.__genes = [
-                    g for g in self.__genes if g not in filtered_genes
-                ]
-                for slide in self.data.slides.values():
-                    slide.data.genes = self.__genes
 
         self._data_iterators = {
             name: slide.iterator(slide.data)
@@ -129,6 +69,12 @@ class Dataset(torch.utils.data.Dataset):
     def genes(self):
         r"""The genes present in the dataset"""
         return self.__genes
+
+    @genes.setter
+    def genes(self, genes):
+        self.__genes = genes
+        for slide in self.data.slides.values():
+            slide.data.genes = genes
 
     @property
     def data(self):

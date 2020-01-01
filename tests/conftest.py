@@ -121,7 +121,7 @@ def toydata(tmp_path):
     design_matrix = design_matrix_from({str(filepath): {"ID": 1}})
     slide = Slide(data=STSlide(h5py.File(filepath, "r")), iterator=FullSlide)
     data = Data(slides={str(filepath): slide}, design=design_matrix)
-    dataset = Dataset(data, unify_genes=True)
+    dataset = Dataset(data)
     dataloader = make_dataloader(dataset)
 
     return dataloader
