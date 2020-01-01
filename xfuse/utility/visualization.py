@@ -3,6 +3,7 @@ from typing import Callable, List, Optional, Union, cast
 import numpy as np
 import pyro
 import torch
+from PIL import Image
 from sklearn.decomposition import PCA
 from umap import UMAP
 
@@ -11,10 +12,13 @@ from ..data.slide import FullSlide, Slide
 from ..data.utility.misc import make_dataloader
 from ..logging import WARNING, log
 from ..session import Session, require
-from ..utility import center_crop
 
 
 __all__ = ["reduce_last_dimension", "visualize_metagenes"]
+
+
+def _cmyk2rgb(x: np.ndarray) -> np.ndarray:
+    return np.array(Image.fromarray(x, mode="CMYK").convert("RGB"))
 
 
 def visualize_metagenes(
@@ -39,11 +43,14 @@ def visualize_metagenes(
             .permute(1, 2, 0)
             .numpy()
         )
-        zero_label = torch.where(x["ST"]["data"][0].sum(1) == 0)[0] + 1
-        mask = ~np.isin(
-            center_crop(x["ST"]["label"][0], activation.shape[:2]), zero_label
+        scale = (
+            model_trace.trace.nodes["scale"]["fn"]
+            .mean[0]
+            .permute(1, 2, 0)
+            .numpy()
         )
-        return activation, mask
+        scale = scale / scale.max()
+        return activation, scale
 
     compute_fn = {"ST": _compute_st_activation}
 
@@ -62,7 +69,7 @@ def visualize_metagenes(
 
     with Session(default_device=torch.device("cpu"), eval=True):
         activations: List[np.ndarray] = []
-        masks: List[torch.Tensor] = []
+        scales: List[torch.Tensor] = []
         for x in dataloader:
             data_type, *__this_should_be_empty = x.keys()
             assert __this_should_be_empty == []
@@ -74,12 +81,15 @@ def visualize_metagenes(
                     data_type,
                 )
             with torch.no_grad():
-                activation, mask = compute_fn[data_type](x)
+                activation, scale = compute_fn[data_type](x)
             activations.append(activation)
-            masks.append(mask)
+            scales.append(scale)
 
     activations_flat = np.concatenate(
-        [activation[mask] for activation, mask in zip(activations, masks)]
+        [
+            activation[scale.squeeze() > 0.01]
+            for activation, scale in zip(activations, scales)
+        ]
     )
     if num_training_samples:
         activations_training = activations_flat[
@@ -102,10 +112,16 @@ def visualize_metagenes(
 
     reduction.fit(activations_training)
 
-    for activation, mask in zip(activations, masks):
-        yield reduce_last_dimension(
-            x=activation, mask=mask, transformation=reduction.transform
+    for activation, scale in zip(activations, scales):
+        summarized_activations = reduce_last_dimension(
+            x=activation, transformation=reduction.transform
         )
+        summarized_activations = np.concatenate(
+            [summarized_activations, 1.0 - scale], axis=-1
+        )
+        summarized_activations = np.round(255 * summarized_activations)
+        summarized_activations = summarized_activations.astype(np.uint8)
+        yield _cmyk2rgb(summarized_activations)
 
 
 def reduce_last_dimension(
