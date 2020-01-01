@@ -12,7 +12,6 @@ description = "Deep spatial data fusion"
 authors = ["Ludvig Bergenstråhle <ludvig.bergenstrahle@scilifelab.se>"]
 
 [tool.poetry.dependencies]
-actnorm = {git = "https://github.com/ludvb/actnorm", rev = "master"}
 click = "^7.0"
 h5py = "^2.10.0"
 imageio = "^2.6.1"
