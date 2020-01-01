@@ -12,6 +12,6 @@ class Scale(StatsHandler):
     def _handle(self, fn, **_):
         # pylint: disable=arguments-differ
         # pylint: disable=no-member
-        self.add_images(
-            "scale", fn.mean.permute(0, 2, 3, 1), dataformats="NHWC"
-        )
+        scale = fn.mean.permute(0, 2, 3, 1)
+        scale = scale / scale.max()
+        self.add_images("scale", scale, dataformats="NHWC")
