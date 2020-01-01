@@ -149,7 +149,7 @@ def reduce_last_dimension(
         x = x.detach().cpu().numpy()
 
     values = transformation(x[mask])
-    dst = np.zeros((*mask.shape, 3))
+    dst = np.zeros((*mask.shape, values.shape[-1]))
     dst[mask] = (values - values.min(0)) / (values.max(0) - values.min(0))
 
     return dst
