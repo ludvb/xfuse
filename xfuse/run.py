@@ -114,7 +114,7 @@ def run(
             panic=None,
             pyro_stack=[],
         ):
-            save_session(f"exception")
+            save_session("exception")
 
     with Session(
         model=xfuse,
@@ -139,7 +139,7 @@ def run(
                 panic=None,
                 pyro_stack=[],
             ):
-                save_session(f"final")
+                save_session("final")
 
     with Session(
         model=xfuse,
