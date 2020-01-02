@@ -38,7 +38,7 @@ def labels_from_spots(dst: np.ndarray, spots: List[Spot]) -> None:
 
 
 def crop_image(
-    image: np.ndarray, spots: List[Spot], margin: float = 0.2
+    image: np.ndarray, spots: List[Spot], margin: float = 0.12
 ) -> np.ndarray:
     r"""Crops `image`, keeping a fixed minimum margin to the `spots`."""
     cs = [[s.x, s.y] for s in spots]
