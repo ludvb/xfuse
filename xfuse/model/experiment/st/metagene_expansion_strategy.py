@@ -3,11 +3,9 @@ from functools import reduce
 from inspect import isabstract, isclass
 from typing import Callable, List, Optional, Set
 
-import torch
-
 from ....logging import DEBUG, log
-from ....session import SessionItem, register_session_item
-from . import ST, MetageneDefault
+from ....session import SessionItem, register_session_item, get
+from . import ST
 
 
 class ExpansionStrategy(ABC):
@@ -25,12 +23,29 @@ class ExpansionStrategy(ABC):
 
 class Extra(ExpansionStrategy):
     r"""
-    An :class:`ExpansionStrategy` that always keeps a fixed number of "extra",
-    non-contributing metagenes around.
+    An :class:`ExpansionStrategy` that keeps a number of "extra",
+    non-contributing metagenes around. The number of extra metagenes can be
+    fixed or linearly annealed.
     """
 
-    def __init__(self, extra_metagenes: int = 1):
-        self.extra_metagenes = extra_metagenes
+    def __init__(
+        self,
+        num_metagenes: int = 16,
+        anneal_to: Optional[int] = 1,
+        anneal_epochs: Optional[int] = 10000,
+    ):
+        self.__num_from = num_metagenes
+        self.__num_to = anneal_to
+        self.__anneal_epochs = anneal_epochs
+
+    @property
+    def num(self):
+        r"""The current number of metagenes"""
+        if self.__num_to is None or self.__anneal_epochs is None:
+            return self.__num_from
+        training_data = get("training_data")
+        q = min(1.0, training_data.epoch / self.__anneal_epochs)
+        return round((1 - q) * self.__num_from + q * self.__num_to)
 
     def __call__(
         self,
@@ -38,26 +53,10 @@ class Extra(ExpansionStrategy):
         contributing_metagenes: List[str],
         noncontributing_metagenes: List[str],
     ) -> None:
-        defaults = [
-            metagene.profile
-            for metagene in experiment.metagenes.values()
-            if metagene.profile is not None
-        ]
-        if defaults == []:
-            default = None
-        else:
-            default = torch.stack(defaults).mean(0).detach()
-
-        scale_biases = [
-            experiment._get_metagene_decoder(1, n)[-1][-1].bias.squeeze()
-            for n in experiment.metagenes.keys()
-        ]
-        scale = torch.stack(scale_biases).min().item()
-
-        for _ in range(self.extra_metagenes - len(noncontributing_metagenes)):
-            experiment.add_metagene(MetageneDefault(scale, default))
+        for _ in range(self.num - len(noncontributing_metagenes)):
+            experiment.add_metagene()
         for n in noncontributing_metagenes[
-            : len(noncontributing_metagenes) - self.extra_metagenes
+            : len(noncontributing_metagenes) - self.num
         ]:
             experiment.remove_metagene(n, remove_params=False)
 
@@ -194,13 +193,13 @@ class RetractAndSplit(ExpansionStrategy):
             map(_retract_noncontributing_branches, self._root_nodes)
         )
 
-        # Remove non-contributing trees, keeping at least one
-        for contributing, tree in sorted(
-            (x.contributing if isinstance(x, _Leaf) else True, x)
+        # Remove non-contributing trees
+        for tree in (
+            x
             for x in self._root_nodes
-        )[:-1]:
-            if contributing:
-                break
+            if isinstance(x, _Leaf)
+            if not x.contributing
+        ):
             self._root_nodes.discard(tree)
 
         _log_trees("trees after retraction / before splitting")
@@ -222,6 +221,10 @@ class RetractAndSplit(ExpansionStrategy):
 
         _log_trees("trees after splitting")
 
+        # Make sure that we have at least one root
+        if len(self._root_nodes) == 0:
+            self._root_nodes.add(_Leaf(experiment.add_metagene()))
+
 
 def _setter(x):
     if not isinstance(x, ExpansionStrategy):
@@ -230,7 +233,7 @@ def _setter(x):
 
 register_session_item(
     "metagene_expansion_strategy",
-    SessionItem(setter=_setter, default=Extra(extra_metagenes=1)),
+    SessionItem(setter=_setter, default=Extra(num_metagenes=1)),
 )
 
 

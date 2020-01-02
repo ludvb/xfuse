@@ -21,7 +21,7 @@ from .model.experiment.st.metagene_expansion_strategy import (
     STRATEGIES,
     ExpansionStrategy,
 )
-from .model.experiment.st import Extra, MetageneDefault, purge_metagenes
+from .model.experiment.st import Extra, purge_metagenes
 from .session import Session, get, require
 from .train import test_convergence, train
 from .utility.file import first_unique_filename
@@ -107,10 +107,10 @@ def run(
         st_experiment = STExperiment(
             depth=network_depth,
             num_channels=network_width,
-            metagenes=[MetageneDefault(0.0, None)],
             encode_expression=encode_expression,
         )
         xfuse = XFuse(experiments=[st_experiment]).to(get("default_device"))
+        expansion_strategy(st_experiment, [], [])
 
     optimizer = get("optimizer")
     if optimizer is None:
