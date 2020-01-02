@@ -281,7 +281,7 @@ class ST(Image):
                     if not mask.any():
                         return (
                             data[[]],
-                            torch.zeros(0, num_genes),
+                            torch.zeros(0, num_genes).to(rim),
                             logits_g.expand(0, -1),
                         )
 
