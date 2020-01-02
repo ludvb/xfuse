@@ -3,7 +3,8 @@ from typing import Callable, List, Optional, Union, cast
 import numpy as np
 import pyro
 import torch
-from PIL import Image
+from PIL import Image, ImageEnhance
+from scipy.ndimage.morphology import binary_fill_holes, distance_transform_edt
 from sklearn.decomposition import PCA
 from umap import UMAP
 
@@ -12,6 +13,7 @@ from ..data.slide import FullSlide, Slide
 from ..data.utility.misc import make_dataloader
 from ..logging import WARNING, log
 from ..session import Session, require
+from ..utility import center_crop
 
 
 __all__ = ["reduce_last_dimension", "visualize_metagenes"]
@@ -21,10 +23,54 @@ def _cmyk2rgb(x: np.ndarray) -> np.ndarray:
     return np.array(Image.fromarray(x, mode="CMYK").convert("RGB"))
 
 
+def _adjust_brightness(x: np.ndarray, adjustment_factor: float) -> np.ndarray:
+    image = Image.fromarray(x)
+    image = ImageEnhance.Brightness(image).enhance(adjustment_factor)
+    return np.array(image)
+
+
+def mask_background(
+    image: np.ndarray,
+    mask: np.ndarray,
+    border: int = 5,
+    border_color: Optional[np.ndarray] = None,
+    background_color: Optional[np.ndarray] = None,
+):
+    r"""
+    Masks out background elements and adds a border to the non-masked elements.
+
+    >>> mask_background(image=100 * np.eye(3, dtype=np.uint8),
+    ...            mask=np.eye(3, dtype=bool), border=1)
+    array([[100,   0, 255],
+           [  0, 100,   0],
+           [255,   0, 100]], dtype=uint8)
+    """
+    if border_color is None:
+        if image.ndim == 2:
+            border_color = np.array(0, dtype=np.uint8)
+        else:
+            border_color = np.zeros(image.shape[-1], dtype=np.uint8)
+    if background_color is None:
+        if image.ndim == 2:
+            background_color = np.array(255, dtype=np.uint8)
+        else:
+            background_color = 255 * np.ones(image.shape[-1], dtype=np.uint8)
+
+    image = image.copy()
+    image[~mask] = background_color
+    border_mask = distance_transform_edt(~mask) <= border
+    border_mask &= ~mask
+    image[border_mask] = border_color
+    return image
+
+
 def visualize_metagenes(
     method: str = "pca", num_training_samples: Optional[int] = None
 ) -> np.ndarray:
     r"""Creates visualizations of metagenes"""
+
+    # pylint: disable=too-many-statements
+
     model = require("model")
     dataloader = require("dataloader")
 
@@ -50,7 +96,12 @@ def visualize_metagenes(
             .numpy()
         )
         scale = scale / scale.max()
-        return activation, scale
+        zero_label = torch.where(x["ST"]["data"][0].sum(1) == 0)[0] + 1
+        mask = ~np.isin(
+            center_crop(x["ST"]["label"][0], activation.shape[:2]), zero_label
+        )
+        mask &= scale.squeeze() > 0.01
+        return activation, scale, mask
 
     compute_fn = {"ST": _compute_st_activation}
 
@@ -70,6 +121,7 @@ def visualize_metagenes(
     with Session(default_device=torch.device("cpu"), eval=True):
         activations: List[np.ndarray] = []
         scales: List[torch.Tensor] = []
+        masks: List[torch.Tensor] = []
         for x in dataloader:
             data_type, *__this_should_be_empty = x.keys()
             assert __this_should_be_empty == []
@@ -81,9 +133,10 @@ def visualize_metagenes(
                     data_type,
                 )
             with torch.no_grad():
-                activation, scale = compute_fn[data_type](x)
+                activation, scale, mask = compute_fn[data_type](x)
             activations.append(activation)
             scales.append(scale)
+            masks.append(mask)
 
     activations_flat = np.concatenate(
         [
@@ -112,7 +165,7 @@ def visualize_metagenes(
 
     reduction.fit(activations_training)
 
-    for activation, scale in zip(activations, scales):
+    for activation, scale, mask in zip(activations, scales, masks):
         summarized_activations = reduce_last_dimension(
             x=activation, transformation=reduction.transform
         )
@@ -121,7 +174,14 @@ def visualize_metagenes(
         )
         summarized_activations = np.round(255 * summarized_activations)
         summarized_activations = summarized_activations.astype(np.uint8)
-        yield _cmyk2rgb(summarized_activations)
+        summarized_activations = _cmyk2rgb(summarized_activations)
+        summarized_activations = _adjust_brightness(
+            summarized_activations, 1.5
+        )
+        summarized_activations = mask_background(
+            summarized_activations, binary_fill_holes(mask)
+        )
+        yield summarized_activations
 
 
 def reduce_last_dimension(
