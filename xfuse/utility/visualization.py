@@ -3,7 +3,7 @@ from typing import Callable, List, Optional, Union, cast
 import numpy as np
 import pyro
 import torch
-from PIL import Image, ImageEnhance
+from PIL import Image
 from scipy.ndimage.morphology import binary_fill_holes, distance_transform_edt
 from sklearn.decomposition import PCA
 from umap import UMAP
@@ -23,10 +23,32 @@ def _cmyk2rgb(x: np.ndarray) -> np.ndarray:
     return np.array(Image.fromarray(x, mode="CMYK").convert("RGB"))
 
 
-def _adjust_brightness(x: np.ndarray, adjustment_factor: float) -> np.ndarray:
-    image = Image.fromarray(x)
-    image = ImageEnhance.Brightness(image).enhance(adjustment_factor)
-    return np.array(image)
+def balance_colors(
+    x: np.ndarray, q: float = 0.01, q_high: Optional[float] = None
+) -> np.ndarray:
+    r"""
+    Balances colors by shifting quantiles `q` and `q_high` to 0.0 and 1.0 using
+    a per channel affine transformation and clipping all values to [0.0, 1.0].
+    If `x` is np.uint8, the range [0, 255] is used instead.
+
+    >>> balance_colors(np.array([1.0, 2.0, 4.0, 5.0]))
+    array([0.  , 0.25, 0.75, 1.  ])
+    >>> balance_colors(np.array([1, 2, 4, 5], dtype=np.uint8))
+    array([  0,  64, 191, 255], dtype=uint8)
+    """
+    if q_high is None:
+        q_high = 1.0 - q
+    if x.ndim > 2:
+        y = x.reshape(-1, x.shape[-1])
+    else:
+        y = x.flatten()
+    ymin, ymax = np.quantile(y, [q, q_high], axis=0, interpolation="nearest")
+    y = (y - ymin) / (ymax - ymin)
+    y = y.clip(0.0, 1.0)
+    y = y.reshape(x.shape)
+    if x.dtype == np.uint8:
+        y = (255 * y).round().astype(np.uint8)
+    return y
 
 
 def mask_background(
@@ -175,9 +197,7 @@ def visualize_metagenes(
         summarized_activations = np.round(255 * summarized_activations)
         summarized_activations = summarized_activations.astype(np.uint8)
         summarized_activations = _cmyk2rgb(summarized_activations)
-        summarized_activations = _adjust_brightness(
-            summarized_activations, 1.5
-        )
+        summarized_activations = balance_colors(summarized_activations)
         summarized_activations = mask_background(
             summarized_activations, binary_fill_holes(mask)
         )
