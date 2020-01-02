@@ -124,8 +124,8 @@ _ANNOTATED_CONFIG = OrderedDict(
                 value=OrderedDict(
                     [
                         ("batch_size", Item(value=4)),
-                        ("epochs", Item(value=-1)),
-                        ("learning_rate", Item(value=1e-4)),
+                        ("epochs", Item(value=20000)),
+                        ("learning_rate", Item(value=1e-3)),
                         ("warmup_epochs", Item(value=1000)),
                         (
                             "patch_size",
@@ -136,7 +136,7 @@ _ANNOTATED_CONFIG = OrderedDict(
                                         "Set to '-1' to use as large patches as possible.",
                                     ]
                                 ),
-                                value=-1,
+                                value=512,
                             ),
                         ),
                     ]
