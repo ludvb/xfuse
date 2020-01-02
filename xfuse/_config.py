@@ -86,7 +86,7 @@ _ANNOTATED_CONFIG = OrderedDict(
                             "type",
                             Item(
                                 comment=f"Available choices: {', '.join(STRATEGIES.keys())}",
-                                value="ExtraBaselines",
+                                value="Extra",
                             ),
                         ),
                         *[

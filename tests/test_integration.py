@@ -8,7 +8,7 @@ from xfuse.handlers.stats import RMSE
 from xfuse.model import XFuse
 from xfuse.model.experiment.st import (
     ST,
-    ExtraBaselines,
+    Extra,
     MetageneDefault,
     RetractAndSplit,
     purge_metagenes,
@@ -66,7 +66,7 @@ def pretrained_toy_model(toydata):
 @pytest.mark.parametrize(
     "expansion_strategies,compute_expected_metagenes",
     [
-        ((ExtraBaselines(5),), lambda n: (n + 5, n)),
+        ((Extra(5),), lambda n: (n + 5, n)),
         ((RetractAndSplit(),) * 2, lambda n: (2 * n, n)),
     ],
 )

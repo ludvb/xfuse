@@ -21,11 +21,7 @@ from .model.experiment.st.metagene_expansion_strategy import (
     STRATEGIES,
     ExpansionStrategy,
 )
-from .model.experiment.st import (
-    ExtraBaselines,
-    MetageneDefault,
-    purge_metagenes,
-)
+from .model.experiment.st import Extra, MetageneDefault, purge_metagenes
 from .session import Session, get, require
 from .train import test_convergence, train
 from .utility.file import first_unique_filename
@@ -151,7 +147,7 @@ def run(
         )
         if not has_converged:
             train(epochs)
-            with Session(metagene_expansion_strategy=ExtraBaselines(0)):
+            with Session(metagene_expansion_strategy=Extra(0)):
                 purge_metagenes(xfuse, num_samples=10)
             with Session(
                 dataloader=None,

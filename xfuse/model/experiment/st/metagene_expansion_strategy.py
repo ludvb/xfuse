@@ -23,7 +23,7 @@ class ExpansionStrategy(ABC):
         pass
 
 
-class ExtraBaselines(ExpansionStrategy):
+class Extra(ExpansionStrategy):
     r"""
     An :class:`ExpansionStrategy` that always keeps a fixed number of "extra",
     non-contributing metagenes around.
@@ -230,7 +230,7 @@ def _setter(x):
 
 register_session_item(
     "metagene_expansion_strategy",
-    SessionItem(setter=_setter, default=ExtraBaselines(extra_metagenes=1)),
+    SessionItem(setter=_setter, default=Extra(extra_metagenes=1)),
 )
 
 
