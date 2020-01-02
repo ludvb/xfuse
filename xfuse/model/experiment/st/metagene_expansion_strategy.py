@@ -53,11 +53,10 @@ class Extra(ExpansionStrategy):
         contributing_metagenes: List[str],
         noncontributing_metagenes: List[str],
     ) -> None:
-        for _ in range(self.num - len(noncontributing_metagenes)):
+        n_missing = self.num - len(noncontributing_metagenes)
+        for _ in range(n_missing):
             experiment.add_metagene()
-        for n in noncontributing_metagenes[
-            : len(noncontributing_metagenes) - self.num
-        ]:
+        for n, _ in zip(noncontributing_metagenes, range(-n_missing)):
             experiment.remove_metagene(n, remove_params=False)
 
 
