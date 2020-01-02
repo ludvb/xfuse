@@ -10,6 +10,7 @@ from functools import wraps
 import click
 import h5py
 import ipdb
+import numpy as np
 import pandas as pd
 import tomlkit
 
@@ -123,6 +124,7 @@ _convert.add_command(visium)
 @click.option("--counts", type=click.File("rb"), required=True)
 @click.option("--image", type=click.File("rb"), required=True)
 @click.option("--spots", type=click.File("rb"))
+@click.option("--transformation-matrix", type=click.File("rb"))
 @click.option("--annotation", type=click.File("rb"))
 @click.option("--scale", type=float)
 @click.option(
@@ -130,12 +132,24 @@ _convert.add_command(visium)
     type=click.Path(exists=False, writable=True),
     required=True,
 )
-def st(counts, image, spots, annotation, scale, output_file):
+def st(
+    counts, image, spots, transformation_matrix, annotation, scale, output_file
+):
     r"""Converts Spatial Transcriptomics ("ST") data"""
+    if spots is not None and transformation_matrix is not None:
+        raise RuntimeError(
+            "Please pass either a spot data file or a text file containing a"
+            " transformation matrix"
+        )
     if spots is not None:
         spots_data = pd.read_csv(spots, sep="\t")
     else:
         spots_data = None
+    if transformation_matrix is not None:
+        transformation = np.loadtxt(transformation_matrix)
+        transformation = transformation.reshape(3, 3)
+    else:
+        transformation = None
     counts_data = pd.read_csv(counts, sep="\t", index_col=0)
     image_data = imread(image)
     if annotation:
@@ -147,7 +161,8 @@ def st(counts, image, spots, annotation, scale, output_file):
         counts_data,
         image_data,
         output_file,
-        spots_data,
+        spots=spots_data,
+        transformation=transformation,
         annotation=annotation,
         scale_factor=scale,
     )

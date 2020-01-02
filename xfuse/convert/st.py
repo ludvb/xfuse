@@ -18,6 +18,7 @@ def run(
     image: np.ndarray,
     output_file: str,
     spots: Optional[pd.DataFrame] = None,
+    transformation: Optional[np.ndarray] = None,
     annotation: Optional[Dict[str, np.ndarray]] = None,
     scale_factor: Optional[float] = None,
 ) -> None:
@@ -36,6 +37,11 @@ def run(
         }
         if spots is not None:
             spots[["pixel_x", "pixel_y"]] *= scale_factor
+        if transformation is not None:
+            scale_matrix = np.array(
+                [[scale_factor, 0, 0], [0, scale_factor, 0], [0, 0, 1]]
+            )
+            transformation = transformation @ scale_matrix
 
     if spots is not None:
         counts = counts.loc[
@@ -53,19 +59,23 @@ def run(
             )
         )
     else:
-        radius = np.sqrt(np.product(image.shape[:2]) / 32 / 34) / 4
-        spots = [
-            Spot(  # type: ignore
-                *[
-                    round((float(y) - 1) / d * s)
-                    for y, s, d in zip(
-                        x.split("x"), image.shape[:2][::-1], (32, 34)
-                    )
-                ],
-                radius,
+        coordinates = np.array(
+            [
+                [float(x), float(y)]
+                for x, y in (x.split("x") for x in counts.index)
+            ]
+        )
+        if transformation is not None:
+            coordinates = np.concatenate(
+                [coordinates, np.ones((len(coordinates), 1))], axis=-1
             )
-            for x in counts.index
-        ]
+            coordinates = coordinates @ transformation
+            coordinates = coordinates[:, :2]
+        else:
+            coordinates[:, 0] = (coordinates[:, 0] - 1) / 32 * image.shape[1]
+            coordinates[:, 1] = (coordinates[:, 1] - 1) / 34 * image.shape[0]
+        radius = np.sqrt(np.product(image.shape[:2]) / 32 / 34) / 4
+        spots = [Spot(x=x, y=y, r=radius) for x, y in coordinates]
 
     counts.index = pd.Index([*range(1, counts.shape[0] + 1)], name="n")
 
