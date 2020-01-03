@@ -108,7 +108,7 @@ class Image(Experiment):
                     torch.nn.Conv2d(
                         x.shape[1],
                         2 * x.shape[1],
-                        kernel_size=4,
+                        kernel_size=5,
                         stride=2,
                         padding=2,
                     ),
