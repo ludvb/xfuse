@@ -4,7 +4,7 @@ import numpy as np
 import pyro
 import torch
 from PIL import Image
-from scipy.ndimage.morphology import binary_fill_holes, distance_transform_edt
+from scipy.ndimage.morphology import distance_transform_edt
 from sklearn.decomposition import PCA
 from umap import UMAP
 
@@ -198,9 +198,7 @@ def visualize_metagenes(
         summarized_activations = summarized_activations.astype(np.uint8)
         summarized_activations = _cmyk2rgb(summarized_activations)
         summarized_activations = balance_colors(summarized_activations)
-        summarized_activations = mask_background(
-            summarized_activations, binary_fill_holes(mask)
-        )
+        summarized_activations = mask_background(summarized_activations, mask)
         yield summarized_activations
 
 
