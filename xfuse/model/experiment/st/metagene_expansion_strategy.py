@@ -30,7 +30,7 @@ class Extra(ExpansionStrategy):
 
     def __init__(
         self,
-        num_metagenes: int = 16,
+        num_metagenes: int = 4,
         anneal_to: Optional[int] = 1,
         anneal_epochs: Optional[int] = 10000,
     ):
