@@ -147,26 +147,14 @@ class ST(Image):
 
         return get_module("scale", _create_scale_decoder)
 
-    def _get_metagene_decoder(self, in_channels, n):
-        def _create_metagene_decoder():
-            decoder = torch.nn.Sequential(
-                torch.nn.Conv2d(in_channels, 1, kernel_size=1)
-            )
-            torch.nn.init.constant_(decoder[-1].weight, 0.0)
-            torch.nn.init.constant_(decoder[-1].bias, self.__metagenes[n][0])
-            return decoder
-
-        return torch.nn.Sequential(
-            get_module(
-                "metagene_shared",
-                lambda: torch.nn.Sequential(
-                    torch.nn.Conv2d(in_channels, in_channels, kernel_size=1),
-                    torch.nn.BatchNorm2d(in_channels),
-                    torch.nn.LeakyReLU(0.2, inplace=True),
-                ),
-            ),
-            get_module(_encode_metagene_name(n), _create_metagene_decoder),
+    def _create_metagene_decoder(self, in_channels, n):
+        decoder = torch.nn.Sequential(
+            torch.nn.Conv2d(in_channels, 1, kernel_size=1)
         )
+        decoder = decoder.to(get("default_device"))
+        torch.nn.init.constant_(decoder[-1].weight, 0.0)
+        torch.nn.init.constant_(decoder[-1].bias, self.__metagenes[n][0])
+        return decoder
 
     def model(self, x, zs):
         # pylint: disable=too-many-locals
@@ -188,11 +176,24 @@ class ST(Image):
         )
 
         if len(self.metagenes) > 0:
+            shared_representation = get_module(
+                "metagene_shared",
+                lambda: torch.nn.Sequential(
+                    torch.nn.Conv2d(
+                        decoded.shape[1], decoded.shape[1], kernel_size=1
+                    ),
+                    torch.nn.BatchNorm2d(decoded.shape[1]),
+                    torch.nn.LeakyReLU(0.2, inplace=True),
+                ).to(decoded),
+            ).to(decoded)(decoded)
             rim = torch.cat(
                 [
-                    self._get_metagene_decoder(decoded.shape[1], n).to(
-                        decoded
-                    )(decoded)
+                    get_module(
+                        f"metagene{n}",
+                        lambda: self._create_metagene_decoder(
+                            decoded.shape[1], n
+                        ),
+                    ).to(shared_representation)(shared_representation)
                     for n in self.metagenes
                 ],
                 dim=1,
