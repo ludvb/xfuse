@@ -317,39 +317,13 @@ class ST(Image):
         expression_encoder1 = get_module(
             "expression_encoder1",
             lambda: torch.nn.Sequential(
-                torch.nn.Linear(x["data"][0].shape[1], 256),
+                torch.nn.Linear(x["data"][0].shape[1], 1024),
                 torch.nn.Tanh(),
-                torch.nn.Linear(256, 256),
+                torch.nn.Linear(1024, 1024),
                 torch.nn.Tanh(),
-                torch.nn.Linear(256, 8),
+                torch.nn.Linear(1024, 16),
             ),
         ).to(x["image"])
-
-        smoothing_kernel = torch.nn.Conv2d(8, 8, 9, 1, 4, bias=False)
-        smoothing_kernel.weight = torch.nn.Parameter(
-            torch.ones_like(smoothing_kernel.weight) / 8 / 9 / 9,
-            requires_grad=False,
-        )
-        with warnings.catch_warnings():
-            # Ignore Pyro warning that the weights of the `smoothing_kernel`
-            # will not be registered to the param store, which is intended.
-            warnings.simplefilter("ignore", category=UserWarning)
-            expression_encoder2 = get_module(
-                "expression_encoder2",
-                lambda: torch.nn.Sequential(
-                    smoothing_kernel,
-                    torch.nn.Conv2d(
-                        8, 8, kernel_size=7, stride=1, padding=6, dilation=2
-                    ),
-                    torch.nn.Tanh(),
-                    smoothing_kernel,
-                    torch.nn.Conv2d(
-                        8, 8, kernel_size=7, stride=1, padding=6, dilation=2
-                    ),
-                    torch.nn.Tanh(),
-                    smoothing_kernel,
-                ),
-            ).to(x["image"])
 
         def encode(data, label):
             # Replace missing labels with closest neighbor
@@ -386,7 +360,6 @@ class ST(Image):
                 )
             ]
         )
-        expression = expression_encoder2(expression)
 
         return expression
 
