@@ -32,28 +32,33 @@ def purge_metagenes(xfuse: XFuse, num_samples: int = 1) -> None:
     with Session(log_level=WARNING):
         st_experiment = cast(ST, xfuse.get_experiment("ST"))
         metagenes = st_experiment.metagenes
-        reduced_models, ns = zip(
-            *[(_xfuse_without(n).model, n) for n in metagenes]
-        )
 
-        def _eval_on(x):
-            def _sample_once():
-                guide = p.poutine.trace(xfuse.guide).get_trace(x)
-                full, *reduced = compare(
-                    x, guide, xfuse.model, *reduced_models
-                )
-                return [x - full for x in reduced]
+        if len(metagenes) == 1:
+            contrib = list(metagenes)
+            noncontrib = []
+        else:
+            reduced_models, ns = zip(
+                *[(_xfuse_without(n).model, n) for n in metagenes]
+            )
 
-            res = [_sample_once() for _ in range(num_samples)]
-            return np.mean(res, 0)
+            def _eval_on(x):
+                def _sample_once():
+                    guide = p.poutine.trace(xfuse.guide).get_trace(x)
+                    full, *reduced = compare(
+                        x, guide, xfuse.model, *reduced_models
+                    )
+                    return [x - full for x in reduced]
 
-        dataloader = require("dataloader")
-        scores = np.mean([_eval_on(to_device(x)) for x in dataloader], 0)
+                res = [_sample_once() for _ in range(num_samples)]
+                return np.mean(res, 0)
 
-    noncontrib = [
-        n for res, n in reversed(sorted(zip(scores, ns))) if res >= 0
-    ]
-    contrib = [n for n in ns if n not in noncontrib]
+            dataloader = require("dataloader")
+            scores = np.mean([_eval_on(to_device(x)) for x in dataloader], 0)
+
+            noncontrib = [
+                n for res, n in reversed(sorted(zip(scores, ns))) if res >= 0
+            ]
+            contrib = [n for n in ns if n not in noncontrib]
 
     log(
         INFO,

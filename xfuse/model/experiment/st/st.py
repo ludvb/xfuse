@@ -45,11 +45,17 @@ class ST(Image):
     def __init__(
         self,
         *args,
-        metagenes: List[MetageneDefault] = [],
+        metagenes: Optional[List[MetageneDefault]] = None,
         encode_expression: bool = False,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
+
+        if metagenes is None:
+            metagenes = [MetageneDefault(0.0, None)]
+
+        if len(metagenes) == 0:
+            raise ValueError(f"Needs at least one metagene")
 
         self.__metagenes: Dict[str, MetageneDefault] = {}
         self.__metagene_queue: List[str] = []
@@ -106,6 +112,9 @@ class ST(Image):
 
     def remove_metagene(self, n, remove_params=False):
         r"""Removes a metagene"""
+        if len(self.metagenes) == 1:
+            raise RuntimeError("Cannot remove last metagene")
+
         log(INFO, "removing metagene: %s", n)
 
         try:
@@ -175,64 +184,51 @@ class ST(Image):
             ),
         )
 
-        if len(self.metagenes) > 0:
-            shared_representation = get_module(
-                "metagene_shared",
-                lambda: torch.nn.Sequential(
-                    torch.nn.Conv2d(
-                        decoded.shape[1], decoded.shape[1], kernel_size=1
+        shared_representation = get_module(
+            "metagene_shared",
+            lambda: torch.nn.Sequential(
+                torch.nn.Conv2d(
+                    decoded.shape[1], decoded.shape[1], kernel_size=1
+                ),
+                torch.nn.BatchNorm2d(decoded.shape[1]),
+                torch.nn.LeakyReLU(0.2, inplace=True),
+            ).to(decoded),
+        ).to(decoded)(decoded)
+        rim = torch.cat(
+            [
+                get_module(
+                    f"metagene{n}",
+                    partial(
+                        self._create_metagene_decoder, decoded.shape[1], n
                     ),
-                    torch.nn.BatchNorm2d(decoded.shape[1]),
-                    torch.nn.LeakyReLU(0.2, inplace=True),
-                ).to(decoded),
-            ).to(decoded)(decoded)
-            rim = torch.cat(
-                [
-                    get_module(
-                        f"metagene{n}",
-                        partial(
-                            self._create_metagene_decoder, decoded.shape[1], n
-                        ),
-                    ).to(shared_representation)(shared_representation)
-                    for n in self.metagenes
-                ],
-                dim=1,
-            )
-            rim = center_crop(rim, [None, None, *label.shape[-2:]])
-            rim = torch.nn.functional.softmax(rim, dim=1)
-            rim = p.sample("rim", Delta(rim))
-            rim = scale * rim
+                ).to(shared_representation)(shared_representation)
+                for n in self.metagenes
+            ],
+            dim=1,
+        )
+        rim = center_crop(rim, [None, None, *label.shape[-2:]])
+        rim = torch.nn.functional.softmax(rim, dim=1)
+        rim = p.sample("rim", Delta(rim))
+        rim = scale * rim
 
-            rate_mg_prior = Normal(
-                get_param(f"rate_mg_mu", lambda: torch.zeros(num_genes)).to(
-                    decoded
-                ),
-                1e-8
-                + get_param(
-                    f"rate_mg_sd",
-                    lambda: torch.ones(num_genes),
-                    constraint=constraints.positive,
-                ).to(decoded),
-            )
-            rate_mg = torch.stack(
-                [
-                    p.sample(_encode_metagene_name(n), rate_mg_prior)
-                    for n in self.metagenes
-                ]
-            )
-            rate_mg = p.sample("rate_mg", Delta(rate_mg))
-        else:
-            rim = p.sample(
-                "rim",
-                Delta(
-                    torch.zeros(len(x["data"]), 0, *label.shape[-2:]).to(
-                        decoded
-                    )
-                ),
-            )
-            rate_mg = p.sample(
-                "rate_mg", Delta(torch.zeros(0, num_genes).to(decoded))
-            )
+        rate_mg_prior = Normal(
+            get_param(f"rate_mg_mu", lambda: torch.zeros(num_genes)).to(
+                decoded
+            ),
+            1e-8
+            + get_param(
+                f"rate_mg_sd",
+                lambda: torch.ones(num_genes),
+                constraint=constraints.positive,
+            ).to(decoded),
+        )
+        rate_mg = torch.stack(
+            [
+                p.sample(_encode_metagene_name(n), rate_mg_prior)
+                for n in self.metagenes
+            ]
+        )
+        rate_mg = p.sample("rate_mg", Delta(rate_mg))
 
         effects = torch.cat(
             [
