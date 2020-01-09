@@ -50,6 +50,7 @@ def run(
 
     if scale_factor is not None:
         tissue_positions[["x", "y"]] *= scale_factor
+        spot_radius *= scale_factor
         image = zoom(image, (scale_factor, scale_factor, 1.0), order=0)
         annotation = {
             k: zoom(v, (scale_factor, scale_factor), order=0)
