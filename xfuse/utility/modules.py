@@ -71,7 +71,9 @@ def get_param(
             raise RuntimeError(f'Parameter "{name}" does not exist')
         param = pyro.param(name, default_value(), **kwargs)
         __STATE_DICT.params[name] = param
-    return param.requires_grad_(not get("eval"))
+    if get("eval"):
+        return param.detach()
+    return param
 
 
 def get_state_dict() -> StateDict:
