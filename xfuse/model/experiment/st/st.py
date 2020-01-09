@@ -1,6 +1,6 @@
 import itertools as it
-import warnings
 from copy import deepcopy
+from functools import partial
 from typing import Dict, List, NamedTuple, Optional
 
 import numpy as np
@@ -190,8 +190,8 @@ class ST(Image):
                 [
                     get_module(
                         f"metagene{n}",
-                        lambda: self._create_metagene_decoder(
-                            decoded.shape[1], n
+                        partial(
+                            self._create_metagene_decoder, decoded.shape[1], n
                         ),
                     ).to(shared_representation)(shared_representation)
                     for n in self.metagenes
