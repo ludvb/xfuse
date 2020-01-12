@@ -121,7 +121,8 @@ def compute_metagene_summary(method: str = "pca") -> None:
                 )
             )
             metagene_profiles_.to_csv(
-                os.path.join(output_dir, f"{experiment}-metagenes.csv.gz")
+                os.path.join(output_dir, f"{experiment}-metagenes.csv.gz"),
+                index=False,
             )
 
 
