@@ -137,15 +137,14 @@ class Image(Experiment):
 
     def _sample_image(self, x, decoded):
         def _create_mu_decoder():
+            image_channels = x["image"].shape[1]
             decoder = torch.nn.Sequential(
                 torch.nn.Conv2d(
-                    self.num_channels, self.num_channels, kernel_size=1
+                    self.num_channels, image_channels, kernel_size=1
                 ),
-                torch.nn.BatchNorm2d(self.num_channels),
+                torch.nn.BatchNorm2d(image_channels),
                 torch.nn.LeakyReLU(0.2, inplace=True),
-                torch.nn.Conv2d(
-                    self.num_channels, x["image"].shape[1], kernel_size=1
-                ),
+                torch.nn.Conv2d(image_channels, image_channels, kernel_size=1),
                 torch.nn.Tanh(),
             ).to(decoded)
             torch.nn.init.constant_(decoder[-2].weight, 0.0)
@@ -154,15 +153,14 @@ class Image(Experiment):
             return decoder
 
         def _create_sd_decoder():
+            image_channels = x["image"].shape[1]
             decoder = torch.nn.Sequential(
                 torch.nn.Conv2d(
-                    self.num_channels, self.num_channels, kernel_size=1
+                    self.num_channels, image_channels, kernel_size=1
                 ),
-                torch.nn.BatchNorm2d(self.num_channels),
+                torch.nn.BatchNorm2d(image_channels),
                 torch.nn.LeakyReLU(0.2, inplace=True),
-                torch.nn.Conv2d(
-                    self.num_channels, x["image"].shape[1], kernel_size=1
-                ),
+                torch.nn.Conv2d(image_channels, image_channels, kernel_size=1),
                 torch.nn.Softplus(),
             )
             torch.nn.init.constant_(decoder[-2].weight, 0.0)
