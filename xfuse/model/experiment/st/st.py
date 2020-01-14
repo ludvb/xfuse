@@ -197,7 +197,7 @@ class ST(Image):
         rim = torch.cat(
             [
                 get_module(
-                    f"metagene{n}",
+                    f"decoder_{_encode_metagene_name(n)}",
                     partial(
                         self._create_metagene_decoder, decoded.shape[1], n
                     ),
