@@ -110,7 +110,6 @@ def run(
             encode_expression=encode_expression,
         )
         xfuse = XFuse(experiments=[st_experiment]).to(get("default_device"))
-        expansion_strategy(st_experiment, [], [])
 
     optimizer = get("optimizer")
     if optimizer is None:
