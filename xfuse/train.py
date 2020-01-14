@@ -42,7 +42,7 @@ def train(epochs: int = -1):
     messengers: List[Messenger] = [
         MetagenePurger(
             period=lambda e: (
-                e % 100 == 0 and (epochs < 0 or e <= epochs - 100)
+                e % 1000 == 0 and (epochs < 0 or e <= epochs - 1000)
             ),
             num_samples=3,
         )
