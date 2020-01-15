@@ -1,3 +1,4 @@
+from .covariates import *
 from .dataloader import *
 from .default_device import *
 from .eval import *

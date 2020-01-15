@@ -8,7 +8,6 @@ from typing import (
     Dict,
     List,
     Optional,
-    Set,
     Tuple,
     Union,
     cast,
@@ -168,7 +167,7 @@ def read_data(
 
 def design_matrix_from(
     design: Dict[str, Dict[str, Union[int, str]]],
-    covariates: Optional[List[Tuple[str, Set[str]]]] = None,
+    covariates: Optional[List[Tuple[str, List[str]]]] = None,
 ) -> pd.DataFrame:
     r"""
     Constructs the design matrix from the design specified in the design file
@@ -204,24 +203,10 @@ def design_matrix_from(
             )
 
         for covariate, values in covariates:
-            design_table[covariate].cat.set_categories(
-                sorted(values), inplace=True
-            )
+            design_table[covariate].cat.set_categories(values, inplace=True)
         design_table = design_table[[x for x, _ in covariates]]
-    else:
-        for covariate in design_table.columns:
-            design_table[covariate].cat.set_categories(
-                sorted(design_table[covariate].cat.categories), inplace=True
-            )
 
     def _encode(covariate):
-        log(
-            INFO,
-            'encoding design covariate "%s" with %d categories: %s',
-            covariate.name,
-            len(covariate.cat.categories),
-            ", ".join(map(str, covariate.cat.categories)),
-        )
         oh_matrix = np.eye(len(covariate.cat.categories), dtype=int)[
             :, covariate.cat.codes
         ]

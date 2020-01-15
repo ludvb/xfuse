@@ -1,5 +1,6 @@
 # pylint: disable=missing-docstring, invalid-name, too-many-instance-attributes
 
+import itertools as it
 import json
 import os
 import sys
@@ -21,10 +22,10 @@ from ._config import (  # type: ignore
     construct_default_config_toml,
     merge_config,
 )
-from .logging import DEBUG, WARNING, log
+from .logging import DEBUG, INFO, WARNING, log
 from .model.experiment.st import STRATEGIES as expansion_strategies
 from .run import run as _run
-from .session import Session
+from .session import Session, get
 from .utility import design_matrix_from, with_
 from .utility.file import first_unique_filename
 from .utility.session import load_session
@@ -261,31 +262,40 @@ def run(project_file, save_path, session):
             {
                 filename: {k: v for k, v in slide.items() if k != "options"}
                 for filename, slide in config["slides"].items()
-            }
+            },
+            covariates=get("covariates"),
         )
+        covariates = [
+            (k, [x for _, x in v])
+            for k, v in it.groupby(design.index, key=lambda x: x[0])
+        ]
+        log(INFO, "Using the following design covariates:")
+        for name, values in covariates:
+            log(INFO, "  - %s: %s", name, ", ".join(map(str, values)))
 
-        _run(
-            design,
-            analyses=config["analyses"],
-            expansion_strategy=expansion_strategies[
-                config["expansion_strategy"]["type"]
-            ](
-                **config["expansion_strategy"][
+        with Session(covariates=covariates):
+            _run(
+                design,
+                analyses=config["analyses"],
+                expansion_strategy=expansion_strategies[
                     config["expansion_strategy"]["type"]
-                ]
-            ),
-            network_depth=config["xfuse"]["network_depth"],
-            network_width=config["xfuse"]["network_width"],
-            encode_expression=config["xfuse"]["encode_expression"],
-            genes=config["xfuse"]["genes"],
-            min_counts=config["xfuse"]["min_counts"],
-            patch_size=config["optimization"]["patch_size"],
-            batch_size=config["optimization"]["batch_size"],
-            epochs=config["optimization"]["epochs"],
-            learning_rate=config["optimization"]["learning_rate"],
-            warmup_epochs=config["optimization"]["warmup_epochs"],
-            slide_options=slide_options,
-        )
+                ](
+                    **config["expansion_strategy"][
+                        config["expansion_strategy"]["type"]
+                    ]
+                ),
+                network_depth=config["xfuse"]["network_depth"],
+                network_width=config["xfuse"]["network_width"],
+                encode_expression=config["xfuse"]["encode_expression"],
+                genes=config["xfuse"]["genes"],
+                min_counts=config["xfuse"]["min_counts"],
+                patch_size=config["optimization"]["patch_size"],
+                batch_size=config["optimization"]["batch_size"],
+                epochs=config["optimization"]["epochs"],
+                learning_rate=config["optimization"]["learning_rate"],
+                warmup_epochs=config["optimization"]["warmup_epochs"],
+                slide_options=slide_options,
+            )
 
 
 cli.add_command(run)
