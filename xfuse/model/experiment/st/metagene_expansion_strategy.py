@@ -156,14 +156,21 @@ class RetractAndSplit(ExpansionStrategy):
 
         def _extend_contributing_branches(root: _Node) -> _Node:
             if isinstance(root, _Split):
-                if (not isinstance(root.a, _Leaf) or root.a.contributing) and (
-                    not isinstance(root.b, _Leaf) or root.b.contributing
-                ):
-                    return _Split(
-                        _extend_contributing_branches(root.a),
-                        _extend_contributing_branches(root.b),
-                    )
-                return root
+                if isinstance(root.a, _Leaf) and isinstance(root.b, _Leaf):
+                    if root.a.contributing and root.b.contributing:
+                        return _Split(
+                            _extend_contributing_branches(root.a),
+                            _extend_contributing_branches(root.b),
+                        )
+                    return root
+                return _Split(
+                    *[
+                        _extend_contributing_branches(node)
+                        if not isinstance(node, _Leaf) or node.contributing
+                        else node
+                        for node in (root.a, root.b)
+                    ]
+                )
             if isinstance(root, _Leaf):
                 if root.contributing:
                     return _Split(
