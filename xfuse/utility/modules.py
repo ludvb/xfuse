@@ -78,11 +78,14 @@ def get_param(
 
 def get_state_dict() -> StateDict:
     r"""Returns the state dicts of the modules in the module store"""
-    state_dicts = copy(__STATE_DICT)
-    state_dicts.modules.update(
+    state_dict = StateDict(
+        modules={k: copy(v) for k, v in __STATE_DICT.modules.items()},
+        params=copy(__STATE_DICT.params),
+    )
+    state_dict.modules.update(
         {name: module.state_dict() for name, module in __MODULES.items()}
     )
-    return state_dicts
+    return state_dict
 
 
 def load_state_dict(state_dict: StateDict) -> None:

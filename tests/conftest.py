@@ -7,13 +7,16 @@ import numpy as np
 import pandas as pd
 import pyro
 import pyro.distributions as distr
-import torch
-
 import pytest
+import torch
 from xfuse.convert.utility import write_data
 from xfuse.data import Data, Dataset
 from xfuse.data.slide import STSlide, FullSlide, Slide
 from xfuse.data.utility.misc import make_dataloader
+from xfuse.model import XFuse
+from xfuse.model.experiment.st import ST, MetageneDefault
+from xfuse.session import Session, get
+from xfuse.train import train
 from xfuse.utility import design_matrix_from
 from xfuse.utility.modules import reset_state
 
@@ -125,3 +128,22 @@ def toydata(tmp_path):
     dataloader = make_dataloader(dataset)
 
     return dataloader
+
+
+@pytest.fixture
+def pretrained_toy_model(toydata):
+    r"""Pretrained toy model"""
+    # pylint: disable=redefined-outer-name
+    st_experiment = ST(
+        depth=2,
+        num_channels=4,
+        metagenes=[MetageneDefault(0.0, None) for _ in range(1)],
+    )
+    xfuse = XFuse(experiments=[st_experiment])
+    with Session(
+        model=xfuse,
+        optimizer=pyro.optim.Adam({"lr": 0.001}),
+        dataloader=toydata,
+    ):
+        train(100 + get("training_data").epoch)
+    return xfuse

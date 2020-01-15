@@ -44,24 +44,6 @@ def test_toydata(tmp_path, mocker, toydata, encode_expression):
     assert rmses[-1] < 20.0
 
 
-@pytest.fixture
-def pretrained_toy_model(toydata):
-    r"""Pretrained toy model"""
-    st_experiment = ST(
-        depth=2,
-        num_channels=4,
-        metagenes=[MetageneDefault(0.0, None) for _ in range(1)],
-    )
-    xfuse = XFuse(experiments=[st_experiment])
-    with Session(
-        model=xfuse,
-        optimizer=pyro.optim.Adam({"lr": 0.001}),
-        dataloader=toydata,
-    ):
-        train(100 + get("training_data").epoch)
-    return xfuse
-
-
 @pytest.mark.fix_rng
 @pytest.mark.parametrize(
     "expansion_strategies,compute_expected_metagenes",

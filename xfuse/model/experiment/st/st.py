@@ -20,7 +20,12 @@ from ....data.utility.misc import spot_size
 from ....logging import DEBUG, INFO, log
 from ....session import get, require
 from ....utility import center_crop, sparseonehot
-from ....utility.modules import get_module, get_param
+from ....utility.modules import (
+    get_module,
+    get_param,
+    get_state_dict,
+    load_state_dict,
+)
 from ..image import Image
 
 
@@ -97,16 +102,25 @@ class ST(Image):
         name = _encode_metagene_name(metagene)
         new_name = _encode_metagene_name(new_metagene)
 
-        store = p.get_param_store()
+        state_dict = get_state_dict()
 
-        for pname in [p for p in store.keys() if name in p]:
+        for pname in [
+            pname for pname in state_dict.params.keys() if name in pname
+        ]:
             new_pname = pname.replace(name, new_name)
             log(DEBUG, "copying param: %s -> %s", pname, new_pname)
-            store.setdefault(
-                new_pname,
-                store[pname].clone().detach(),
-                store._constraints[pname],  # pylint: disable=protected-access
+            state_dict.params[new_pname] = (
+                state_dict.params[pname].detach().clone().requires_grad_()
             )
+
+        for mname in [
+            mname for mname in state_dict.modules.keys() if name in mname
+        ]:
+            new_mname = mname.replace(name, new_name)
+            log(DEBUG, "copying module: %s -> %s", mname, new_mname)
+            state_dict.modules[new_mname] = state_dict.modules[mname]
+
+        load_state_dict(state_dict)
 
         return new_metagene
 
