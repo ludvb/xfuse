@@ -147,7 +147,6 @@ class ST(Image):
                 torch.nn.Conv2d(in_channels, 1, kernel_size=1),
                 torch.nn.Softplus(),
             )
-            torch.nn.init.constant_(decoder[-2].weight, 0.0)
             torch.nn.init.constant_(
                 decoder[-2].bias,
                 np.log(np.exp(1 / spot_size(dataset)["ST"]) - 1),
@@ -161,7 +160,6 @@ class ST(Image):
             torch.nn.Conv2d(in_channels, 1, kernel_size=1)
         )
         decoder = decoder.to(get("default_device"))
-        torch.nn.init.constant_(decoder[-1].weight, 0.0)
         torch.nn.init.constant_(decoder[-1].bias, self.__metagenes[n][0])
         return decoder
 
@@ -462,7 +460,7 @@ class ST(Image):
         for name, metagene in self.metagenes.items():
             if metagene.profile is None:
                 metagene = MetageneDefault(
-                    metagene.scale, torch.zeros(num_genes)
+                    metagene.scale, torch.randn(num_genes)
                 )
             _sample_metagene(metagene, name)
 
