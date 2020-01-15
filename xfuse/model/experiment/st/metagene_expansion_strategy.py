@@ -229,14 +229,9 @@ class RetractAndSplit(ExpansionStrategy):
         _log_trees("trees after splitting")
 
 
-def _setter(x):
-    if not isinstance(x, ExpansionStrategy):
-        raise ValueError(f"{x} is not an expansion strategy")
-
-
 register_session_item(
     "metagene_expansion_strategy",
-    SessionItem(setter=_setter, default=Extra(num_metagenes=1)),
+    SessionItem(setter=lambda _: None, default=None),
 )
 
 

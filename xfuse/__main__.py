@@ -273,17 +273,21 @@ def run(project_file, save_path, session):
         for name, values in covariates:
             log(INFO, "  - %s: %s", name, ", ".join(map(str, values)))
 
+        expansion_strategy = get("metagene_expansion_strategy")
+        if expansion_strategy is None:
+            expansion_strategy = expansion_strategies[
+                config["expansion_strategy"]["type"]
+            ](
+                **config["expansion_strategy"][
+                    config["expansion_strategy"]["type"]
+                ]
+            )
+
         with Session(covariates=covariates):
             _run(
                 design,
                 analyses=config["analyses"],
-                expansion_strategy=expansion_strategies[
-                    config["expansion_strategy"]["type"]
-                ](
-                    **config["expansion_strategy"][
-                        config["expansion_strategy"]["type"]
-                    ]
-                ),
+                expansion_strategy=expansion_strategy,
                 network_depth=config["xfuse"]["network_depth"],
                 network_width=config["xfuse"]["network_width"],
                 encode_expression=config["xfuse"]["encode_expression"],
