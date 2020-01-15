@@ -56,5 +56,6 @@ def load_session(file: Union[str, BufferedReader]) -> Session:
     r"""Loads :class:`Session` from a file"""
     log(INFO, "loading session from %s", str(file))
     session, state_dict = t.load(file, map_location="cpu")
-    load_state_dict(state_dict)
+    with session:
+        load_state_dict(state_dict)
     return session

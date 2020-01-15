@@ -10,6 +10,7 @@ def _set_default_device(device):
     new_state_dict = StateDict(
         params=to_device_(state_dict.params, device=device),
         modules=to_device_(state_dict.modules, device=device),
+        optimizer=to_device_(state_dict.optimizer, device=device),
     )
     load_state_dict(new_state_dict)
 
