@@ -5,7 +5,7 @@ import os
 import pytest
 
 from xfuse.session import Session, Unset, get
-from xfuse.utility.modules import get_state_dict, reset_state
+from xfuse.utility.state import get_state_dict, reset_state
 
 
 @pytest.mark.parametrize("test_case", ["test_train_exit_status.1.toml"])

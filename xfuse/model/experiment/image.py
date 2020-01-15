@@ -3,7 +3,7 @@ import torch
 from pyro.distributions import Normal  # pylint: disable=no-name-in-module
 
 from ...utility import center_crop
-from ...utility.modules import get_module
+from ...utility.state import get_module
 from . import Experiment
 
 
@@ -39,7 +39,7 @@ class Image(Experiment):
                     ),
                     torch.nn.BatchNorm2d(y.shape[1]),
                     torch.nn.LeakyReLU(0.2, inplace=True),
-                ),
+                ).to(y),
             ).to(y)
             return decoder(y)
 
@@ -55,7 +55,7 @@ class Image(Experiment):
                     ),
                     torch.nn.BatchNorm2d(z.shape[1]),
                     torch.nn.LeakyReLU(0.2, inplace=True),
-                ),
+                ).to(y),
             ).to(y)
             y = center_crop(y, [None, None, *z.shape[-2:]])
             return combiner(torch.cat([y, z], 1))
@@ -72,7 +72,7 @@ class Image(Experiment):
                     ),
                     torch.nn.BatchNorm2d(y.shape[1] // 2),
                     torch.nn.LeakyReLU(0.2, inplace=True),
-                ),
+                ).to(y),
             ).to(y)
             return upsampler(y)
 
@@ -164,7 +164,7 @@ class Image(Experiment):
                     self.num_channels, x["image"].shape[1], kernel_size=1
                 ),
                 torch.nn.Softplus(),
-            )
+            ).to(decoded)
             torch.nn.init.constant_(decoder[-2].weight, 0.0)
             std = x["image"].std((0, 2, 3))
             decoder[-2].bias.data = (std.exp() - 1).log()

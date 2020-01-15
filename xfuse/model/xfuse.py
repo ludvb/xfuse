@@ -9,7 +9,7 @@ import torch
 from .experiment import Experiment
 from ..logging import INFO, log
 from ..utility import find_device
-from ..utility.modules import get_module
+from ..utility.state import get_module
 
 
 class ModelWrapper(Messenger):
@@ -107,7 +107,7 @@ class XFuse(torch.nn.Module):
                         torch.nn.BatchNorm2d(y.shape[1]),
                         torch.nn.LeakyReLU(0.2, inplace=True),
                         torch.nn.Conv2d(y.shape[1], y.shape[1], 1),
-                    ),
+                    ).to(y),
                 ).to(y)
                 z_sd = get_module(
                     f"{name}-sd",
@@ -117,7 +117,7 @@ class XFuse(torch.nn.Module):
                         torch.nn.LeakyReLU(0.2, inplace=True),
                         torch.nn.Conv2d(y.shape[1], y.shape[1], 1),
                         torch.nn.Softplus(),
-                    ),
+                    ).to(y),
                 ).to(y)
                 with p.poutine.scale(scale=experiment.n / len(x)):
                     return p.sample(

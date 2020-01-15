@@ -9,7 +9,7 @@ from _io import BufferedReader
 from ..logging import INFO, WARNING, log
 from ..session import Session, get_session, require
 from .file import first_unique_filename
-from .modules import get_state_dict, load_state_dict
+from .state.state import get_state_dict, load_state_dict
 
 __all__ = ["load_session", "save_session"]
 

@@ -20,7 +20,7 @@ from ....data.utility.misc import spot_size
 from ....logging import DEBUG, INFO, log
 from ....session import get, require
 from ....utility import center_crop, sparseonehot
-from ....utility.modules import (
+from ....utility.state import (
     get_module,
     get_param,
     get_state_dict,
@@ -161,6 +161,7 @@ class ST(Image):
                 torch.nn.Conv2d(in_channels, 1, kernel_size=1),
                 torch.nn.Softplus(),
             )
+            decoder = decoder.to(get("default_device"))
             torch.nn.init.constant_(
                 decoder[-2].bias,
                 np.log(np.exp(1 / spot_size(dataset)["ST"]) - 1),
@@ -224,13 +225,14 @@ class ST(Image):
         rim = scale * rim
 
         rate_mg_prior = Normal(
-            get_param(f"rate_mg_mu", lambda: torch.zeros(num_genes)).to(
-                decoded
-            ),
+            get_param(
+                f"rate_mg_mu",
+                lambda: torch.zeros(num_genes).to(get("default_device")),
+            ).to(decoded),
             1e-8
             + get_param(
                 f"rate_mg_sd",
-                lambda: torch.ones(num_genes),
+                lambda: torch.ones(num_genes).to(get("default_device")),
                 constraint=constraints.positive,
             ).to(decoded),
         )
@@ -330,7 +332,7 @@ class ST(Image):
                 torch.nn.Linear(1024, 1024),
                 torch.nn.Tanh(),
                 torch.nn.Linear(1024, 16),
-            ),
+            ).to(x["image"]),
         ).to(x["image"])
 
         def encode(data, label):
@@ -381,7 +383,13 @@ class ST(Image):
             data = vstack(
                 [slide.data.counts for slide in dataset.data.slides.values()]
             )
-            return torch.as_tensor(data.mean(0)).float().squeeze().log()
+            return (
+                torch.as_tensor(data.mean(0))
+                .float()
+                .squeeze()
+                .log()
+                .to(device)
+            )
 
         a = p.sample(
             f"rate_g_effects-baseline",
@@ -397,14 +405,16 @@ class ST(Image):
                 get_param(
                     f"rate_g_effects-covariate_mu",
                     lambda: torch.zeros(
-                        dataset.data.design.shape[0], num_genes
+                        dataset.data.design.shape[0], num_genes, device=device
                     ),
                 ).to(device),
                 1e-8
                 + get_param(
                     f"rate_g_effects-covariate_sd",
                     lambda: 1e-2
-                    * torch.ones(dataset.data.design.shape[0], num_genes),
+                    * torch.ones(
+                        dataset.data.design.shape[0], num_genes, device=device
+                    ),
                     constraint=constraints.positive,
                 ).to(device),
             ),
@@ -422,7 +432,7 @@ class ST(Image):
                 get_param(
                     f"logits_g_effects-baseline-value",
                     # pylint: disable=unnecessary-lambda
-                    lambda: (0.5 * torch.ones(num_genes)).log(),
+                    lambda: (0.5 * torch.ones(num_genes, device=device)).log(),
                 )
             ),
         ).to(device)
@@ -432,14 +442,16 @@ class ST(Image):
                 get_param(
                     f"logits_g_effects-covariate_mu",
                     lambda: torch.zeros(
-                        dataset.data.design.shape[0], num_genes
+                        dataset.data.design.shape[0], num_genes, device=device
                     ),
                 ).to(device),
                 1e-8
                 + get_param(
                     f"logits_g_effects-covariate_sd",
                     lambda: 1e-2
-                    * torch.ones(dataset.data.design.shape[0], num_genes),
+                    * torch.ones(
+                        dataset.data.design.shape[0], num_genes, device=device
+                    ),
                     constraint=constraints.positive,
                 ).to(device),
             ),
@@ -458,13 +470,15 @@ class ST(Image):
                     get_param(
                         f"{_encode_metagene_name(name)}_mu",
                         # pylint: disable=unnecessary-lambda
-                        lambda: metagene.profile.float(),
+                        lambda: metagene.profile.float().to(device),
                     ).to(device),
                     1e-8
                     + get_param(
                         f"{_encode_metagene_name(name)}_sd",
                         lambda: 1e-2
-                        * torch.ones_like(metagene.profile).float(),
+                        * torch.ones_like(
+                            metagene.profile, device=device
+                        ).float(),
                         constraint=constraints.positive,
                     ).to(device),
                 ),

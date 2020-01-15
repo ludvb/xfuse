@@ -18,7 +18,7 @@ from xfuse.model.experiment.st import ST, MetageneDefault
 from xfuse.session import Session, get
 from xfuse.train import train
 from xfuse.utility import design_matrix_from
-from xfuse.utility.modules import reset_state
+from xfuse.utility.state import reset_state
 
 
 def pytest_configure(config):
