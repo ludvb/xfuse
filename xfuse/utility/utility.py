@@ -33,7 +33,6 @@ __all__ = [
     "find_device",
     "sparseonehot",
     "to_device",
-    "to_device_",
     "with_",
 ]
 
@@ -297,47 +296,6 @@ def to_device(x, device=None):
         return [to_device(y, device) for y in x]
     if isinstance(x, dict):
         return {k: to_device(v, device) for k, v in x.items()}
-    return x
-
-
-@overload
-def to_device_(
-    x: torch.Tensor, device: Optional[torch.device] = None
-) -> torch.Tensor:
-    # pylint: disable=missing-function-docstring
-    ...
-
-
-@overload
-def to_device_(
-    x: List[Any], device: Optional[torch.device] = None
-) -> List[Any]:
-    # pylint: disable=missing-function-docstring
-    ...
-
-
-@overload
-def to_device_(
-    x: Dict[Any, Any], device: Optional[torch.device] = None
-) -> Dict[Any, Any]:
-    # pylint: disable=missing-function-docstring
-    ...
-
-
-def to_device_(x, device=None):
-    r"""
-    Converts :class:`torch.Tensor` or a collection of :class:`torch.Tensor` in
-    place to the given :class:`torch.device`
-    """
-    if device is None:
-        device = get("default_device")
-    if isinstance(x, torch.Tensor):
-        x.data = x.data.to(device)
-        return x
-    if isinstance(x, list):
-        return [to_device_(y, device) for y in x]
-    if isinstance(x, dict):
-        return {k: to_device_(v, device) for k, v in x.items()}
     return x
 
 
