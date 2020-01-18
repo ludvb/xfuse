@@ -60,7 +60,7 @@ def get_param(
         if default_value is None:
             raise RuntimeError(f'Parameter "{name}" does not exist')
         param = pyro.param(name, default_value(), **kwargs)
-        __STATE_DICT.params[name] = param
+        __STATE_DICT.params[name] = param.detach()
     if get("eval"):
         return param.detach()
     return param

@@ -28,6 +28,12 @@ def get_state_dict() -> StateDict:
     state_dict.modules.update(
         {name: module.state_dict() for name, module in __MODULES.items()}
     )
+    state_dict.params.update(
+        {
+            name: param.detach()
+            for name, param in pyro.get_param_store().items()
+        }
+    )
     optimizer = get("optimizer")
     if optimizer is not None:
         state_dict.optimizer.update(optimizer.get_state())
