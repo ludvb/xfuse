@@ -22,6 +22,7 @@ def compute_gene_maps(
 ) -> None:
     r"""Gene maps analysis function"""
     # pylint: disable=too-many-locals
+    genes = require("genes")
     model = require("model")
     dataloader = require("dataloader")
     save_path = require("save_path")
@@ -47,6 +48,15 @@ def compute_gene_maps(
         shuffle=False,
     )
 
+    all_genes = np.array(genes)
+    selected_genes = np.array(
+        [
+            x
+            for x in all_genes
+            if re.match(gene_name_regex, x, flags=re.IGNORECASE)
+        ]
+    )
+
     def _compute_gene_map_st(
         guide_trace, model_trace, data  # pylint: disable=unused-argument
     ):
@@ -54,10 +64,12 @@ def compute_gene_maps(
         if not normalize:
             rate_im *= model_trace.nodes["scale"]["value"]
         rate_mg = model_trace.nodes["rate_mg"]["value"]
-        for name, rate_m in tqdm(
-            zip(dataloader.dataset.genes, rate_mg.t()),
-            total=len(dataloader.dataset.genes),
-        ):
+        rate_mg = rate_mg[:, np.isin(all_genes, selected_genes).nonzero()[0]]
+        progress = tqdm(
+            zip(selected_genes, rate_mg.t()), total=len(selected_genes)
+        )
+        for name, rate_m in progress:
+            progress.set_description(name)
             gene_map = torch.einsum("fyx,f->yx", rate_im[0], rate_m.exp())
             gene_map -= gene_map.min()
             gene_map /= gene_map.max() - gene_map.min()
@@ -82,9 +94,11 @@ def compute_gene_maps(
     with Session(
         default_device=torch.device("cpu"), pyro_stack=[]
     ), torch.no_grad():
-        for x in tqdm(dataloader, position=1):
+        progress = tqdm(dataloader, position=1)
+        for x in progress:
             experiment_type = next(iter(x.keys()))
             slide_name = x[experiment_type]["slide_name"][0]
+            progress.set_description(slide_name)
 
             if experiment_type not in fns.keys():
                 log(
@@ -106,10 +120,6 @@ def compute_gene_maps(
             for gene_name, gene_map in fns[experiment_type](
                 guide_trace.trace, model_trace.trace, x[experiment_type]
             ):
-                if not re.match(
-                    gene_name_regex, gene_name, flags=re.IGNORECASE
-                ):
-                    continue
                 filename = os.path.join(
                     output_dir,
                     os.path.basename(slide_name),
