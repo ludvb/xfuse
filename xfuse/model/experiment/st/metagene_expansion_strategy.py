@@ -143,13 +143,14 @@ class RetractAndSplit(ExpansionStrategy):
 
         def _retract_noncontributing_branches(root: _Node) -> _Node:
             if isinstance(root, _Split):
-                if isinstance(root.a, _Leaf) and isinstance(root.b, _Leaf):
-                    if not (root.a.contributing or root.b.contributing):
-                        return root.a
-                    return _Split(root.a, root.b)
-                a = _retract_noncontributing_branches(root.a)
-                b = _retract_noncontributing_branches(root.b)
-                return _Split(a, b)
+                if isinstance(root.b, _Leaf) and not root.b.contributing:
+                    return _retract_noncontributing_branches(root.a)
+                if isinstance(root.a, _Leaf) and not root.a.contributing:
+                    return _retract_noncontributing_branches(root.b)
+                return _Split(
+                    _retract_noncontributing_branches(root.a),
+                    _retract_noncontributing_branches(root.b),
+                )
             if isinstance(root, _Leaf):
                 return root
             raise NotImplementedError()
