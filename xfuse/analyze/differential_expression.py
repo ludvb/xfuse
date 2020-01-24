@@ -69,7 +69,7 @@ def compute_differential_expression(
                                 slide,
                                 design,
                                 annotation_label,
-                                normalize_scale=False,
+                                normalize_scale=True,
                                 normalize_size=True,
                             )
                     else:
@@ -82,7 +82,7 @@ def compute_differential_expression(
                                     slide,
                                     design,
                                     annotation_label,
-                                    normalize_scale=False,
+                                    normalize_scale=True,
                                     normalize_size=True,
                                 )
                         model_fixed_globals = copy(model)
