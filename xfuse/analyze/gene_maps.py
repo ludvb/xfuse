@@ -6,6 +6,7 @@ import numpy as np
 import pyro
 import torch
 from imageio import imwrite
+from matplotlib import cm
 from tqdm import tqdm
 
 from .analyze import Analysis, _register_analysis
@@ -15,6 +16,7 @@ from ..data.utility.misc import make_dataloader
 from ..logging import WARNING, log
 from ..session import Session, require
 from ..utility import center_crop
+from ..utility.visualization import mask_background, balance_colors
 
 
 def compute_gene_maps(
@@ -71,23 +73,18 @@ def compute_gene_maps(
         for name, rate_m in progress:
             progress.set_description(name)
             gene_map = torch.einsum("fyx,f->yx", rate_im[0], rate_m.exp())
-            gene_map -= gene_map.min()
-            gene_map /= gene_map.max() - gene_map.min()
-            gene_map = (255 * gene_map).round().byte()
             nonzero_labels = (data["data"][0].sum(1) == 0).nonzero() + 1
-            gene_map[
-                np.isin(
-                    center_crop(data["label"][0].cpu(), gene_map.shape),
-                    nonzero_labels.cpu(),
-                )
-            ] = 0
-            yield name, gene_map
+            mask = ~np.isin(
+                center_crop(data["label"][0].cpu(), gene_map.shape),
+                nonzero_labels.cpu(),
+            )
+            yield name, gene_map, mask
 
     fns: Dict[
         str,
         Callable[
             [pyro.poutine.Trace, pyro.poutine.Trace, Dict[str, Any]],
-            Iterator[Tuple[str, torch.Tensor]],
+            Iterator[Tuple[str, torch.Tensor, torch.Tensor]],
         ],
     ] = {"ST": _compute_gene_map_st}
 
@@ -117,16 +114,28 @@ def compute_gene_maps(
                 with pyro.poutine.trace() as model_trace:
                     model.model(x)
 
-            for gene_name, gene_map in fns[experiment_type](
+            for gene_name, gene_map, mask in fns[experiment_type](
                 guide_trace.trace, model_trace.trace, x[experiment_type]
             ):
+                gene_map -= gene_map.min()
+                gene_map /= gene_map.max() - gene_map.min()
+                gene_map = (255 * gene_map).round().byte()
+                gene_map = balance_colors(gene_map.numpy(), q=0, q_high=0.999)
+                gene_map = np.round(
+                    255
+                    * np.array(
+                        # pylint: disable=no-member
+                        cm.viridis.colors
+                    )[gene_map]
+                ).astype(np.uint8)
+                gene_map = mask_background(gene_map, mask)
                 filename = os.path.join(
                     output_dir,
                     os.path.basename(slide_name),
                     f"{gene_name}.png",
                 )
                 os.makedirs(os.path.dirname(filename), exist_ok=True)
-                imwrite(filename, gene_map.cpu().numpy())
+                imwrite(filename, gene_map)
 
 
 _register_analysis(
