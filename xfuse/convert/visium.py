@@ -3,6 +3,7 @@ from typing import Dict, Optional
 import h5py
 import numpy as np
 import pandas as pd
+from PIL import Image
 from scipy.ndimage.interpolation import zoom
 from scipy.sparse import csr_matrix
 
@@ -51,7 +52,12 @@ def run(
     if scale_factor is not None:
         tissue_positions[["x", "y"]] *= scale_factor
         spot_radius *= scale_factor
-        image = zoom(image, (scale_factor, scale_factor, 1.0), order=0)
+        image = Image.fromarray(image)
+        image = image.resize(
+            [round(x * scale_factor) for x in image.size],
+            resample=Image.BILINEAR,
+        )
+        image = np.array(image)
         annotation = {
             k: zoom(v, (scale_factor, scale_factor), order=0)
             for k, v in annotation.items()

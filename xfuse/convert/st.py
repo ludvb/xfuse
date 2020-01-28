@@ -2,6 +2,7 @@ from typing import Dict, Optional
 
 import numpy as np
 import pandas as pd
+from PIL import Image
 from scipy.ndimage.interpolation import zoom
 
 from .utility import (
@@ -30,7 +31,12 @@ def run(
         annotation = {}
 
     if scale_factor is not None:
-        image = zoom(image, (scale_factor, scale_factor, 1.0), order=0)
+        image = Image.fromarray(image)
+        image = image.resize(
+            [round(x * scale_factor) for x in image.size],
+            resample=Image.BILINEAR,
+        )
+        image = np.array(image)
         annotation = {
             k: zoom(v, (scale_factor, scale_factor), order=0)
             for k, v in annotation.items()
