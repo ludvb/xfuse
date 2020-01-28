@@ -16,6 +16,7 @@ import pandas as pd
 import tomlkit
 
 from imageio import imread
+from PIL import Image
 
 from . import __version__, convert
 from ._config import (  # type: ignore
@@ -91,6 +92,7 @@ def visium(
     tissue_positions = pd.read_csv(tissue_positions, index_col=0, header=None)
     tissue_positions = tissue_positions[[4, 5]]
     tissue_positions = tissue_positions.rename(columns={4: "y", 5: "x"})
+
     if scale_factors:
         scale_factors = json.load(scale_factors)
         spot_radius = scale_factors["spot_diameter_fullres"] / 2
@@ -100,12 +102,16 @@ def visium(
         )
     else:
         spot_radius = 255.1463437163131 / 2
+
+    Image.MAX_IMAGE_PIXELS = None
     image = imread(image)
+
     if annotation:
         with h5py.File(annotation, "r") as annotation_file:
             annotation = {
                 k: annotation_file[k][()] for k in annotation_file.keys()
             }
+
     with h5py.File(bc_matrix, "r") as data:
         convert.visium.run(
             image,
