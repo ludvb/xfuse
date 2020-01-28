@@ -39,8 +39,9 @@ class Image(Experiment):
                     ),
                     torch.nn.BatchNorm2d(y.shape[1]),
                     torch.nn.LeakyReLU(0.2, inplace=True),
-                ).to(y),
-            ).to(y)
+                ),
+                checkpoint=True,
+            )
             return decoder(y)
 
         def _combine(y, z, i):
@@ -55,8 +56,9 @@ class Image(Experiment):
                     ),
                     torch.nn.BatchNorm2d(z.shape[1]),
                     torch.nn.LeakyReLU(0.2, inplace=True),
-                ).to(y),
-            ).to(y)
+                ),
+                checkpoint=True,
+            )
             y = center_crop(y, [None, None, *z.shape[-2:]])
             return combiner(torch.cat([y, z], 1))
 
@@ -72,8 +74,9 @@ class Image(Experiment):
                     ),
                     torch.nn.BatchNorm2d(y.shape[1] // 2),
                     torch.nn.LeakyReLU(0.2, inplace=True),
-                ).to(y),
-            ).to(y)
+                ),
+                checkpoint=True,
+            )
             return upsampler(y)
 
         y = _decode(zs[-1], self.depth - 1)
@@ -97,8 +100,9 @@ class Image(Experiment):
                     ),
                     torch.nn.BatchNorm2d(x.shape[1]),
                     torch.nn.LeakyReLU(0.2, inplace=True),
-                ).to(x),
-            ).to(x)
+                ),
+                checkpoint=True,
+            )
             return encoder(x)
 
         def _downsample(x, i):
@@ -114,8 +118,9 @@ class Image(Experiment):
                     ),
                     torch.nn.BatchNorm2d(2 * x.shape[1]),
                     torch.nn.LeakyReLU(0.2, inplace=True),
-                ).to(x),
-            ).to(x)
+                ),
+                checkpoint=True,
+            )
             return downsampler(x)
 
         preencoder = get_module(
@@ -126,8 +131,8 @@ class Image(Experiment):
                 ),
                 torch.nn.BatchNorm2d(self.num_channels),
                 torch.nn.LeakyReLU(0.2, inplace=True),
-            ).to(x),
-        ).to(x)
+            ),
+        )
 
         ys = [_encode(preencoder(x), 0)]
         for i in range(1, self.depth):
@@ -147,7 +152,7 @@ class Image(Experiment):
                     self.num_channels, x["image"].shape[1], kernel_size=1
                 ),
                 torch.nn.Tanh(),
-            ).to(decoded)
+            )
             torch.nn.init.constant_(decoder[-2].weight, 0.0)
             mean = x["image"].mean((0, 2, 3))
             decoder[-2].bias.data = ((1 + mean) / (1 - mean)).log() / 2
@@ -164,14 +169,14 @@ class Image(Experiment):
                     self.num_channels, x["image"].shape[1], kernel_size=1
                 ),
                 torch.nn.Softplus(),
-            ).to(decoded)
+            )
             torch.nn.init.constant_(decoder[-2].weight, 0.0)
             std = x["image"].std((0, 2, 3))
             decoder[-2].bias.data = (std.exp() - 1).log()
             return decoder
 
-        img_mu = get_module("img_mu", _create_mu_decoder).to(decoded)
-        img_sd = get_module("img_sd", _create_sd_decoder).to(decoded)
+        img_mu = get_module("img_mu", _create_mu_decoder, checkpoint=True)
+        img_sd = get_module("img_sd", _create_sd_decoder, checkpoint=True)
         mu = img_mu(decoded)
         sd = img_sd(decoded)
 

@@ -19,12 +19,14 @@ import numpy as np
 import pandas as pd
 import scipy.sparse as ss
 import torch
+from torch.utils.checkpoint import checkpoint as _checkpoint
 
 from ..logging import INFO, WARNING, log
 from ..session import get
 from ..utility.file import extension
 
 __all__ = [
+    "checkpoint",
     "compose",
     "set_rng_seed",
     "center_crop",
@@ -35,6 +37,16 @@ __all__ = [
     "to_device",
     "with_",
 ]
+
+
+def checkpoint(function, *args, **kwargs):
+    r"""
+    Wrapper for :func:`torch.utils.checkpoint.checkpoint` that conditions
+    checkpointing on the session `eval` state.
+    """
+    if get("eval"):
+        return function(*args, **kwargs)
+    return _checkpoint(function, *args, **kwargs)
 
 
 def compose(f: Callable[..., Any], *gs: Callable[..., Any]):

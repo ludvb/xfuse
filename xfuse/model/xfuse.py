@@ -107,8 +107,9 @@ class XFuse(torch.nn.Module):
                         torch.nn.BatchNorm2d(y.shape[1]),
                         torch.nn.LeakyReLU(0.2, inplace=True),
                         torch.nn.Conv2d(y.shape[1], y.shape[1], 1),
-                    ).to(y),
-                ).to(y)
+                    ),
+                    checkpoint=True,
+                )
                 z_sd = get_module(
                     f"{name}-sd",
                     lambda: torch.nn.Sequential(
@@ -117,8 +118,9 @@ class XFuse(torch.nn.Module):
                         torch.nn.LeakyReLU(0.2, inplace=True),
                         torch.nn.Conv2d(y.shape[1], y.shape[1], 1),
                         torch.nn.Softplus(),
-                    ).to(y),
-                ).to(y)
+                    ),
+                    checkpoint=True,
+                )
                 with p.poutine.scale(scale=experiment.n / len(x)):
                     return p.sample(
                         name, Normal(z_mu(y), 1e-8 + z_sd(y)).to_event(3)

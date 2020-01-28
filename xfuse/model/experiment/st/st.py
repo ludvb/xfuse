@@ -19,7 +19,7 @@ from scipy.sparse import vstack
 from ....data.utility.misc import spot_size
 from ....logging import DEBUG, INFO, log
 from ....session import get, require
-from ....utility import center_crop, sparseonehot
+from ....utility import center_crop, checkpoint, sparseonehot
 from ....utility.state import (
     get_module,
     get_param,
@@ -161,67 +161,66 @@ class ST(Image):
                 torch.nn.Conv2d(in_channels, 1, kernel_size=1),
                 torch.nn.Softplus(),
             )
-            decoder = decoder.to(get("default_device"))
             torch.nn.init.constant_(
                 decoder[-2].bias,
                 np.log(np.exp(1 / spot_size(dataset)["ST"]) - 1),
             )
             return decoder
 
-        return get_module("scale", _create_scale_decoder)
+        return get_module("scale", _create_scale_decoder, checkpoint=True)
 
     def _create_metagene_decoder(self, in_channels, n):
         decoder = torch.nn.Sequential(
             torch.nn.Conv2d(in_channels, 1, kernel_size=1)
         )
-        decoder = decoder.to(get("default_device"))
         torch.nn.init.constant_(decoder[-1].bias, self.__metagenes[n][0])
         return decoder
 
     def model(self, x, zs):
         # pylint: disable=too-many-locals
-        num_genes = x["data"][0].shape[1]
+        def _compute_rim(decoded):
+            shared_representation = get_module(
+                "metagene_shared",
+                lambda: torch.nn.Sequential(
+                    torch.nn.Conv2d(
+                        decoded.shape[1], decoded.shape[1], kernel_size=1
+                    ),
+                    torch.nn.BatchNorm2d(decoded.shape[1]),
+                    torch.nn.LeakyReLU(0.2, inplace=True),
+                ),
+            )(decoded)
+            rim = torch.cat(
+                [
+                    get_module(
+                        f"decoder_{_encode_metagene_name(n)}",
+                        partial(
+                            self._create_metagene_decoder, decoded.shape[1], n
+                        ),
+                    )(shared_representation)
+                    for n in self.metagenes
+                ],
+                dim=1,
+            )
+            rim = center_crop(rim, [None, None, *label.shape[-2:]])
+            rim = torch.nn.functional.softmax(rim, dim=1)
+            return rim
 
+        num_genes = x["data"][0].shape[1]
         decoded = self._decode(zs)
         label = center_crop(x["label"], [None, *decoded.shape[-2:]])
+
+        rim = checkpoint(_compute_rim, decoded)
+        rim = p.sample("rim", Delta(rim))
 
         scale = p.sample(
             "scale",
             Delta(
                 center_crop(
-                    self._get_scale_decoder(decoded.shape[1]).to(decoded)(
-                        decoded
-                    ),
+                    self._get_scale_decoder(decoded.shape[1])(decoded),
                     [None, None, *label.shape[-2:]],
                 )
             ),
         )
-
-        shared_representation = get_module(
-            "metagene_shared",
-            lambda: torch.nn.Sequential(
-                torch.nn.Conv2d(
-                    decoded.shape[1], decoded.shape[1], kernel_size=1
-                ),
-                torch.nn.BatchNorm2d(decoded.shape[1]),
-                torch.nn.LeakyReLU(0.2, inplace=True),
-            ).to(decoded),
-        ).to(decoded)(decoded)
-        rim = torch.cat(
-            [
-                get_module(
-                    f"decoder_{_encode_metagene_name(n)}",
-                    partial(
-                        self._create_metagene_decoder, decoded.shape[1], n
-                    ),
-                ).to(shared_representation)(shared_representation)
-                for n in self.metagenes
-            ],
-            dim=1,
-        )
-        rim = center_crop(rim, [None, None, *label.shape[-2:]])
-        rim = torch.nn.functional.softmax(rim, dim=1)
-        rim = p.sample("rim", Delta(rim))
         rim = scale * rim
 
         rate_mg_prior = Normal(
@@ -296,13 +295,14 @@ class ST(Image):
                             logits_g.expand(0, -1),
                         )
 
-                    rim = rim[:, mask]
                     label = label[mask] - 1
                     idxs, label = torch.unique(label, return_inverse=True)
                     data = data[idxs]
 
+                    rim = rim[:, mask]
                     labelonehot = sparseonehot(label)
                     rim = torch.sparse.mm(labelonehot.t().float(), rim.t())
+
                     rgs = rim @ rate_mg.exp()
 
                     return data, rgs, logits_g.expand(len(rgs), -1)

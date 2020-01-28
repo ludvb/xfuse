@@ -5,11 +5,14 @@ import torch
 
 from .state import __MODULES, __STATE_DICT
 from ...session import get
+from ...utility.utility import checkpoint as _checkpoint
 
 
 def get_module(
-    name: str, module: Optional[Callable[[], torch.nn.Module]] = None
-) -> torch.nn.Module:
+    name: str,
+    module: Optional[Callable[[], torch.nn.Module]] = None,
+    checkpoint: bool = False,
+) -> Callable[..., Any]:
     r"""
     Retrieves :class:`~torch.nn.Module` by name or creates it if it doesn't
     exist.
@@ -18,6 +21,8 @@ def get_module(
     :param module: Module to register if it doesn't already exist. The module
     should be "quoted" by encapsulating it in a `Callable` in order to lazify
     its creation.
+    :param checkpoint: Flag indicating whether the module should be
+    checkpointed
 
     :returns: The module
     :raises RuntimeError: If there is no module named `name` and `module` is
@@ -31,8 +36,12 @@ def get_module(
         module_ = pyro.module(name, module(), update_module_params=True)
         if name in __STATE_DICT.modules:
             module_.load_state_dict(__STATE_DICT.modules[name])
+        module_ = module_.to(get("default_device"))
         __MODULES[name] = module_
-    return module_.train(not get("eval"))
+    module_ = module_.train(not get("eval"))
+    if checkpoint:
+        return lambda *args, **kwargs: _checkpoint(module_, *args, **kwargs)
+    return module_
 
 
 def get_param(
