@@ -109,8 +109,9 @@ class RetractAndSplit(ExpansionStrategy):
     back previously split, non-contributing metagenes
     """
 
-    def __init__(self):
+    def __init__(self, max_metagenes: int = 0):
         self._root_nodes: Set[_Node] = set()
+        self._max_metagenes = max_metagenes
 
     def __call__(
         self,
@@ -173,7 +174,10 @@ class RetractAndSplit(ExpansionStrategy):
                     ]
                 )
             if isinstance(root, _Leaf):
-                if root.contributing:
+                if root.contributing and (
+                    self._max_metagenes <= 0
+                    or len(experiment.metagenes) < self._max_metagenes
+                ):
                     return _Split(
                         root, _Leaf(experiment.split_metagene(root.name))
                     )
