@@ -179,31 +179,28 @@ def design_matrix_from(
         ],
         sort=True,
     )
-    if len(design_table.columns) == 0:
-        return pd.DataFrame(
-            np.zeros((0, len(design_table))), columns=design_table.index
-        )
 
-    design_table = design_table.astype("category")
+    if covariates is not None:
+        for covariate, values in covariates:
+            if covariate not in design_table:
+                design_table[covariate] = 0
+            design_table[covariate] = design_table[covariate].astype(
+                "category"
+            )
+            design_table[covariate].cat.set_categories(values, inplace=True)
+        design_table = design_table[[x for x, _ in covariates]]
+    else:
+        if len(design_table.columns) == 0:
+            return pd.DataFrame(
+                np.zeros((0, len(design_table))), columns=design_table.index
+            )
+        design_table = design_table.astype("category")
+
     for covariate in design_table:
         if np.any(pd.isna(design_table[covariate])):
             log(
                 WARNING, 'Design covariate "%s" has missing values.', covariate
             )
-
-    if covariates is not None:
-        missing_covariates = [
-            x for x, _ in covariates if x not in design_table.columns
-        ]
-        if missing_covariates != []:
-            raise ValueError(
-                "the following covariates are missing from the design: "
-                + ", ".join(missing_covariates)
-            )
-
-        for covariate, values in covariates:
-            design_table[covariate].cat.set_categories(values, inplace=True)
-        design_table = design_table[[x for x, _ in covariates]]
 
     def _encode(covariate):
         oh_matrix = np.eye(len(covariate.cat.categories), dtype=int)[
