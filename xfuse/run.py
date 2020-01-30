@@ -67,7 +67,13 @@ def run(
         for slide in design.columns
     }
     dataset = Dataset(data=Data(slides=slides, design=design))
-    dataloader = make_dataloader(dataset, batch_size=batch_size, shuffle=True)
+    dataloader = make_dataloader(
+        dataset,
+        batch_size=batch_size if batch_size < len(dataset) else len(dataset),
+        shuffle=True,
+        num_workers=min(len(os.sched_getaffinity(0)), 8),
+        drop_last=True,
+    )
 
     genes = get("genes")
     if genes is None:
