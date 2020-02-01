@@ -10,6 +10,11 @@
     pip install --user git+https://github.com/ludvb/xfuse@master
   #+END_SRC
 
+* Hardware requirements
+
+  XFuse can run on CPU-only hardware, but training new models will take exceedingly long.
+  We recommend running XFuse on a GPU with at least 8 GB of VRAM.
+
 * Usage
 
   Coming soon!
