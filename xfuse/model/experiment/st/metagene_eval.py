@@ -29,7 +29,7 @@ def purge_metagenes(xfuse: XFuse, num_samples: int = 1) -> None:
         )
         return reduced_xfuse
 
-    with Session(log_level=WARNING):
+    with Session(log_level=WARNING, eval=True):
         st_experiment = cast(ST, xfuse.get_experiment("ST"))
         metagenes = st_experiment.metagenes
 

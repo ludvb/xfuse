@@ -1,7 +1,6 @@
 from typing import List
 
 import pyro
-import torch
 
 from ...session import Session
 
@@ -23,6 +22,6 @@ def compare(data, guide, *models) -> List[float]:
             ).item()
         )
 
-    with torch.no_grad(), Session(eval=True):
+    with Session(eval=True):
         result = [_evaluate(model) for model in models]
     return result
