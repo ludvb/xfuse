@@ -53,25 +53,20 @@ class STSlide(SlideData):
     def __init__(
         self,
         data: h5py.File,
+        cache_data: bool = True,
         min_counts: float = 0,
         always_filter: List[int] = None,
         always_keep: List[int] = None,
     ):
         self._data = data
-        self._counts = scipy.sparse.csr_matrix(
-            (
-                self._data["counts"]["data"],
-                self._data["counts"]["indices"],
-                self._data["counts"]["indptr"],
-            ),
-            shape=(
-                len(self._data["counts"]["index"]),
-                len(self._data["counts"]["columns"]),
-            ),
-        )
-        self._counts = scipy.sparse.hstack(
-            [self._counts, np.zeros((self._counts.shape[0], 1))], format="csr"
-        )
+        if cache_data:
+            self._counts = self.__construct_count_matrix()
+            self._label = self._data["label"][()]
+            self._image = self._data["image"][()]
+        else:
+            self._counts = None
+            self._label = None
+            self._image = None
         self.genes = list(self._data["counts"]["columns"][()])
         self.__always_filter = always_filter or []
         self.__always_keep = always_keep or []
@@ -143,10 +138,31 @@ class STSlide(SlideData):
         self.__recompute_summary_statistics()
         return self
 
+    def __construct_count_matrix(self):
+        counts = scipy.sparse.csr_matrix(
+            (
+                self._data["counts"]["data"],
+                self._data["counts"]["indices"],
+                self._data["counts"]["indptr"],
+            ),
+            shape=(
+                len(self._data["counts"]["index"]),
+                len(self._data["counts"]["columns"]),
+            ),
+        )
+        counts = scipy.sparse.hstack(
+            [counts, np.zeros((counts.shape[0], 1))], format="csr"
+        )
+        return counts
+
     @property
     def counts(self):
         r"""Getter for the count data"""
-        return self._counts[:, self.__gene_idxs]
+        if self._counts is not None:
+            counts = self._counts
+        else:
+            counts = self.__construct_count_matrix()
+        return counts[:, self.__gene_idxs]
 
     @property
     def means(self):
@@ -161,11 +177,15 @@ class STSlide(SlideData):
     @property
     def image(self):
         r"""Getter for the slide image"""
+        if self._image is not None:
+            return self._image
         return self._data["image"]
 
     @property
     def label(self):
         r"""Getter for the label image of the slide"""
+        if self._label is not None:
+            return self._label
         return self._data["label"]
 
     def annotation(self, name):

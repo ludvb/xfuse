@@ -77,6 +77,39 @@ _ANNOTATED_CONFIG = OrderedDict(
             ),
         ),
         (
+            "settings",
+            Item(
+                value=OrderedDict(
+                    [
+                        (
+                            "cache_data",
+                            Item(
+                                value=True,
+                                comment=" ".join(
+                                    [
+                                        "If true, always keep data in memory (better performance).",
+                                        "Otherwise, load data selectively for each mini-batch (lower memory usage).",
+                                    ]
+                                ),
+                            ),
+                        ),
+                        (
+                            "data_workers",
+                            Item(
+                                value=8,
+                                comment=" ".join(
+                                    [
+                                        "Number of worker processes for data loading.",
+                                        "If set to zero, run data loading in main thread.",
+                                    ]
+                                ),
+                            ),
+                        ),
+                    ]
+                )
+            ),
+        ),
+        (
             "expansion_strategy",
             Item(
                 comment="This section contains configuration options for the metagene expansion strategy.",

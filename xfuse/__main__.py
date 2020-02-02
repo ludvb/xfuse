@@ -303,6 +303,8 @@ def run(project_file, save_path, session):
                 batch_size=config["optimization"]["batch_size"],
                 epochs=config["optimization"]["epochs"],
                 learning_rate=config["optimization"]["learning_rate"],
+                cache_data=config["settings"]["cache_data"],
+                num_data_workers=config["settings"]["data_workers"],
                 slide_options=slide_options,
             )
 

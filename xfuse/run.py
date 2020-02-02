@@ -42,6 +42,8 @@ def run(
     batch_size: int = CONFIG["optimization"].value["batch_size"].value,
     epochs: int = CONFIG["optimization"].value["epochs"].value,
     learning_rate: float = CONFIG["optimization"].value["learning_rate"].value,
+    cache_data: bool = CONFIG["settings"].value["cache_data"].value,
+    num_data_workers: int = CONFIG["settings"].value["data_workers"].value,
     slide_options: Optional[Dict[str, Any]] = None,
 ):
     r"""Runs an analysis"""
@@ -51,10 +53,36 @@ def run(
     if analyses is None:
         analyses = {}
 
+    if (available_cores := len(os.sched_getaffinity(0))) < num_data_workers:
+        log(
+            WARNING,
+            " ".join(
+                [
+                    f"Available cores ({available_cores}) is less than the"
+                    f" requested number of workers ({num_data_workers}).",
+                    f"Setting the number of workers to {available_cores}.",
+                ]
+            ),
+        )
+        num_data_workers = available_cores
+
+    if not cache_data and num_data_workers > 1:
+        log(
+            WARNING,
+            " ".join(
+                [
+                    "Running with uncached data and more than one data"
+                    " worker.",
+                    "Data loading may not be thread safe.",
+                ]
+            ),
+        )
+
     slides = {
         slide: Slide(
             data=STSlide(
                 h5py.File(os.path.expanduser(slide), "r"),
+                cache_data=cache_data,
                 **(slide_options[slide] if slide_options is not None else {}),
             ),
             iterator=partial(
@@ -71,7 +99,7 @@ def run(
         dataset,
         batch_size=batch_size if batch_size < len(dataset) else len(dataset),
         shuffle=True,
-        num_workers=min(len(os.sched_getaffinity(0)), 8),
+        num_workers=num_data_workers,
         drop_last=True,
     )
 
