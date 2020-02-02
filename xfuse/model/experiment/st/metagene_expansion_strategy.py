@@ -3,6 +3,8 @@ from functools import reduce
 from inspect import isabstract, isclass
 from typing import Callable, List, Optional, Set
 
+import numpy as np
+
 from ....logging import DEBUG, log
 from ....session import SessionItem, register_session_item, get
 from . import ST
@@ -149,8 +151,12 @@ class RetractAndSplit(ExpansionStrategy):
                 if isinstance(root.a, _Leaf) and not root.a.contributing:
                     return _retract_noncontributing_branches(root.b)
                 return _Split(
-                    _retract_noncontributing_branches(root.a),
-                    _retract_noncontributing_branches(root.b),
+                    *np.random.permutation(
+                        [
+                            _retract_noncontributing_branches(root.a),
+                            _retract_noncontributing_branches(root.b),
+                        ]
+                    )
                 )
             if isinstance(root, _Leaf):
                 return root
