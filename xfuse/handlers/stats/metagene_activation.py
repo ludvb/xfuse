@@ -61,7 +61,7 @@ class MetageneHistogram(Metagene):
     def _handle_metagene(self, name, metagene):
         # pylint: disable=no-member
         self.add_histogram(
-            f"metagenes/histogram/metagene-{name}", metagene.flatten()
+            f"metagene-histogram/metagene-{name}", metagene.flatten()
         )
 
 
@@ -71,7 +71,7 @@ class MetageneMaps(Metagene):
     def _handle_metagene(self, name, metagene):
         # pylint: disable=no-member
         self.add_images(
-            f"metagenes/maps/metagene-{name}",
+            f"metagene-maps/metagene-{name}",
             metagene.unsqueeze(1),
             dataformats="NCHW",
         )
@@ -82,7 +82,7 @@ class MetageneMean(Metagene):
 
     def _handle_metagene(self, name, metagene):
         # pylint: disable=no-member
-        self.add_scalar(f"metagenes/mean/metagene-{name}", metagene.mean())
+        self.add_scalar(f"metagene-mean/metagene-{name}", metagene.mean())
 
 
 class MetageneSummary(StatsHandler):
@@ -103,7 +103,7 @@ class MetageneSummary(StatsHandler):
         # pylint: disable=no-member
         try:
             self.add_images(
-                "metagenes/summary/training-batch",
+                "metagene-batch-summary",
                 reduce_last_dimension(fn.mean.permute(0, 2, 3, 1)),
                 dataformats="NHWC",
             )
@@ -122,12 +122,20 @@ class MetageneFullSummary(StatsHandler):
     def _handle(self, **msg):
         try:
             with pyro.poutine.block():
-                for i, metagene in enumerate(visualize_metagenes()):
+                for i, (summarization, metagenes) in enumerate(
+                    visualize_metagenes(), 1,
+                ):
                     # pylint: disable=no-member
                     self.add_image(
-                        f"metagenes/summary/sample-{i}",
-                        torch.as_tensor(metagene),
+                        f"metagene-summary/sample-{i}",
+                        torch.as_tensor(summarization),
                         dataformats="HWC",
                     )
+                    for name, metagene in metagenes:
+                        self.add_image(
+                            f"metagene-{name}/sample-{i}",
+                            torch.as_tensor(metagene),
+                            dataformats="HWC",
+                        )
         except ValueError:
             pass

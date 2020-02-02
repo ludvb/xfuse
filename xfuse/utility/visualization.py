@@ -1,3 +1,4 @@
+import warnings
 from typing import Callable, List, Optional, Union, cast
 
 import numpy as np
@@ -12,7 +13,7 @@ from ..data import Data, Dataset
 from ..data.slide import FullSlide, Slide
 from ..data.utility.misc import make_dataloader
 from ..logging import WARNING, log
-from ..session import Session, require
+from ..session import Session, get, require
 from ..utility import center_crop
 
 
@@ -23,12 +24,21 @@ def _cmyk2rgb(x: np.ndarray) -> np.ndarray:
     return np.array(Image.fromarray(x, mode="CMYK").convert("RGB"))
 
 
+def _normalize(x: np.ndarray, axis=None) -> np.ndarray:
+    x = x - x.min(axis, keepdims=True)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        x = x / x.max(axis, keepdims=True)
+        x = np.nan_to_num(x)
+    return x
+
+
 def balance_colors(
-    x: np.ndarray, q: float = 0.01, q_high: Optional[float] = None
+    x: np.ndarray, q: float = 0.01, q_high: Optional[float] = None, axis=None
 ) -> np.ndarray:
     r"""
     Balances colors by shifting quantiles `q` and `q_high` to 0.0 and 1.0 using
-    a per channel affine transformation and clipping all values to [0.0, 1.0].
+    an affine transformation and clipping all values to [0.0, 1.0].
     If `x` is np.uint8, the range [0, 255] is used instead.
 
     >>> balance_colors(np.array([1.0, 2.0, 4.0, 5.0]))
@@ -38,17 +48,29 @@ def balance_colors(
     """
     if q_high is None:
         q_high = 1.0 - q
-    if x.ndim > 2:
-        y = x.reshape(-1, x.shape[-1])
-    else:
-        y = x.flatten()
-    ymin, ymax = np.quantile(y, [q, q_high], axis=0, interpolation="nearest")
-    y = (y - ymin) / (ymax - ymin)
-    y = y.clip(0.0, 1.0)
-    y = y.reshape(x.shape)
+    xmin, xmax = np.quantile(
+        x, [q, q_high], axis=axis, interpolation="nearest"
+    )
+    y = x.clip(xmin, xmax)
+    y = _normalize(y, axis)
     if x.dtype == np.uint8:
         y = (255 * y).round().astype(np.uint8)
     return y
+
+
+def greyscale2colormap(x: np.ndarray) -> np.ndarray:
+    r"""
+    Applies the current :class:`Session` `colormap` to greyscale image `x`.
+    """
+    colormap = get("colormap")
+    if x.ndim != 2:
+        raise ValueError(
+            f"Image must have exactly two dimensions (got {x.ndim=})."
+        )
+    if x.dtype != np.uint8:
+        x = _normalize(x)
+        x = (255 * x).round().astype(np.uint8)
+    return np.round(255 * np.array(colormap.colors)[x]).astype(np.uint8)
 
 
 def mask_background(
@@ -91,7 +113,7 @@ def visualize_metagenes(
 ) -> np.ndarray:
     r"""Creates visualizations of metagenes"""
 
-    # pylint: disable=too-many-statements
+    # pylint: disable=too-many-locals,too-many-statements
 
     model = require("model")
     dataloader = require("dataloader")
@@ -123,7 +145,8 @@ def visualize_metagenes(
             center_crop(x["ST"]["label"][0], activation.shape[:2]), zero_label
         )
         mask &= scale.squeeze() > 0.01
-        return activation, scale, mask
+        name = list(model.get_experiment("ST").metagenes.keys())
+        return activation, scale, mask, name
 
     compute_fn = {"ST": _compute_st_activation}
 
@@ -144,6 +167,7 @@ def visualize_metagenes(
         activations: List[np.ndarray] = []
         scales: List[torch.Tensor] = []
         masks: List[torch.Tensor] = []
+        names: List[List[str]] = []
         for x in dataloader:
             data_type, *__this_should_be_empty = x.keys()
             assert __this_should_be_empty == []
@@ -155,14 +179,15 @@ def visualize_metagenes(
                     data_type,
                 )
             with torch.no_grad():
-                activation, scale, mask = compute_fn[data_type](x)
+                activation, scale, mask, name = compute_fn[data_type](x)
             activations.append(activation)
-            scales.append(scale)
+            scales.append(scale.squeeze())
             masks.append(mask)
+            names.append(name)
 
     activations_flat = np.concatenate(
         [
-            activation[scale.squeeze() > 0.01]
+            activation[scale > 0.01]
             for activation, scale in zip(activations, scales)
         ]
     )
@@ -179,27 +204,59 @@ def visualize_metagenes(
         activations_training = activations_flat
 
     if method == "pca":
-        reduction = PCA(n_components=3)
+        reduction = PCA(n_components=min(3, activations_training.shape[-1]))
     elif method == "umap":
-        reduction = UMAP(n_components=3)
+        reduction = UMAP(n_components=min(3, activations_training.shape[-1]))
     else:
         raise RuntimeError("This path should not be reachable")
 
-    reduction.fit(activations_training)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", RuntimeWarning)
+        try:
+            a = reduction.fit_transform(activations_training)
 
-    for activation, scale, mask in zip(activations, scales, masks):
-        summarized_activations = reduce_last_dimension(
-            x=activation, transformation=reduction.transform
+            def transform(x):
+                x = reduction.transform(x)
+                x = x - a.min(0) / (a.max(0) - a.min(0))
+                x = x.clip(0.0, 1.0)
+                return x
+
+        except RuntimeWarning:
+            transform = lambda x: x[..., :3]
+
+    for activation, scale, mask, name in zip(
+        activations, scales, masks, names
+    ):
+        summarized_image = np.zeros((*activation.shape[:2], 4), dtype=float)
+        summarized_activation = reduce_last_dimension(
+            x=activation, transformation=transform
         )
-        summarized_activations = np.concatenate(
-            [summarized_activations, 1.0 - scale], axis=-1
+        summarized_image[
+            ...,
+            # pylint: disable=unsubscriptable-object
+            : summarized_activation.shape[-1],
+        ] = _normalize(summarized_activation)
+        summarized_image[..., -1] = balance_colors(
+            1.0 - scale, q=0.05, q_high=1.0
         )
-        summarized_activations = np.round(255 * summarized_activations)
-        summarized_activations = summarized_activations.astype(np.uint8)
-        summarized_activations = _cmyk2rgb(summarized_activations)
-        summarized_activations = balance_colors(summarized_activations)
-        summarized_activations = mask_background(summarized_activations, mask)
-        yield summarized_activations
+        summarized_image = np.round(255 * summarized_image)
+        summarized_image = summarized_image.astype(np.uint8)
+        summarized_image = _cmyk2rgb(summarized_image)
+        yield (
+            mask_background(summarized_image, mask),
+            [
+                (
+                    n,
+                    mask_background(
+                        greyscale2colormap(
+                            balance_colors(scale * x, q=0.0, q_high=0.95)
+                        ),
+                        mask,
+                    ),
+                )
+                for n, x in zip(name, activation.transpose(2, 0, 1))
+            ],
+        )
 
 
 def reduce_last_dimension(
@@ -212,7 +269,7 @@ def reduce_last_dimension(
     """
 
     def _default_transformation(x):
-        return PCA(n_components=3).fit_transform(x)
+        return PCA(n_components=min(x.shape[-1], 3)).fit_transform(x)
 
     if transformation is None:
         transformation = _default_transformation
@@ -228,6 +285,6 @@ def reduce_last_dimension(
 
     values = transformation(x[mask])
     dst = np.zeros((*mask.shape, values.shape[-1]))
-    dst[mask] = (values - values.min(0)) / (values.max(0) - values.min(0))
+    dst[mask] = _normalize(values, axis=0)
 
     return dst

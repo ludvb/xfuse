@@ -5,7 +5,6 @@ import numpy as np
 import pandas as pd
 import pyro
 import torch
-from pyro.poutine.messenger import Messenger
 from tifffile import imwrite
 
 from ..logging import WARNING, log
@@ -15,24 +14,6 @@ from ..utility.visualization import visualize_metagenes
 from .analyze import Analysis, _register_analysis
 
 __all__ = ["compute_metagene_summary"]
-
-
-class __ActivationTracker(Messenger):
-    # pylint: disable=invalid-name
-    def __init__(self):
-        super().__init__()
-        self.activations = []
-
-    def _pyro_post_sample(self, msg):
-        if not (msg["type"] == "sample" and msg["name"][-3:] == "rim"):
-            return
-        self.activations.append(msg["fn"].mean.squeeze())
-
-
-def _normalize(image: np.ndarray) -> np.ndarray:
-    minvals = image.min((0, 1))
-    maxvals = image.max((0, 1))
-    return (image - minvals) / (maxvals - minvals)
 
 
 def compute_metagene_summary(method: str = "pca") -> None:
@@ -59,31 +40,21 @@ def compute_metagene_summary(method: str = "pca") -> None:
     with Session(
         default_device=torch.device("cpu"), pyro_stack=[]
     ), torch.no_grad():
-        with __ActivationTracker() as activation_tracker:
-            for slide_path, summarization, metagenes in zip(
-                dataloader.dataset.data.design.columns,
-                visualize_metagenes(method),
-                activation_tracker.activations,
-            ):
-                slide_name = os.path.basename(slide_path)
-                os.makedirs(
-                    os.path.join(output_dir, slide_name), exist_ok=True
-                )
+        for slide_path, (summarization, metagenes) in zip(
+            dataloader.dataset.data.design.columns,
+            visualize_metagenes(method),
+        ):
+            slide_name = os.path.basename(slide_path)
+            os.makedirs(os.path.join(output_dir, slide_name), exist_ok=True)
+            imwrite(
+                os.path.join(output_dir, slide_name, "summary.png"),
+                summarization,
+            )
+            for n, metagene in enumerate(metagenes, 1):
                 imwrite(
-                    os.path.join(output_dir, slide_name, "summary.png"),
-                    summarization,
+                    os.path.join(output_dir, slide_name, f"metagene-{n}.png"),
+                    metagene,
                 )
-                mask = summarization.sum(-1) != 0.0
-                for n, metagene in enumerate(metagenes, 1):
-                    metagene = -metagene.detach().cpu().numpy()
-                    metagene[~mask] = metagene[mask].max()
-                    metagene = _normalize(metagene)
-                    imwrite(
-                        os.path.join(
-                            output_dir, slide_name, f"metagene-{n}.png"
-                        ),
-                        metagene,
-                    )
 
         for experiment in model.experiments.keys():
             try:

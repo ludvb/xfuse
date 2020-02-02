@@ -6,7 +6,6 @@ import numpy as np
 import pyro
 import torch
 from imageio import imwrite
-from matplotlib import cm
 from tqdm import tqdm
 
 from .analyze import Analysis, _register_analysis
@@ -16,7 +15,11 @@ from ..data.utility.misc import make_dataloader
 from ..logging import WARNING, log
 from ..session import Session, require
 from ..utility import center_crop
-from ..utility.visualization import mask_background, balance_colors
+from ..utility.visualization import (
+    greyscale2colormap,
+    mask_background,
+    balance_colors,
+)
 
 
 def compute_gene_maps(
@@ -117,17 +120,8 @@ def compute_gene_maps(
             for gene_name, gene_map, mask in fns[experiment_type](
                 guide_trace.trace, model_trace.trace, x[experiment_type]
             ):
-                gene_map -= gene_map.min()
-                gene_map /= gene_map.max() - gene_map.min()
-                gene_map = (255 * gene_map).round().byte()
-                gene_map = balance_colors(gene_map.numpy(), q=0, q_high=0.999)
-                gene_map = np.round(
-                    255
-                    * np.array(
-                        # pylint: disable=no-member
-                        cm.viridis.colors
-                    )[gene_map]
-                ).astype(np.uint8)
+                gene_map = greyscale2colormap(gene_map.numpy())
+                gene_map = balance_colors(gene_map, q=0, q_high=0.999)
                 gene_map = mask_background(gene_map, mask)
                 filename = os.path.join(
                     output_dir,
