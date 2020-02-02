@@ -4,7 +4,6 @@
 
 * Installing
 
-  XFuse requires Python 3.7.
   To install XFuse to your home directory, run
   #+BEGIN_SRC sh
     pip install --user git+https://github.com/ludvb/xfuse@master
