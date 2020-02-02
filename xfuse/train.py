@@ -63,17 +63,17 @@ def train(epochs: int = -1):
 
         messengers.extend(
             [
-                stats.ELBO(writer, _every(1)),
-                stats.MetageneHistogram(writer, _every(10)),
-                stats.MetageneMaps(writer, _every(100)),
-                stats.MetageneMean(writer, _every(1)),
-                stats.MetageneSummary(writer, _every(100)),
-                stats.MetageneFullSummary(writer, _every(1000)),
-                stats.Image(writer, _every(100)),
-                stats.Latent(writer, _every(100)),
-                stats.LogLikelihood(writer, _every(1)),
-                stats.RMSE(writer, _every(1)),
-                stats.Scale(writer, _every(100)),
+                stats.ELBO(writer, _every(10)),
+                stats.MetageneHistogram(writer, _every(100)),
+                stats.MetageneMaps(writer, _every(1000)),
+                stats.MetageneMean(writer, _every(100)),
+                stats.MetageneSummary(writer, _every(1000)),
+                stats.MetageneFullSummary(writer, _every(5000)),
+                stats.Image(writer, _every(1000)),
+                stats.Latent(writer, _every(1000)),
+                stats.LogLikelihood(writer, _every(10)),
+                stats.RMSE(writer, _every(10)),
+                stats.Scale(writer, _every(1000)),
             ]
         )
 
