@@ -240,9 +240,9 @@ class ST(Image):
             1e-8
             + get_param(
                 f"rate_mg_sd",
-                lambda: torch.ones(num_genes).to(get("default_device")),
+                lambda: torch.ones(num_genes),
                 constraint=constraints.positive,
-            ).to(decoded),
+            ),
         )
         rate_mg = torch.stack(
             [
@@ -360,8 +360,8 @@ class ST(Image):
                 torch.nn.Linear(1024, 1024),
                 torch.nn.Tanh(),
                 torch.nn.Linear(1024, 16),
-            ).to(x["image"]),
-        ).to(x["image"])
+            ),
+        )
 
         def encode(data, label):
             # Replace missing labels with closest neighbor
@@ -456,8 +456,8 @@ class ST(Image):
                     get_param(
                         f"{_encode_metagene_name(name)}_mu",
                         # pylint: disable=unnecessary-lambda
-                        lambda: metagene.profile.float().to(device),
-                    ).to(device),
+                        lambda: metagene.profile.float(),
+                    ),
                     1e-8
                     + get_param(
                         f"{_encode_metagene_name(name)}_sd",
@@ -466,7 +466,7 @@ class ST(Image):
                             metagene.profile, device=device
                         ).float(),
                         constraint=constraints.positive,
-                    ).to(device),
+                    ),
                 ),
                 infer={"is_global": True},
             )
