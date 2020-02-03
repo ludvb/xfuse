@@ -176,6 +176,18 @@ class ST(Image):
         torch.nn.init.constant_(decoder[-1].bias, self.__metagenes[n][0])
         return decoder
 
+    @staticmethod
+    def __init_rate_g_effects_baselines():
+        dataset = require("dataloader").dataset
+        data = vstack(
+            [
+                slide.data.counts
+                for slide in dataset.data.slides.values()
+                if slide.data.type == "ST"
+            ]
+        )
+        return torch.as_tensor(data.mean(0)).float().squeeze().log()
+
     def model(self, x, zs):
         # pylint: disable=too-many-locals
         def _compute_rim(decoded):
@@ -224,10 +236,7 @@ class ST(Image):
         rim = scale * rim
 
         rate_mg_prior = Normal(
-            get_param(
-                f"rate_mg_mu",
-                lambda: torch.zeros(num_genes).to(get("default_device")),
-            ).to(decoded),
+            0.0,
             1e-8
             + get_param(
                 f"rate_mg_sd",
@@ -243,6 +252,43 @@ class ST(Image):
         )
         rate_mg = p.sample("rate_mg", Delta(rate_mg))
 
+        rate_g_effects_baseline = get_param(
+            f"rate_g_effects_baseline", self.__init_rate_g_effects_baselines
+        )
+        logits_g_effects_baseline = get_param(
+            f"logits_g_effects_baseline",
+            # pylint: disable=unnecessary-lambda
+            lambda: (0.5 * torch.ones(num_genes)).log(),
+        )
+        rate_g_effects_prior = Normal(
+            0.0,
+            1e-8
+            + get_param(
+                f"rate_g_effects_sd",
+                lambda: torch.ones(num_genes),
+                constraint=constraints.positive,
+            ),
+        )
+        rate_g_effects = p.sample("rate_g_effects", rate_g_effects_prior)
+        rate_g_effects = torch.cat(
+            [rate_g_effects_baseline.unsqueeze(0), rate_g_effects]
+        )
+        logits_g_effects_prior = Normal(
+            0.0,
+            1e-8
+            + get_param(
+                f"logits_g_effects_sd",
+                lambda: torch.ones(num_genes),
+                constraint=constraints.positive,
+            ),
+        )
+        logits_g_effects = p.sample(
+            "logits_g_effects", logits_g_effects_prior,
+        )
+        logits_g_effects = torch.cat(
+            [logits_g_effects_baseline.unsqueeze(0), logits_g_effects]
+        )
+
         effects = torch.cat(
             [
                 torch.ones(x["effects"].shape[0], 1).to(x["effects"]),
@@ -250,24 +296,6 @@ class ST(Image):
             ],
             1,
         ).float()
-        rate_g_effects = p.sample(
-            "rate_g_effects",
-            (
-                # pylint: disable=not-callable
-                Normal(torch.tensor(0.0).to(decoded), 1).expand(
-                    [effects.shape[1], num_genes]
-                )
-            ),
-        )
-        logits_g_effects = p.sample(
-            "logits_g_effects",
-            (
-                # pylint: disable=not-callable
-                Normal(torch.tensor(0.0).to(decoded), 1).expand(
-                    [effects.shape[1], num_genes]
-                )
-            ),
-        )
 
         logits_g = effects @ logits_g_effects
         rate_g = effects @ rate_g_effects
@@ -378,88 +406,46 @@ class ST(Image):
         device = get("default_device")
         num_genes = len(dataset.genes)
 
-        # Sample rate coefficients
-        def _init_gene_baselines():
-            data = vstack(
-                [slide.data.counts for slide in dataset.data.slides.values()]
-            )
-            return (
-                torch.as_tensor(data.mean(0))
-                .float()
-                .squeeze()
-                .log()
-                .to(device)
-            )
-
-        a = p.sample(
-            f"rate_g_effects-baseline",
-            Delta(
-                get_param(
-                    f"rate_g_effects-baseline-value", _init_gene_baselines
-                )
-            ),
-        ).to(device)
-        b = p.sample(
-            f"rate_g_effects-covariate",
+        p.sample(
+            f"rate_g_effects",
             Normal(
                 get_param(
-                    f"rate_g_effects-covariate_mu",
+                    f"rate_g_effects_mu",
                     lambda: torch.zeros(
                         dataset.data.design.shape[0], num_genes, device=device
                     ),
-                ).to(device),
+                ),
                 1e-8
                 + get_param(
-                    f"rate_g_effects-covariate_sd",
+                    f"rate_g_effects_sd",
                     lambda: 1e-2
                     * torch.ones(
                         dataset.data.design.shape[0], num_genes, device=device
                     ),
                     constraint=constraints.positive,
-                ).to(device),
+                ),
             ),
-        ).to(device)
-        p.sample(
-            "rate_g_effects",
-            Delta(torch.cat([a.unsqueeze(0), b])),
-            infer={"is_global": True},
         )
 
-        # Sample logits coefficients
-        a = p.sample(
-            f"logits_g_effects-baseline",
-            Delta(
-                get_param(
-                    f"logits_g_effects-baseline-value",
-                    # pylint: disable=unnecessary-lambda
-                    lambda: (0.5 * torch.ones(num_genes, device=device)).log(),
-                )
-            ),
-        ).to(device)
-        b = p.sample(
-            f"logits_g_effects-covariate",
+        p.sample(
+            f"logits_g_effects",
             Normal(
                 get_param(
-                    f"logits_g_effects-covariate_mu",
+                    f"logits_g_effects_mu",
                     lambda: torch.zeros(
                         dataset.data.design.shape[0], num_genes, device=device
                     ),
-                ).to(device),
+                ),
                 1e-8
                 + get_param(
-                    f"logits_g_effects-covariate_sd",
+                    f"logits_g_effects_sd",
                     lambda: 1e-2
                     * torch.ones(
                         dataset.data.design.shape[0], num_genes, device=device
                     ),
                     constraint=constraints.positive,
-                ).to(device),
+                ),
             ),
-        ).to(device)
-        p.sample(
-            "logits_g_effects",
-            Delta(torch.cat([a.unsqueeze(0), b])),
-            infer={"is_global": True},
         )
 
         # Sample metagene profiles
