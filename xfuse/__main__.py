@@ -24,7 +24,9 @@ from ._config import (  # type: ignore
     merge_config,
 )
 from .logging import DEBUG, INFO, WARNING, log
-from .model.experiment.st import STRATEGIES as expansion_strategies
+from .model.experiment.st.metagene_expansion_strategy import (
+    STRATEGIES as expansion_strategies,
+)
 from .run import run as _run
 from .session import Session, get
 from .utility import design_matrix_from, with_

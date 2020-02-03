@@ -20,7 +20,8 @@ from .model.experiment.st.metagene_expansion_strategy import (
     STRATEGIES,
     ExpansionStrategy,
 )
-from .model.experiment.st import Extra, purge_metagenes
+from .model.experiment.st.metagene_eval import purge_metagenes
+from .model.experiment.st.metagene_expansion_strategy import Extra
 from .session import Session, get, require
 from .train import test_convergence, train
 from .utility.file import first_unique_filename

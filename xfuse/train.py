@@ -12,7 +12,7 @@ from tqdm import tqdm
 
 from .handlers import Checkpointer, stats
 from .logging import DEBUG, log
-from .model.experiment.st import MetagenePurger
+from .model.experiment.st.metagene_eval import MetagenePurger
 from .session import get, require
 from .utility import to_device
 

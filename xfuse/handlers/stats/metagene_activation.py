@@ -1,8 +1,13 @@
 from abc import abstractmethod
 
+import matplotlib.pyplot as plt
 import pyro.poutine
 import torch
 
+from ...analyze.metagenes import (
+    compute_metagene_profiles,
+    visualize_metagene_profile,
+)
 from ...logging import WARNING, log
 from ...model.experiment.st import ST
 from ...session import require
@@ -139,3 +144,17 @@ class MetageneFullSummary(StatsHandler):
                         )
         except ValueError:
             pass
+
+        for experiment, metagene_profiles in compute_metagene_profiles():
+            for name in metagene_profiles.metagene.unique():
+                fig = plt.figure(figsize=(4, 4))
+                visualize_metagene_profile(
+                    metagene_profiles[metagene_profiles.metagene == name],
+                    num_high=20,
+                    num_low=10,
+                )
+                plt.tight_layout(pad=0.0)
+                # pylint: disable=no-member
+                self.add_figure(
+                    f"metagene-{name}/profile-{experiment}", fig,
+                )

@@ -6,12 +6,11 @@ from torch.utils.tensorboard import SummaryWriter
 import pytest
 from xfuse.handlers.stats import RMSE
 from xfuse.model import XFuse
-from xfuse.model.experiment.st import (
-    ST,
+from xfuse.model.experiment.st import ST, MetageneDefault
+from xfuse.model.experiment.st.metagene_eval import purge_metagenes
+from xfuse.model.experiment.st.metagene_expansion_strategy import (
     Extra,
-    MetageneDefault,
     RetractAndSplit,
-    purge_metagenes,
 )
 from xfuse.session import Session, get
 from xfuse.train import train
