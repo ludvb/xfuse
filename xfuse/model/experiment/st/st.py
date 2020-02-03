@@ -474,7 +474,7 @@ class ST(Image):
         for name, metagene in self.metagenes.items():
             if metagene.profile is None:
                 metagene = MetageneDefault(
-                    metagene.scale, torch.randn(num_genes)
+                    metagene.scale, torch.zeros(num_genes)
                 )
             _sample_metagene(metagene, name)
 
