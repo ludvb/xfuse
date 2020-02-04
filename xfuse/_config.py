@@ -302,7 +302,11 @@ def _annotated_config2toml(
             else:
                 table.add(k, item.value)
                 if item.comment:
-                    table[k].comment(item.comment)
+                    try:
+                        table[k].comment(item.comment)
+                    except AttributeError:
+                        # FIXME
+                        pass
 
     config = tomlkit.document()
     _add_items(config, x)
