@@ -163,7 +163,7 @@ def write_data(
         data_file.create_dataset("label", label.shape, np.int16, label)
         data_file.create_group("annotation", track_order=True)
         for k, v in annotation.items():
-            data_file.create_dataset(f"annotation/{k}", v.shape, bool, v)
+            data_file.create_dataset(f"annotation/{k}", v.shape, np.uint16, v)
         data_file.create_dataset(
             "type", data=type_label, dtype=h5py.string_dtype()
         )

@@ -4,8 +4,6 @@ import numpy as np
 import pandas as pd
 import pyro
 import torch
-from scipy.ndimage.measurements import label as make_label
-from tifffile import imwrite
 from tqdm import tqdm
 
 from ..data import Data, Dataset
@@ -89,7 +87,6 @@ def _impute(
 def compute_imputation(
     annotation_layer: str = "",
     num_samples: int = 1,
-    split_components: bool = True,
     normalize_size: bool = False,
 ):
     r"""Imputation analysis function"""
@@ -113,17 +110,12 @@ def compute_imputation(
                 )
                 continue
 
-            if split_components:
-                labels, _n = make_label(annotation)
-            else:
-                labels = annotation.astype(np.uint8)
-
             samples = torch.stack(
                 [
                     _impute(
                         slide,
                         dataloader.dataset.data.design[name],
-                        torch.as_tensor(labels),
+                        torch.as_tensor(annotation.astype(np.int32)),
                         normalize_size=normalize_size,
                     )
                     for _ in tqdm(range(num_samples))
@@ -133,18 +125,22 @@ def compute_imputation(
             os.makedirs(
                 os.path.join(output_dir, os.path.basename(name)), exist_ok=True
             )
-            pd.DataFrame(
-                samples.mean(0).detach().cpu().numpy(),
-                columns=slide.data.genes,
-                index=pd.Index(np.unique(labels)[1:], name="label"),
+            pd.concat(
+                [
+                    pd.DataFrame(
+                        sample.detach().cpu().numpy(),
+                        columns=slide.data.genes,
+                        index=pd.Index(
+                            np.unique(annotation)[1:], name="label"
+                        ),
+                    )
+                    for sample in samples
+                ],
+                keys=pd.Index(np.arange(len(samples)) + 1, name="sample"),
             ).to_csv(
                 os.path.join(
                     output_dir, os.path.basename(name), "imputed_counts.csv"
                 )
-            )
-            imwrite(
-                os.path.join(output_dir, os.path.basename(name), "labels.tif"),
-                labels,
             )
 
 
