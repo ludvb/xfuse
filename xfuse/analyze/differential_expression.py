@@ -69,8 +69,8 @@ def compute_differential_expression(
                                 slide,
                                 design,
                                 annotation_label,
-                                normalize_scale=True,
-                                normalize_size=True,
+                                normalize_scale=False,
+                                normalize_size=False,
                             )
                     else:
                         with pyro.poutine.trace() as trace:
@@ -82,8 +82,8 @@ def compute_differential_expression(
                                     slide,
                                     design,
                                     annotation_label,
-                                    normalize_scale=True,
-                                    normalize_size=True,
+                                    normalize_scale=False,
+                                    normalize_size=False,
                                 )
                         model_fixed_globals = copy(model)
                         model_fixed_globals.model = pyro.poutine.condition(
@@ -99,6 +99,13 @@ def compute_differential_expression(
 
     annotation_samples1 = torch.stack(samples[annotation_layer1])
     annotation_samples2 = torch.stack(samples[annotation_layer2])
+
+    annotation_samples1 = annotation_samples1 / annotation_samples1.sum(
+        1, keepdims=True
+    )
+    annotation_samples2 = annotation_samples2 / annotation_samples2.sum(
+        1, keepdims=True
+    )
 
     log2_fold = annotation_samples1.log2() - annotation_samples2.log2()
     data = pd.DataFrame(
