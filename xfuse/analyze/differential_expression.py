@@ -100,11 +100,17 @@ def compute_differential_expression(
     annotation_samples1 = torch.stack(samples[annotation_layer1])
     annotation_samples2 = torch.stack(samples[annotation_layer2])
 
-    annotation_samples1 = annotation_samples1 / annotation_samples1.sum(
-        1, keepdims=True
+    annotation_samples1 = (
+        annotation_samples1
+        / annotation_samples1.sum(  # type: ignore
+            1, keepdims=True
+        )
     )
-    annotation_samples2 = annotation_samples2 / annotation_samples2.sum(
-        1, keepdims=True
+    annotation_samples2 = (
+        annotation_samples2
+        / annotation_samples2.sum(  # type: ignore
+            1, keepdims=True
+        )
     )
 
     log2_fold = annotation_samples1.log2() - annotation_samples2.log2()
