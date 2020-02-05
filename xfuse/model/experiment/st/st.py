@@ -19,7 +19,7 @@ from scipy.sparse import vstack
 from ....data.utility.misc import spot_size
 from ....logging import DEBUG, INFO, log
 from ....session import get, require
-from ....utility import center_crop, checkpoint, sparseonehot
+from ....utility import center_crop, checkpoint, sparseonehot, isoftplus
 from ....utility.state import (
     get_module,
     get_param,
@@ -163,7 +163,7 @@ class ST(Image):
             )
             torch.nn.init.constant_(
                 decoder[-2].bias,
-                np.log(np.exp(1 / spot_size(dataset)["ST"]) - 1),
+                isoftplus(torch.tensor(1 / spot_size(dataset)["ST"])),
             )
             return decoder
 

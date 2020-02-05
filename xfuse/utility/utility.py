@@ -34,6 +34,7 @@ __all__ = [
     "design_matrix_from",
     "find_device",
     "sparseonehot",
+    "isoftplus",
     "to_device",
     "with_",
 ]
@@ -266,6 +267,17 @@ def sparseonehot(labels: torch.Tensor, num_classes: Optional[int] = None):
         torch.ones(idx.shape[1]).to(idx),
         torch.Size([labels.shape[0], num_classes]),
     )
+
+
+def isoftplus(x, /):
+    r"""
+    Inverse softplus.
+
+    >>> ((isoftplus(torch.nn.functional.softplus(torch.linspace(-5, 5)))
+    ...     - torch.linspace(-5, 5)) < 1e-5).all()
+    tensor(True)
+    """
+    return np.log(np.exp(x) - 1)
 
 
 @overload
