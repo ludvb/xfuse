@@ -14,7 +14,7 @@ from pyro.distributions import (  # pylint: disable=no-name-in-module
     Normal,
 )
 from scipy.ndimage.morphology import binary_fill_holes, distance_transform_edt
-from scipy.sparse import vstack
+from torch.distributions import transform_to
 
 from ....data.utility.misc import spot_size
 from ....logging import DEBUG, INFO, log
@@ -68,6 +68,10 @@ class ST(Image):
             self.add_metagene(metagene)
 
         self.__encode_expression = encode_expression
+
+        self.__init_scale = None
+        self.__init_rate = None
+        self.__init_logits = None
 
     @property
     def metagenes(self) -> Dict[str, MetageneDefault]:
@@ -150,6 +154,67 @@ class ST(Image):
                 if optim is not None:
                     del optim.optim_objs[param]
 
+    def __init_globals(self):
+        dataloader = require("dataloader")
+        device = get("default_device")
+
+        r2rp = transform_to(constraints.positive)
+
+        scale = torch.zeros(1, requires_grad=True, device=device)
+        rate = torch.zeros(
+            len(dataloader.dataset.genes), requires_grad=True, device=device
+        )
+        logits = torch.zeros(
+            len(dataloader.dataset.genes), requires_grad=True, device=device
+        )
+
+        optim = torch.optim.Adam((scale, rate, logits), lr=0.01)
+
+        running_rmse = torch.tensor(99).float()  # pylint: disable=not-callable
+        for epoch in it.count(1):
+            previous_rmse = running_rmse
+            for x in (
+                torch.cat(x["ST"]["data"]).to(device)
+                for x in dataloader
+                if "ST" in x
+            ):
+                distr = NegativeBinomial(
+                    r2rp(scale) * r2rp(rate), logits=logits
+                )
+                running_rmse = 0.99 * running_rmse + 0.01 * (
+                    ((distr.mean - x) ** 2)
+                    .mean(1)
+                    .sqrt()
+                    .mean()
+                    .detach()
+                    .cpu()
+                )
+                optim.zero_grad()
+                nll = -distr.log_prob(x).sum()
+                nll.backward()
+                optim.step()
+            if (epoch > 100) and (previous_rmse - running_rmse > 0.001):
+                break
+
+        self.__init_scale = r2rp(scale).detach().cpu()
+        self.__init_rate = r2rp(rate).detach().cpu()
+        self.__init_logits = logits.detach().cpu()
+
+    def __init_scale_baseline(self):
+        if self.__init_scale is None:
+            self.__init_globals()
+        return self.__init_scale
+
+    def __init_rate_baseline(self):
+        if self.__init_rate is None:
+            self.__init_globals()
+        return self.__init_rate
+
+    def __init_logits_baseline(self):
+        if self.__init_logits is None:
+            self.__init_globals()
+        return self.__init_logits
+
     def _get_scale_decoder(self, in_channels):
         # pylint: disable=no-self-use
         def _create_scale_decoder():
@@ -161,9 +226,9 @@ class ST(Image):
                 torch.nn.Conv2d(in_channels, 1, kernel_size=1),
                 torch.nn.Softplus(),
             )
-            torch.nn.init.constant_(
-                decoder[-2].bias,
-                isoftplus(torch.tensor(1 / spot_size(dataset)["ST"])),
+            torch.nn.init.normal_(decoder[-2].weight, std=1e-5)
+            decoder[-2].bias.data[...] = isoftplus(
+                self.__init_scale_baseline() / spot_size(dataset)["ST"]
             )
             return decoder
 
@@ -175,18 +240,6 @@ class ST(Image):
         )
         torch.nn.init.constant_(decoder[-1].bias, self.__metagenes[n][0])
         return decoder
-
-    @staticmethod
-    def __init_rate_g_effects_baselines():
-        dataset = require("dataloader").dataset
-        data = vstack(
-            [
-                slide.data.counts
-                for slide in dataset.data.slides.values()
-                if slide.data.type == "ST"
-            ]
-        )
-        return torch.as_tensor(data.mean(0)).float().squeeze().log()
 
     def model(self, x, zs):
         # pylint: disable=too-many-locals
@@ -253,12 +306,13 @@ class ST(Image):
         rate_mg = p.sample("rate_mg", Delta(rate_mg))
 
         rate_g_effects_baseline = get_param(
-            f"rate_g_effects_baseline", self.__init_rate_g_effects_baselines
+            f"rate_g_effects_baseline",
+            lambda: self.__init_rate_baseline().log(),
         )
         logits_g_effects_baseline = get_param(
             f"logits_g_effects_baseline",
             # pylint: disable=unnecessary-lambda
-            lambda: (0.5 * torch.ones(num_genes)).log(),
+            self.__init_logits_baseline,
         )
         rate_g_effects_prior = Normal(
             0.0,
