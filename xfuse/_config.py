@@ -305,7 +305,7 @@ def _annotated_config2toml(
                     try:
                         table[k].comment(item.comment)
                     except AttributeError:
-                        # FIXME
+                        # TODO
                         pass
 
     config = tomlkit.document()
