@@ -450,24 +450,23 @@ class ST(Image):
 
         # Sample metagene profiles
         def _sample_metagene(metagene, name):
+            mu = get_param(
+                f"{_encode_metagene_name(name)}_mu",
+                # pylint: disable=unnecessary-lambda
+                lambda: metagene.profile.float(),
+            )
+            sd = get_param(
+                f"{_encode_metagene_name(name)}_sd",
+                lambda: 1e-2
+                * torch.ones_like(metagene.profile, device=device).float(),
+                constraint=constraints.positive,
+            )
+            if len(self.__metagenes) < 2:
+                mu = mu.detach()
+                sd = sd.detach()
             p.sample(
                 _encode_metagene_name(name),
-                Normal(
-                    get_param(
-                        f"{_encode_metagene_name(name)}_mu",
-                        # pylint: disable=unnecessary-lambda
-                        lambda: metagene.profile.float(),
-                    ),
-                    1e-8
-                    + get_param(
-                        f"{_encode_metagene_name(name)}_sd",
-                        lambda: 1e-2
-                        * torch.ones_like(
-                            metagene.profile, device=device
-                        ).float(),
-                        constraint=constraints.positive,
-                    ),
-                ),
+                Normal(mu, 1e-8 + sd),
                 infer={"is_global": True},
             )
 
