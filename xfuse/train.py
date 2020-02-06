@@ -120,8 +120,8 @@ def train(epochs: int = -1):
                     ),
                     epoch,
                     elbo,
-                    training_data.elbo_long,
-                    training_data.rmse,
+                    training_data.elbo_long or 0.0,
+                    training_data.rmse or 0.0,
                 )
 
                 if epochs < 0 and test_convergence():
