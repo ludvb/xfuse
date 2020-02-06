@@ -111,7 +111,7 @@ class RetractAndSplit(ExpansionStrategy):
     back previously split, non-contributing metagenes
     """
 
-    def __init__(self, max_metagenes: int = 0):
+    def __init__(self, max_metagenes: int = 50):
         self._root_nodes: Set[_Node] = set()
         self._max_metagenes = max_metagenes
 

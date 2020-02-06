@@ -38,7 +38,7 @@ _ANNOTATED_CONFIG = OrderedDict(
                 ),
                 value=OrderedDict(
                     [
-                        ("network_depth", Item(value=5)),
+                        ("network_depth", Item(value=6)),
                         ("network_width", Item(value=16)),
                         ("encode_expression", Item(value=False)),
                         (
@@ -119,7 +119,7 @@ _ANNOTATED_CONFIG = OrderedDict(
                             "type",
                             Item(
                                 comment=f"Available choices: {', '.join(STRATEGIES.keys())}",
-                                value="Extra",
+                                value="RetractAndSplit",
                             ),
                         ),
                         *[
