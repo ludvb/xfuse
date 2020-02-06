@@ -105,7 +105,7 @@ def _show(root: _Node) -> str:
     raise NotImplementedError()
 
 
-class RetractAndSplit(ExpansionStrategy):
+class DropAndSplit(ExpansionStrategy):
     r"""
     An :class:`ExpansionStrategy` that splits contributing metagenes and merges
     back previously split, non-contributing metagenes
@@ -144,17 +144,17 @@ class RetractAndSplit(ExpansionStrategy):
                 return None
             raise NotImplementedError()
 
-        def _retract_noncontributing_branches(root: _Node) -> _Node:
+        def _drop_noncontributing_branches(root: _Node) -> _Node:
             if isinstance(root, _Split):
                 if isinstance(root.b, _Leaf) and not root.b.contributing:
-                    return _retract_noncontributing_branches(root.a)
+                    return _drop_noncontributing_branches(root.a)
                 if isinstance(root.a, _Leaf) and not root.a.contributing:
-                    return _retract_noncontributing_branches(root.b)
+                    return _drop_noncontributing_branches(root.b)
                 return _Split(
                     *np.random.permutation(
                         [
-                            _retract_noncontributing_branches(root.a),
-                            _retract_noncontributing_branches(root.b),
+                            _drop_noncontributing_branches(root.a),
+                            _drop_noncontributing_branches(root.b),
                         ]
                     )
                 )
@@ -207,7 +207,7 @@ class RetractAndSplit(ExpansionStrategy):
         _log_trees("trees before retraction")
 
         self._root_nodes = set(
-            map(_retract_noncontributing_branches, self._root_nodes)
+            map(_drop_noncontributing_branches, self._root_nodes)
         )
 
         # Remove non-contributing trees, keeping at least one

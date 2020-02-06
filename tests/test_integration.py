@@ -10,7 +10,7 @@ from xfuse.model.experiment.st import ST, MetageneDefault
 from xfuse.model.experiment.st.metagene_eval import purge_metagenes
 from xfuse.model.experiment.st.metagene_expansion_strategy import (
     Extra,
-    RetractAndSplit,
+    DropAndSplit,
 )
 from xfuse.session import Session, get
 from xfuse.train import train
@@ -48,7 +48,7 @@ def test_toydata(tmp_path, mocker, toydata, encode_expression):
     "expansion_strategies,compute_expected_metagenes",
     [
         ((Extra(5),), lambda n: (n + 5, n)),
-        ((RetractAndSplit(),) * 2, lambda n: (2 * n, n)),
+        ((DropAndSplit(),) * 2, lambda n: (2 * n, n)),
     ],
 )
 def test_metagene_expansion(

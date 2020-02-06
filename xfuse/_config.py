@@ -119,7 +119,7 @@ _ANNOTATED_CONFIG = OrderedDict(
                             "type",
                             Item(
                                 comment=f"Available choices: {', '.join(STRATEGIES.keys())}",
-                                value="RetractAndSplit",
+                                value="DropAndSplit",
                             ),
                         ),
                         *[
