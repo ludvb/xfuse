@@ -17,7 +17,6 @@ from .stats_handler import StatsHandler
 
 __all__ = [
     "MetageneHistogram",
-    "MetageneMaps",
     "MetageneMean",
     "MetageneSummary",
     "MetageneFullSummary",
@@ -67,18 +66,6 @@ class MetageneHistogram(Metagene):
         # pylint: disable=no-member
         self.add_histogram(
             f"metagene-histogram/metagene-{name}", metagene.flatten()
-        )
-
-
-class MetageneMaps(Metagene):
-    r"""Plots the spatial activation of each metagene"""
-
-    def _handle_metagene(self, name, metagene):
-        # pylint: disable=no-member
-        self.add_images(
-            f"metagene-maps/metagene-{name}",
-            metagene.unsqueeze(1),
-            dataformats="NCHW",
         )
 
 

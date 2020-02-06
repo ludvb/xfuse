@@ -61,7 +61,6 @@ def train(epochs: int = -1):
             [
                 stats.ELBO(writer, _every(1)),
                 stats.MetageneHistogram(writer, _every(100)),
-                stats.MetageneMaps(writer, _every(1000)),
                 stats.MetageneMean(writer, _every(100)),
                 stats.MetageneSummary(writer, _every(1000)),
                 stats.MetageneFullSummary(writer, _every(5000)),
