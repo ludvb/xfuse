@@ -16,6 +16,9 @@ from pyro.distributions import (  # pylint: disable=no-name-in-module
 from scipy.ndimage.morphology import binary_fill_holes, distance_transform_edt
 from torch.distributions import transform_to
 
+from ....data import Data, Dataset
+from ....data.slide import DataSlide, Slide
+from ....data.utility.misc import make_dataloader
 from ....data.utility.misc import spot_size
 from ....logging import Progressbar, DEBUG, INFO, log
 from ....session import get, require
@@ -157,6 +160,26 @@ class ST(Image):
     def __init_globals(self):
         dataloader = require("dataloader")
         device = get("default_device")
+
+        dataloader = make_dataloader(
+            Dataset(
+                Data(
+                    slides={
+                        k: Slide(
+                            data=v.data,
+                            # pylint: disable=unnecessary-lambda
+                            # ^ Necessary for type checking to pass
+                            iterator=lambda x: DataSlide(x),
+                        )
+                        for k, v in dataloader.dataset.data.slides.items()
+                        if v.data.type == "ST"
+                    },
+                    design=dataloader.dataset.data.design,
+                )
+            ),
+            num_workers=dataloader.num_workers,
+            batch_size=1,
+        )
 
         r2rp = transform_to(constraints.positive)
 
