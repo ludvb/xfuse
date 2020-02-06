@@ -1,4 +1,5 @@
 from .stats_handler import StatsHandler
+from ...session import get
 
 
 class ELBO(StatsHandler):
@@ -6,6 +7,17 @@ class ELBO(StatsHandler):
 
     def _handle(self, **msg) -> None:
         # pylint: disable=no-member
+        training_data = get("training_data")
+        try:
+            training_data.elbo_short = training_data.elbo_short + 1e-2 * (
+                msg["value"] - training_data.elbo_short
+            )
+            training_data.elbo_long = training_data.elbo_long + 1e-3 * (
+                msg["value"] - training_data.elbo_long
+            )
+        except TypeError:
+            training_data.elbo_short = msg["value"]
+            training_data.elbo_long = msg["value"]
         self.add_scalar(f"loss/elbo", msg["value"])
 
     def _select_msg(self, type, **msg):

@@ -1,4 +1,5 @@
 from .stats_handler import StatsHandler
+from ...session import get
 
 
 class RMSE(StatsHandler):
@@ -12,6 +13,12 @@ class RMSE(StatsHandler):
     def _handle(self, fn, value, **_):
         # pylint: disable=arguments-differ
         # pylint: disable=no-member
-        self.add_scalar(
-            "accuracy/rmse", ((fn.mean - value) ** 2).mean(1).sqrt().mean()
-        )
+        training_data = get("training_data")
+        rmse = ((fn.mean - value) ** 2).mean(1).sqrt().mean().item()
+        try:
+            training_data.rmse = training_data.rmse + 1e-3 * (
+                rmse - training_data.rmse
+            )
+        except TypeError:
+            training_data.rmse = rmse
+        self.add_scalar("accuracy/rmse", rmse)

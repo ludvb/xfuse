@@ -24,6 +24,7 @@ from ._config import (  # type: ignore
     merge_config,
 )
 from .logging import DEBUG, INFO, WARNING, log
+from .logging.setup import setup_logging
 from .model.experiment.st.metagene_expansion_strategy import (
     STRATEGIES as expansion_strategies,
 )
@@ -40,6 +41,7 @@ def _init(f):
     @wraps(f)
     @with_(_DEFAULT_SESSION)
     def _wrapped(*args, **kwargs):
+        setup_logging(sys.stderr)
         log(DEBUG, "this is %s %s", __package__, __version__)
         log(DEBUG, "invoked by %s", " ".join(sys.argv))
         return f(*args, **kwargs)

@@ -8,10 +8,9 @@ import pyro
 from pyro.poutine.messenger import Messenger
 from pyro.poutine.runtime import effectful
 from torch.utils.tensorboard.writer import SummaryWriter
-from tqdm import tqdm
 
 from .handlers import Checkpointer, stats
-from .logging import DEBUG, log
+from .logging import DEBUG, INFO, Progressbar, log
 from .model.experiment.st.metagene_eval import MetagenePurger
 from .session import get, require
 from .utility import to_device
@@ -23,13 +22,10 @@ def test_convergence():
     criterion
     """
     training_data = get("training_data")
-    rmean_long = np.mean(training_data.elbos[-len(training_data.elbos) // 2 :])
-    rmean_short = np.mean(
-        training_data.elbos[-len(training_data.elbos) // 4 :]
+    return (
+        training_data.epoch > 1000
+        and training_data.elbo_long > training_data.elbo_short
     )
-    log(DEBUG, "Running mean ELBO (long):  %.2e", rmean_long)
-    log(DEBUG, "Running mean ELBO (short): %.2e", rmean_short)
-    return rmean_long > rmean_short
 
 
 def train(epochs: int = -1):
@@ -63,7 +59,7 @@ def train(epochs: int = -1):
 
         messengers.extend(
             [
-                stats.ELBO(writer, _every(10)),
+                stats.ELBO(writer, _every(1)),
                 stats.MetageneHistogram(writer, _every(100)),
                 stats.MetageneMaps(writer, _every(1000)),
                 stats.MetageneMean(writer, _every(100)),
@@ -71,8 +67,8 @@ def train(epochs: int = -1):
                 stats.MetageneFullSummary(writer, _every(5000)),
                 stats.Image(writer, _every(1000)),
                 stats.Latent(writer, _every(1000)),
-                stats.LogLikelihood(writer, _every(10)),
-                stats.RMSE(writer, _every(10)),
+                stats.LogLikelihood(writer, _every(1)),
+                stats.RMSE(writer, _every(1)),
                 stats.Scale(writer, _every(1000)),
             ]
         )
@@ -86,34 +82,49 @@ def train(epochs: int = -1):
     def _epoch(*, epoch):
         if isinstance(optim, pyro.optim.PyroLRScheduler):
             optim.step(epoch=epoch)
-        progress = tqdm(dataloader, position=0, dynamic_ncols=True)
-        elbo = []
-        for x in progress:
-            training_data.step += 1
-            elbo.append(_step(x=to_device(x)))
-            progress.set_description(
-                f"Epoch {epoch:05d} :: Mean ELBO {np.mean(elbo):+.3e}"
-            )
+        with Progressbar(
+            dataloader, desc=f"Epoch {epoch:05d}", leave=False,
+        ) as iterator:
+            elbo = []
+            for x in iterator:
+                training_data.step += 1
+                elbo.append(_step(x=to_device(x)))
         return np.mean(elbo)
 
     with ExitStack() as stack:
         for messenger in messengers:
             stack.enter_context(messenger)
 
-        for epoch in tqdm(
+        with Progressbar(
             (
                 it.count(training_data.epoch + 1)
                 if epochs < 0
                 else range(training_data.epoch + 1, epochs + 1)
             ),
-            position=1,
             desc="Optimizing model",
             unit="epoch",
             dynamic_ncols=True,
-        ):
-            training_data.epoch = epoch
-            training_data.elbos.append(_epoch(epoch=epoch))
+            leave=False,
+        ) as iterator:
+            for epoch in iterator:
+                training_data.epoch = epoch
+                elbo = _epoch(epoch=epoch)
+                log(
+                    INFO,
+                    " | ".join(
+                        [
+                            "Epoch %05d",
+                            "ELBO %+.3e",
+                            "Running ELBO %+.4e",
+                            "Running RMSE %.3f",
+                        ]
+                    ),
+                    epoch,
+                    elbo,
+                    training_data.elbo_long,
+                    training_data.rmse,
+                )
 
-            if epochs < 0 and test_convergence():
-                log(DEBUG, "Model has converged, stopping")
-                break
+                if epochs < 0 and test_convergence():
+                    log(DEBUG, "Model has converged, stopping")
+                    break

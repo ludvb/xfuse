@@ -17,7 +17,7 @@ from scipy.ndimage.morphology import binary_fill_holes, distance_transform_edt
 from torch.distributions import transform_to
 
 from ....data.utility.misc import spot_size
-from ....logging import DEBUG, INFO, log
+from ....logging import Progressbar, DEBUG, INFO, log
 from ....session import get, require
 from ....utility import center_crop, checkpoint, sparseonehot, isoftplus
 from ....utility.state import (
@@ -92,7 +92,7 @@ class ST(Image):
             new_metagene = f"{len(self.__metagenes) + 1:d}"
         assert new_metagene not in self.__metagenes
 
-        log(INFO, "adding metagene: %s", new_metagene)
+        log(INFO, "Adding metagene: %s", new_metagene)
         self.__metagenes.setdefault(new_metagene, metagene)
 
         return new_metagene
@@ -101,7 +101,7 @@ class ST(Image):
         r"""Adds a new metagene by splitting an already existing metagene."""
         new_metagene = self.add_metagene(self.metagenes[metagene])
 
-        log(INFO, "copying metagene: %s -> %s", metagene, new_metagene)
+        log(INFO, "Copying metagene: %s -> %s", metagene, new_metagene)
 
         name = _encode_metagene_name(metagene)
         new_name = _encode_metagene_name(new_metagene)
@@ -170,31 +170,40 @@ class ST(Image):
 
         optim = torch.optim.Adam((scale, rate, logits), lr=0.01)
 
-        running_rmse = torch.tensor(99).float()  # pylint: disable=not-callable
-        for epoch in it.count(1):
-            previous_rmse = running_rmse
-            for x in (
-                torch.cat(x["ST"]["data"]).to(device)
-                for x in dataloader
-                if "ST" in x
-            ):
-                distr = NegativeBinomial(
-                    r2rp(scale) * r2rp(rate), logits=logits
-                )
-                running_rmse = 0.99 * running_rmse + 0.01 * (
-                    ((distr.mean - x) ** 2)
-                    .mean(1)
-                    .sqrt()
-                    .mean()
-                    .detach()
-                    .cpu()
-                )
-                optim.zero_grad()
-                nll = -distr.log_prob(x).sum()
-                nll.backward()
-                optim.step()
-            if (epoch > 100) and (previous_rmse - running_rmse > 0.001):
-                break
+        with Progressbar(it.count(1), leave=False, position=0) as iterator:
+            running_rmse = None
+            for epoch in iterator:
+                previous_rmse = running_rmse
+                for x in (
+                    torch.cat(x["ST"]["data"]).to(device) for x in dataloader
+                ):
+                    distr = NegativeBinomial(
+                        r2rp(scale) * r2rp(rate), logits=logits
+                    )
+                    rmse = (
+                        ((distr.mean - x) ** 2)
+                        .mean(1)
+                        .sqrt()
+                        .mean()
+                        .detach()
+                        .cpu()
+                    )
+                    try:
+                        running_rmse = running_rmse + 1e-2 * (
+                            rmse - running_rmse
+                        )
+                    except TypeError:
+                        running_rmse = rmse
+                    iterator.set_description(
+                        "Initializing global coefficients, please wait..."
+                        + f" (RMSE: {running_rmse:.3f})"
+                    )
+                    optim.zero_grad()
+                    nll = -distr.log_prob(x).sum()
+                    nll.backward()
+                    optim.step()
+                if (epoch > 100) and (previous_rmse - running_rmse < 1e-4):
+                    break
 
         self.__init_scale = r2rp(scale).detach().cpu()
         self.__init_rate = r2rp(rate).detach().cpu()

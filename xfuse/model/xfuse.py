@@ -57,7 +57,7 @@ class XFuse(torch.nn.Module):
             )
         log(
             INFO,
-            'registering experiment: %s (data type: "%s")',
+            'Registering experiment: %s (data type: "%s")',
             type(experiment).__name__,
             experiment.tag,
         )

@@ -124,7 +124,7 @@ def get_session():
 
 def register_session_item(name: str, x: SessionItem) -> None:
     r"""Registers new :class:`SessionItem`"""
-    log(DEBUG, 'registering session item "%s"', name)
+    log(DEBUG, 'Registering session item "%s"', name)
     _SESSION_STORE[name] = x
 
 

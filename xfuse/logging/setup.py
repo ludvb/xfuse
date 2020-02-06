@@ -1,7 +1,7 @@
 import logging
-import sys
-from functools import wraps
-from logging import DEBUG, ERROR, INFO, WARNING
+
+from . import DEBUG, INFO, WARNING, ERROR, LOGGER
+from ..session import get
 
 
 class Formatter(logging.Formatter):
@@ -25,7 +25,7 @@ class Formatter(logging.Formatter):
         else:
             style = ""
             reset_style = ""
-        if record.levelno in [DEBUG, WARNING, ERROR]:
+        if record.levelno == DEBUG or get("log_level") <= DEBUG:
             where = f"({record.filename}:{record.lineno})"
         else:
             where = None
@@ -33,7 +33,7 @@ class Formatter(logging.Formatter):
             x
             for x in [
                 f"[{self.formatTime(record)}]",
-                "".join([style, record.levelname.lower(), reset_style]),
+                "".join([style, record.levelname, reset_style]),
                 where,
                 ":",
                 record.getMessage(),
@@ -42,20 +42,16 @@ class Formatter(logging.Formatter):
         )
 
 
-HANDLER = logging.StreamHandler(sys.stderr)
-HANDLER.setFormatter(Formatter(fancy_formatting=sys.stderr.isatty()))
-
-logging.basicConfig(handlers=[HANDLER])
-
-LOGGER = logging.getLogger(__name__)
-
-
-@wraps(LOGGER.log)
-def log(*args, **kwargs):
-    # pylint: disable=missing-function-docstring
-    return LOGGER.log(*args, **kwargs)
-
-
-def set_level(level: int):
-    r"""Set logging level"""
-    LOGGER.setLevel(level)
+def setup_logging(filebuffer=None, fancy_formatting=None):
+    r"""Adds a new logging stream"""
+    if fancy_formatting is None:
+        fancy_formatting = filebuffer.isatty()
+    if fancy_formatting:
+        logging.addLevelName(DEBUG, "🐛")
+        logging.addLevelName(INFO, "ℹ")
+        logging.addLevelName(WARNING, "⚠ WARNING")
+        logging.addLevelName(ERROR, "💔 ERROR")
+    handler = logging.StreamHandler(filebuffer)
+    handler.setFormatter(Formatter(fancy_formatting=fancy_formatting))
+    LOGGER.addHandler(handler)
+    return handler

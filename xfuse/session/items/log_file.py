@@ -1,8 +1,8 @@
 import os
-from logging import StreamHandler
 from typing import Optional, Union
 
-from ...logging import DEBUG, LOGGER, Formatter, log
+from ...logging import DEBUG, LOGGER, log
+from ...logging.setup import setup_logging
 from .. import SessionItem, Unset, register_session_item
 
 _LOG_HANDLER = None
@@ -22,8 +22,7 @@ def _setter(path: Optional[Union[str, Unset]]):
         log(DEBUG, "opening log file stream: %s", path)
         os.makedirs(os.path.dirname(path), exist_ok=True)
         _FILE_STREAM = open(path, "a")
-        _LOG_HANDLER = StreamHandler(_FILE_STREAM)
-        _LOG_HANDLER.setFormatter(Formatter(fancy_formatting=False))
+        _LOG_HANDLER = setup_logging(_FILE_STREAM)
         LOGGER.addHandler(_LOG_HANDLER)
 
 
