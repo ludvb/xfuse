@@ -10,7 +10,6 @@ from functools import wraps
 
 import click
 import h5py
-import ipdb
 import numpy as np
 import pandas as pd
 import tomlkit
@@ -54,11 +53,6 @@ def _init(f):
 @click.version_option()
 def cli(debug):
     if debug:
-
-        def _panic(_s, _err_type, _err, tb):
-            ipdb.post_mortem(tb)
-
-        _DEFAULT_SESSION.panic = _panic
         _DEFAULT_SESSION.log_level = -999
 
 
