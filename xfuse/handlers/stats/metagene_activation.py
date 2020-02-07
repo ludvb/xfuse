@@ -133,15 +133,29 @@ class MetageneFullSummary(StatsHandler):
             pass
 
         for experiment, metagene_profiles in compute_metagene_profiles():
-            for name in metagene_profiles.metagene.unique():
-                fig = plt.figure(figsize=(4, 4))
+            metagene_profiles["invcv"] = (
+                metagene_profiles["mean"] / metagene_profiles["stddev"]
+            )
+            for name, profile in metagene_profiles.groupby(level=0):
+                fig = plt.figure(figsize=(3.5, 3.5))
                 visualize_metagene_profile(
-                    metagene_profiles[metagene_profiles.metagene == name],
+                    profile.loc[name],
                     num_high=20,
                     num_low=10,
+                    sort_by="invcv",
                 )
                 plt.tight_layout(pad=0.0)
                 # pylint: disable=no-member
                 self.add_figure(
-                    f"metagene-{name}/profile-{experiment}", fig,
+                    f"metagene-{name}/profile/{experiment}/invcvsort", fig,
+                )
+
+                fig = plt.figure(figsize=(3.5, 3.5))
+                visualize_metagene_profile(
+                    profile.loc[name], num_high=20, num_low=10, sort_by="mean",
+                )
+                plt.tight_layout(pad=0.0)
+                # pylint: disable=no-member
+                self.add_figure(
+                    f"metagene-{name}/profile/{experiment}/meansort", fig,
                 )

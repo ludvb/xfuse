@@ -51,7 +51,9 @@ def compute_metagene_profiles():
                                 x.stddev.detach().cpu().numpy(),
                             ],
                             columns=genes,
-                            index=pd.Index(["mean", "stddev"], name="type"),
+                            index=pd.Index(
+                                ["mean", "stddev"], name="log2fold"
+                            ),
                         )
                         for x in profiles
                     ],
@@ -59,9 +61,14 @@ def compute_metagene_profiles():
                 )
                 .reset_index()
                 .melt(
-                    ["metagene", "type"],
+                    ["metagene", "log2fold"],
                     var_name="gene",
-                    value_name="log2fold",
+                    value_name="value",
+                )
+                .pivot_table(
+                    index=["metagene", "gene"],
+                    columns="log2fold",
+                    values="value",
                 )
             )
             yield experiment, dataframe
@@ -75,10 +82,12 @@ def compute_metagene_profiles():
             continue
 
 
-def visualize_metagene_profile(profile, num_high=20, num_low=20, ax=None):
+def visualize_metagene_profile(
+    profile, num_high=20, num_low=20, sort_by="mean", ax=None,
+):
     r"""Creates metagene profile visualization"""
-    x = profile.pivot("gene", "type", "log2fold")
-    x = x.sort_values("mean")
+    num_low = max(min(len(profile) - num_high, num_low), 0)
+    x = profile.sort_values(sort_by)
     x = pd.concat([x.iloc[:num_low], x.iloc[-num_high:]])
     (ax if ax else plt).errorbar(
         x["mean"], x.index, xerr=x["stddev"], fmt="none", c="black"
@@ -125,21 +134,45 @@ def compute_metagene_summary(method: str = "pca") -> None:
 
         for experiment, metagene_profiles in compute_metagene_profiles():
             metagene_profiles.to_csv(
-                os.path.join(output_dir, f"{experiment}-metagenes.csv.gz"),
-                index=False,
+                os.path.join(
+                    output_dir, f"{experiment}-metagene-log2fold.csv.gz"
+                ),
             )
-            for metagene in metagene_profiles.metagene.unique():
-                plt.figure(figsize=(4, 14))
+            metagene_profiles["invcv"] = (
+                metagene_profiles["mean"] / metagene_profiles["stddev"]
+            )
+            for metagene, profile in metagene_profiles.groupby(level=0):
+                plt.figure(figsize=(4, 10))
                 visualize_metagene_profile(
-                    metagene_profiles[metagene_profiles.metagene == metagene],
-                    num_high=40,
-                    num_low=40,
+                    profile.loc[metagene],
+                    num_high=30,
+                    num_low=15,
+                    sort_by="invcv",
                 )
                 plt.title(f"{metagene=} ({experiment})")
                 plt.tight_layout(pad=0.0)
                 plt.savefig(
                     os.path.join(
-                        output_dir, f"{experiment}-metagene-{metagene}.png"
+                        output_dir,
+                        f"{experiment}-metagene-{metagene}-invcvsort.png",
+                    ),
+                    dpi=600,
+                )
+                plt.close()
+
+                plt.figure(figsize=(4, 10))
+                visualize_metagene_profile(
+                    profile.loc[metagene],
+                    num_high=30,
+                    num_low=15,
+                    sort_by="mean",
+                )
+                plt.title(f"{metagene=} ({experiment})")
+                plt.tight_layout(pad=0.0)
+                plt.savefig(
+                    os.path.join(
+                        output_dir,
+                        f"{experiment}-metagene-{metagene}-meansort.png",
                     ),
                     dpi=600,
                 )
