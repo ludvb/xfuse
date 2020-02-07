@@ -33,14 +33,12 @@ def test_toydata(tmp_path, mocker, toydata, encode_expression):
     rmse.add_scalar = mocker.MagicMock()
     with Session(
         model=xfuse,
-        optimizer=pyro.optim.Adam({"lr": 0.001}),
+        optimizer=pyro.optim.Adam({"lr": 0.0001}),
         dataloader=toydata,
     ), rmse:
         train(100 + get("training_data").epoch)
     rmses = [x[1][1] for x in rmse.add_scalar.mock_calls]
-    assert rmses[0] > rmses[19]
-    assert rmses[19] > rmses[-1]
-    assert rmses[-1] < 20.0
+    assert rmses[-1] < 6.0
 
 
 @pytest.mark.fix_rng
