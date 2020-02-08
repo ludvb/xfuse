@@ -13,7 +13,7 @@ from pyro.distributions import (  # pylint: disable=no-name-in-module
     NegativeBinomial,
     Normal,
 )
-from scipy.ndimage.morphology import binary_fill_holes, distance_transform_edt
+from scipy.ndimage.morphology import binary_fill_holes
 from torch.distributions import transform_to
 
 from ....data import Data, Dataset
@@ -54,7 +54,6 @@ class ST(Image):
         self,
         *args,
         metagenes: Optional[List[MetageneDefault]] = None,
-        encode_expression: bool = False,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
@@ -69,8 +68,6 @@ class ST(Image):
         self.__metagene_queue: List[str] = []
         for metagene in metagenes:
             self.add_metagene(metagene)
-
-        self.__encode_expression = encode_expression
 
         self.__init_scale = None
         self.__init_rate = None
@@ -449,57 +446,6 @@ class ST(Image):
 
         return image_distr, expression_distr
 
-    @staticmethod
-    def _construct_expression_encoding(x):
-        expression_encoder1 = get_module(
-            "expression_encoder1",
-            lambda: torch.nn.Sequential(
-                torch.nn.Linear(x["data"][0].shape[1], 1024),
-                torch.nn.Tanh(),
-                torch.nn.Linear(1024, 1024),
-                torch.nn.Tanh(),
-                torch.nn.Linear(1024, 16),
-            ),
-        )
-
-        def encode(data, label):
-            # Replace missing labels with closest neighbor
-            if 0 in label:
-                dim1, dim2 = distance_transform_edt(
-                    (label == 0).cpu(),
-                    return_distances=False,
-                    return_indices=True,
-                )
-                _, n_original = label.unique(return_counts=True)
-                label = label[dim1, dim2]
-                idxs, n_new = label.unique(return_counts=True)
-                scaling = torch.zeros(data.shape[0]).to(data)
-                scaling[idxs - 1] = n_original[1:].float() / n_new.float()
-                data = data * scaling.unsqueeze(1)
-            label = label - 1
-
-            # Expand labels into (encoded) expression vectors
-            encdat = expression_encoder1(data)
-            labelonehot = sparseonehot(label.flatten(), len(encdat))
-            expanded = torch.sparse.mm(labelonehot.float(), encdat)
-            expanded = expanded.reshape(*label.shape, -1)
-
-            return expanded.permute(2, 0, 1)
-
-        def _normalize(data, means, stdvs):
-            return (data - means) / stdvs.clamp_min(1e-2)
-
-        expression = torch.stack(
-            [
-                encode(_normalize(data, means, stdvs), label)
-                for data, means, stdvs, label in zip(
-                    x["data"], x["means"], x["stdvs"], x["label"]
-                )
-            ]
-        )
-
-        return expression
-
     def _sample_globals(self):
         dataset = require("dataloader").dataset
         device = get("default_device")
@@ -578,8 +524,4 @@ class ST(Image):
 
     def guide(self, x):
         self._sample_globals()
-        if self.__encode_expression:
-            expression = self._construct_expression_encoding(x)
-            x = x.copy()
-            x["image"] = torch.cat([x["image"], expression], dim=1)
         return super().guide(x)

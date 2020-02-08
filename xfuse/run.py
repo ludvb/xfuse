@@ -36,7 +36,6 @@ def run(
     ](),
     network_depth: int = CONFIG["xfuse"].value["network_depth"].value,
     network_width: int = CONFIG["xfuse"].value["network_width"].value,
-    encode_expression: bool = CONFIG["xfuse"].value["encode_expression"].value,
     genes: List[str] = CONFIG["xfuse"].value["genes"].value,
     min_counts: int = CONFIG["xfuse"].value["min_counts"].value,
     patch_size: int = CONFIG["optimization"].value["patch_size"].value,
@@ -130,9 +129,7 @@ def run(
     xfuse = get("model")
     if xfuse is None:
         st_experiment = STExperiment(
-            depth=network_depth,
-            num_channels=network_width,
-            encode_expression=encode_expression,
+            depth=network_depth, num_channels=network_width,
         )
         xfuse = XFuse(experiments=[st_experiment]).to(get("default_device"))
 

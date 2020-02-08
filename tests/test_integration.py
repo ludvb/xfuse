@@ -18,14 +18,12 @@ from xfuse.train import train
 
 @pytest.mark.fix_rng
 @pytest.mark.slow
-@pytest.mark.parametrize("encode_expression", [True, False])
-def test_toydata(tmp_path, mocker, toydata, encode_expression):
+def test_toydata(tmp_path, mocker, toydata):
     r"""Integration test on toy dataset"""
     st_experiment = ST(
         depth=2,
         num_channels=4,
         metagenes=[MetageneDefault(0.0, None) for _ in range(3)],
-        encode_expression=encode_expression,
     )
     xfuse = XFuse(experiments=[st_experiment])
     summary_writer = SummaryWriter(tmp_path)

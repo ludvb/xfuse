@@ -294,7 +294,6 @@ def run(project_file, save_path, session):
                 expansion_strategy=expansion_strategy,
                 network_depth=config["xfuse"]["network_depth"],
                 network_width=config["xfuse"]["network_width"],
-                encode_expression=config["xfuse"]["encode_expression"],
                 genes=config["xfuse"]["genes"],
                 min_counts=config["xfuse"]["min_counts"],
                 patch_size=config["optimization"]["patch_size"],

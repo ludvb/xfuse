@@ -40,7 +40,6 @@ _ANNOTATED_CONFIG = OrderedDict(
                     [
                         ("network_depth", Item(value=6)),
                         ("network_width", Item(value=16)),
-                        ("encode_expression", Item(value=False)),
                         (
                             "genes",
                             Item(
