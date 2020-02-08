@@ -122,15 +122,6 @@ class ST(Image):
             log(DEBUG, "copying module: %s -> %s", mname, new_mname)
             state_dict.modules[new_mname] = deepcopy(state_dict.modules[mname])
 
-        for oname in [
-            oname for oname in state_dict.optimizer.keys() if name in oname
-        ]:
-            new_oname = oname.replace(name, new_name)
-            log(DEBUG, "copying optimizer params: %s -> %s", oname, new_oname)
-            state_dict.optimizer[new_oname] = deepcopy(
-                state_dict.optimizer[oname]
-            )
-
         # adjust bias so that the summed exponential activation of the two new
         # metagenes is the same as the activation before splitting
         # pylint: disable=line-too-long
