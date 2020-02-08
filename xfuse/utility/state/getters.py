@@ -63,15 +63,20 @@ def get_param(
     :raises RuntimeError: If there is no parameter named `name` and
     `default_value` is `None`.
     """
-    try:
-        param = pyro.param(name, __STATE_DICT.params[name], **kwargs)
-    except KeyError:
-        if default_value is None:
-            raise RuntimeError(f'Parameter "{name}" does not exist')
-        param = pyro.param(
-            name, default_value().to(get("default_device")), **kwargs
-        )
-        __STATE_DICT.params[name] = param.detach()
+    if name in pyro.get_param_store():
+        param = pyro.param(name)
+    else:
+        try:
+            value = __STATE_DICT.params[name]
+        except KeyError:
+            if default_value is None:
+                raise RuntimeError(f'Parameter "{name}" does not exist')
+            if callable(default_value):
+                value = default_value()
+            else:
+                value = default_value
+            __STATE_DICT.params[name] = value.detach().cpu()
+        param = pyro.param(name, value.to(get("default_device")), **kwargs)
     if get("eval"):
         return param.detach()
     return param

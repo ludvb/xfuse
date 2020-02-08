@@ -8,10 +8,7 @@ from ...utility.state.state import StateDict, get_state_dict, load_state_dict
 def _set_default_device(device):
     state_dict = get_state_dict()
     new_state_dict = StateDict(
-        params={
-            k: v.detach().to(device).requires_grad_()
-            for k, v in state_dict.params.items()
-        },
+        params=state_dict.params,
         modules=to_device(state_dict.modules, device=device),
         optimizer=to_device(state_dict.optimizer, device=device),
     )

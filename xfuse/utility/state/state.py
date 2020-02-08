@@ -5,6 +5,7 @@ import pyro
 import torch
 
 from ...session import get
+from ...utility.utility import to_device
 
 
 class StateDict(NamedTuple):
@@ -26,17 +27,22 @@ def get_state_dict() -> StateDict:
         optimizer=copy(__STATE_DICT.optimizer),
     )
     state_dict.modules.update(
-        {name: module.state_dict() for name, module in __MODULES.items()}
+        {
+            name: to_device(module.state_dict(), torch.device("cpu"))
+            for name, module in __MODULES.items()
+        }
     )
     state_dict.params.update(
         {
-            name: param.detach()
+            name: param.detach().cpu()
             for name, param in pyro.get_param_store().items()
         }
     )
     optimizer = get("optimizer")
     if optimizer is not None:
-        state_dict.optimizer.update(optimizer.get_state())
+        state_dict.optimizer.update(
+            to_device(optimizer.get_state(), torch.device("cpu"))
+        )
     return state_dict
 
 

@@ -116,9 +116,7 @@ class ST(Image):
         ]:
             new_pname = pname.replace(name, new_name)
             log(DEBUG, "copying param: %s -> %s", pname, new_pname)
-            state_dict.params[new_pname] = (
-                state_dict.params[pname].detach().clone().requires_grad_()
-            )
+            state_dict.params[new_pname] = deepcopy(state_dict.params[pname])
 
         for mname in [
             mname for mname in state_dict.modules.keys() if name in mname
