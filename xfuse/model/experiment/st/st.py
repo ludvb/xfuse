@@ -172,7 +172,7 @@ class ST(Image):
                     design=dataloader.dataset.data.design,
                 )
             ),
-            num_workers=dataloader.num_workers,
+            num_workers=0,
             batch_size=100,
         )
 
