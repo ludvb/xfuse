@@ -3,7 +3,6 @@ from operator import add
 import os
 from typing import Any, Dict, List, Optional
 
-import h5py
 import numpy as np
 import pandas as pd
 import pyro
@@ -81,7 +80,7 @@ def run(
     slides = {
         slide: Slide(
             data=STSlide(
-                h5py.File(os.path.expanduser(slide), "r"),
+                os.path.expanduser(slide),
                 cache_data=cache_data,
                 **(slide_options[slide] if slide_options is not None else {}),
             ),

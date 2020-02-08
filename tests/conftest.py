@@ -2,7 +2,6 @@ r"""Config file for tests"""
 
 import itertools as it
 
-import h5py
 import numpy as np
 import pandas as pd
 import pyro
@@ -122,7 +121,7 @@ def toydata(tmp_path):
     write_data(counts, image, label, {}, "ST", str(filepath))
 
     design_matrix = design_matrix_from({str(filepath): {"ID": 1}})
-    slide = Slide(data=STSlide(h5py.File(filepath, "r")), iterator=FullSlide)
+    slide = Slide(data=STSlide(filepath), iterator=FullSlide)
     data = Data(slides={str(filepath): slide}, design=design_matrix)
     dataset = Dataset(data)
     dataloader = make_dataloader(dataset)
