@@ -122,12 +122,6 @@ class ST(Image):
             log(DEBUG, "copying module: %s -> %s", mname, new_mname)
             state_dict.modules[new_mname] = deepcopy(state_dict.modules[mname])
 
-        # adjust bias so that the summed exponential activation of the two new
-        # metagenes is the same as the activation before splitting
-        # pylint: disable=line-too-long
-        state_dict.modules[f"decoder_{name}"]["0.bias"] -= np.log(2)  # type: ignore
-        state_dict.modules[f"decoder_{new_name}"]["0.bias"] -= np.log(2)  # type: ignore
-
         load_state_dict(state_dict)
 
         return new_metagene
