@@ -188,7 +188,7 @@ class ST(Image):
                 )
             ),
             num_workers=dataloader.num_workers,
-            batch_size=1,
+            batch_size=100,
         )
 
         r2rp = transform_to(constraints.positive)

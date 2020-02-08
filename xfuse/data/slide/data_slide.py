@@ -14,7 +14,7 @@ class DataSlide(SlideIterator):
         self._slide = slide
 
     def __len__(self):
-        return 1
+        return self._slide.counts.shape[0]
 
     def __getitem__(self, idx):
-        return dict(data=torch.as_tensor(self._slide.counts.todense()))
+        return dict(data=torch.as_tensor(self._slide.counts[idx].todense()))
