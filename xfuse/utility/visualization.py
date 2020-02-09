@@ -5,7 +5,7 @@ import numpy as np
 import pyro
 import torch
 from PIL import Image
-from scipy.ndimage.morphology import distance_transform_edt
+from scipy.ndimage.morphology import binary_fill_holes, distance_transform_edt
 from sklearn.decomposition import PCA
 from umap import UMAP
 
@@ -14,7 +14,6 @@ from ..data.slide import FullSlide, Slide
 from ..data.utility.misc import make_dataloader
 from ..logging import WARNING, log
 from ..session import Session, get, require
-from ..utility import center_crop
 
 
 __all__ = ["reduce_last_dimension", "visualize_metagenes"]
@@ -140,11 +139,12 @@ def visualize_metagenes(
             .numpy()
         )
         scale = scale / scale.max()
-        zero_label = torch.where(x["ST"]["data"][0].sum(1) == 0)[0] + 1
-        mask = ~np.isin(
-            center_crop(x["ST"]["label"][0], activation.shape[:2]), zero_label
+        mask = (
+            model_trace.trace.nodes["scale"]["value"]
+            > 0.001 * model_trace.trace.nodes["scale"]["value"].max()
         )
-        mask &= scale.squeeze() > 0.01
+        mask = mask.squeeze().cpu().numpy()
+        mask = binary_fill_holes(mask)
         name = list(model.get_experiment("ST").metagenes.keys())
         return activation, scale, mask, name
 
