@@ -121,8 +121,10 @@ def compute_gene_maps(
             for gene_name, gene_map, mask in fns[experiment_type](
                 guide_trace.trace, model_trace.trace, x[experiment_type]
             ):
-                gene_map = greyscale2colormap(gene_map.numpy())
-                gene_map = balance_colors(gene_map, q=0, q_high=0.999)
+                gene_map = balance_colors(
+                    gene_map.cpu().numpy(), q=0, q_high=0.999
+                )
+                gene_map = greyscale2colormap(gene_map)
                 gene_map = mask_background(gene_map, mask)
                 filename = os.path.join(
                     output_dir,
