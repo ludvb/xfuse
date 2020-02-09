@@ -6,6 +6,7 @@ import numpy as np
 import pyro
 import torch
 from imageio import imwrite
+from scipy.ndimage.morphology import binary_fill_holes
 from tqdm import tqdm
 
 from .analyze import Analysis, _register_analysis
@@ -14,7 +15,6 @@ from ..data.slide import FullSlide, Slide
 from ..data.utility.misc import make_dataloader
 from ..logging import WARNING, log
 from ..session import Session, require
-from ..utility import center_crop
 from ..utility.visualization import (
     greyscale2colormap,
     mask_background,
@@ -73,14 +73,15 @@ def compute_gene_maps(
         progress = tqdm(
             zip(selected_genes, rate_mg.t()), total=len(selected_genes)
         )
+        mask = (
+            model_trace.nodes["scale"]["value"]
+            > 0.001 * model_trace.nodes["scale"]["value"].max()
+        )
+        mask = mask.squeeze().cpu().numpy()
+        mask = binary_fill_holes(mask)
         for name, rate_m in progress:
             progress.set_description(name)
             gene_map = torch.einsum("fyx,f->yx", rate_im[0], rate_m.exp())
-            nonzero_labels = (data["data"][0].sum(1) == 0).nonzero() + 1
-            mask = ~np.isin(
-                center_crop(data["label"][0].cpu(), gene_map.shape),
-                nonzero_labels.cpu(),
-            )
             yield name, gene_map, mask
 
     fns: Dict[
