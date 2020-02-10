@@ -13,5 +13,6 @@ def _setter(pyro_stack):
 
 
 register_session_item(
-    "pyro_stack", SessionItem(setter=_setter, default=_DEFAULT_PYRO_STACK)
+    "pyro_stack",
+    SessionItem(setter=_setter, default=_DEFAULT_PYRO_STACK, persistent=False),
 )

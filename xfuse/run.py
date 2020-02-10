@@ -24,7 +24,7 @@ from .model.experiment.st.metagene_expansion_strategy import Extra
 from .session import Session, get, require
 from .train import test_convergence, train
 from .utility.file import first_unique_filename
-from .utility.session import save_session
+from .session.io import save_session
 
 
 def run(
@@ -125,14 +125,7 @@ def run(
         optimizer = pyro.optim.Adam({"lr": learning_rate, "amsgrad": True})
 
     def _panic(_session, _err_type, _err, _tb):
-        with Session(
-            dataloader=None,
-            default_device=None,
-            log_file=None,
-            panic=None,
-            pyro_stack=[],
-        ):
-            save_session("exception")
+        save_session("exception")
 
     with Session(
         model=xfuse,
@@ -151,14 +144,7 @@ def run(
             train(epochs)
             with Session(metagene_expansion_strategy=Extra(0)):
                 purge_metagenes(xfuse, num_samples=10)
-            with Session(
-                dataloader=None,
-                default_device=None,
-                log_file=None,
-                panic=None,
-                pyro_stack=[],
-            ):
-                save_session("final")
+            save_session("final")
 
     with Session(
         model=xfuse,

@@ -31,7 +31,7 @@ from .run import run as _run
 from .session import Session, get
 from .utility import design_matrix_from, with_
 from .utility.file import first_unique_filename
-from .utility.session import load_session
+from .session.io import load_session
 
 _DEFAULT_SESSION = Session()
 

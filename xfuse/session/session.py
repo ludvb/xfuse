@@ -82,7 +82,7 @@ _SESSION_STORE: Dict[str, SessionItem] = {}
 
 
 def _apply_session(session: Session):
-    for name, (setter, default) in _SESSION_STORE.items():
+    for name, (setter, default, _persistent) in _SESSION_STORE.items():
         setter(getattr(session, name, default))
 
 
@@ -128,4 +128,6 @@ def register_session_item(name: str, x: SessionItem) -> None:
     _SESSION_STORE[name] = x
 
 
-register_session_item("panic", SessionItem(lambda _: None, lambda *_: None))
+register_session_item(
+    "panic", SessionItem(lambda _: None, lambda *_: None, persistent=False)
+)

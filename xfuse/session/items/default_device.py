@@ -20,5 +20,6 @@ register_session_item(
     SessionItem(
         setter=_set_default_device,
         default=t.device("cuda") if t.cuda.is_available() else t.device("cpu"),
+        persistent=False,
     ),
 )

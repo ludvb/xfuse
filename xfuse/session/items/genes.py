@@ -10,4 +10,6 @@ def _set_genes(x: Optional[List[str]]) -> None:
         dataloader.reset_workers()
 
 
-register_session_item("genes", SessionItem(setter=_set_genes, default=None))
+register_session_item(
+    "genes", SessionItem(setter=_set_genes, default=None, persistent=True)
+)

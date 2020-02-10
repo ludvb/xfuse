@@ -26,4 +26,6 @@ def _setter(path: Optional[Union[str, Unset]]):
         LOGGER.addHandler(_LOG_HANDLER)
 
 
-register_session_item("log_file", SessionItem(setter=_setter, default=None))
+register_session_item(
+    "log_file", SessionItem(setter=_setter, default=None, persistent=False)
+)

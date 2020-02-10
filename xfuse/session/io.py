@@ -6,10 +6,11 @@ import torch as t
 
 from _io import BufferedReader
 
+from . import Session, get_session, require
+from .session import _SESSION_STORE
 from ..logging import INFO, WARNING, log
-from ..session import Session, get_session, require
-from .file import first_unique_filename
-from .state.state import get_state_dict, load_state_dict
+from ..utility.file import first_unique_filename
+from ..utility.state.state import get_state_dict, load_state_dict
 
 __all__ = ["load_session", "save_session"]
 
@@ -43,6 +44,7 @@ def save_session(filename_prefix: str) -> None:
         **{
             k: v
             for k, v in iter(get_session())
+            if _SESSION_STORE[k].persistent
             if v is not None
             if _can_pickle(k, v)
         }

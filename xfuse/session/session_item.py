@@ -6,3 +6,4 @@ class SessionItem(NamedTuple):
 
     setter: Callable[[Any], None]
     default: Any
+    persistent: bool = True

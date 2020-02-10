@@ -13,5 +13,8 @@ class TrainingData:
 
 
 register_session_item(
-    "training_data", SessionItem(setter=lambda _: None, default=TrainingData())
+    "training_data",
+    SessionItem(
+        setter=lambda _: None, default=TrainingData(), persistent=True
+    ),
 )

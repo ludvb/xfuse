@@ -242,7 +242,7 @@ class DropAndSplit(ExpansionStrategy):
 
 register_session_item(
     "metagene_expansion_strategy",
-    SessionItem(setter=lambda _: None, default=None),
+    SessionItem(setter=lambda _: None, default=None, persistent=True),
 )
 
 
