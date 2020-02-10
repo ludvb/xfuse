@@ -141,7 +141,7 @@ def visualize_metagenes(
         scale = scale / scale.max()
         mask = (
             model_trace.trace.nodes["scale"]["value"]
-            > 0.001 * model_trace.trace.nodes["scale"]["value"].max()
+            > 0.01 * model_trace.trace.nodes["scale"]["value"].max()
         )
         mask = mask.squeeze().cpu().numpy()
         mask = binary_fill_holes(mask)

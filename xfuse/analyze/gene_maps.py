@@ -75,7 +75,7 @@ def compute_gene_maps(
         )
         mask = (
             model_trace.nodes["scale"]["value"]
-            > 0.001 * model_trace.nodes["scale"]["value"].max()
+            > 0.01 * model_trace.nodes["scale"]["value"].max()
         )
         mask = mask.squeeze().cpu().numpy()
         mask = binary_fill_holes(mask)
