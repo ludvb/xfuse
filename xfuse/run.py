@@ -65,18 +65,6 @@ def run(
         )
         num_data_workers = available_cores
 
-    if not cache_data and num_data_workers > 1:
-        log(
-            WARNING,
-            " ".join(
-                [
-                    "Running with uncached data and more than one data"
-                    " worker.",
-                    "Data loading may not be thread safe.",
-                ]
-            ),
-        )
-
     slides = {
         slide: Slide(
             data=STSlide(
