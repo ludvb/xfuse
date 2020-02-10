@@ -52,7 +52,7 @@ class STSlide(SlideData):
 
     def __init__(
         self,
-        datafile: h5py.File,
+        datafile: str,
         cache_data: bool = True,
         min_counts: float = 0,
         always_filter: List[int] = None,
