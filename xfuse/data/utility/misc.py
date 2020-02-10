@@ -13,12 +13,8 @@ from ..dataset import Dataset
 __all__ = ["make_dataloader", "spot_size"]
 
 
-class _RepeatSampler(object):
-    """ Sampler that repeats forever.
-
-    Args:
-        sampler (Sampler)
-    """
+class _RepeatSampler:
+    """Sampler that repeats forever."""
 
     def __init__(self, sampler):
         self.sampler = sampler
@@ -29,7 +25,11 @@ class _RepeatSampler(object):
 
 
 class DataLoader(torch.utils.data.DataLoader):
-    # https://github.com/pytorch/pytorch/issues/15849
+    r"""
+    DataLoader that avoids spawning new workers in each epoch.
+    See https://github.com/pytorch/pytorch/issues/15849
+    """
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         object.__setattr__(
@@ -50,8 +50,10 @@ class DataLoader(torch.utils.data.DataLoader):
 
     def __iter__(self):
         if self.__iterator is None:
+            # pylint: disable=attribute-defined-outside-init
             self.__iterator = super().__iter__()
-        for i in range(len(self)):
+        for _ in range(len(self)):
+            # pylint: disable=stop-iteration-return
             yield next(self.__iterator)
 
 
