@@ -4,7 +4,6 @@ from typing import Any, Dict
 import numpy as np
 import torch
 from scipy.ndimage.morphology import binary_fill_holes
-from torch.utils.data import DataLoader
 from torch.utils.data.dataloader import default_collate  # type: ignore
 
 from ...session import get
@@ -12,6 +11,48 @@ from ...utility import center_crop
 from ..dataset import Dataset
 
 __all__ = ["make_dataloader", "spot_size"]
+
+
+class _RepeatSampler(object):
+    """ Sampler that repeats forever.
+
+    Args:
+        sampler (Sampler)
+    """
+
+    def __init__(self, sampler):
+        self.sampler = sampler
+
+    def __iter__(self):
+        while True:
+            yield from iter(self.sampler)
+
+
+class DataLoader(torch.utils.data.DataLoader):
+    # https://github.com/pytorch/pytorch/issues/15849
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        object.__setattr__(
+            self, "batch_sampler", _RepeatSampler(self.batch_sampler)
+        )
+        self.reset_workers()
+
+    def reset_workers(self):
+        r"""
+        Reloads worker processes on the next call to `self.__iter__`. This
+        should be called if the dataset in the main process has been changed.
+        """
+        self.__iterator = None
+        return self
+
+    def __len__(self):
+        return len(self.batch_sampler.sampler)
+
+    def __iter__(self):
+        if self.__iterator is None:
+            self.__iterator = super().__iter__()
+        for i in range(len(self)):
+            yield next(self.__iterator)
 
 
 def spot_size(dataset: Dataset) -> Dict[str, float]:
