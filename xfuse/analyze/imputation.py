@@ -125,14 +125,14 @@ def compute_imputation(
             os.makedirs(
                 os.path.join(output_dir, os.path.basename(name)), exist_ok=True
             )
+            annotation_labels = np.unique(annotation)
+            annotation_labels = annotation_labels[annotation_labels.nonzero()]
             pd.concat(
                 [
                     pd.DataFrame(
                         sample.detach().cpu().numpy(),
                         columns=slide.data.genes,
-                        index=pd.Index(
-                            np.unique(annotation)[1:], name="label"
-                        ),
+                        index=pd.Index(annotation_labels, name="label"),
                     )
                     for sample in samples
                 ],
