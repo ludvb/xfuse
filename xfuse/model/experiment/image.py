@@ -32,12 +32,12 @@ class Image(Experiment):
                     torch.nn.Conv2d(
                         y.shape[1], y.shape[1], kernel_size=3, padding=1
                     ),
-                    torch.nn.BatchNorm2d(y.shape[1]),
+                    torch.nn.BatchNorm2d(y.shape[1], momentum=0.05),
                     torch.nn.LeakyReLU(0.2, inplace=True),
                     torch.nn.Conv2d(
                         y.shape[1], y.shape[1], kernel_size=3, padding=1
                     ),
-                    torch.nn.BatchNorm2d(y.shape[1]),
+                    torch.nn.BatchNorm2d(y.shape[1], momentum=0.05),
                     torch.nn.LeakyReLU(0.2, inplace=True),
                 ),
                 checkpoint=True,
@@ -54,7 +54,7 @@ class Image(Experiment):
                         kernel_size=3,
                         padding=1,
                     ),
-                    torch.nn.BatchNorm2d(z.shape[1]),
+                    torch.nn.BatchNorm2d(z.shape[1], momentum=0.05),
                     torch.nn.LeakyReLU(0.2, inplace=True),
                 ),
                 checkpoint=True,
@@ -72,7 +72,7 @@ class Image(Experiment):
                     torch.nn.Conv2d(
                         y.shape[1], y.shape[1] // 2, kernel_size=5, padding=2
                     ),
-                    torch.nn.BatchNorm2d(y.shape[1] // 2),
+                    torch.nn.BatchNorm2d(y.shape[1] // 2, momentum=0.05),
                     torch.nn.LeakyReLU(0.2, inplace=True),
                 ),
                 checkpoint=True,
@@ -93,12 +93,12 @@ class Image(Experiment):
                     torch.nn.Conv2d(
                         x.shape[1], x.shape[1], kernel_size=3, padding=1
                     ),
-                    torch.nn.BatchNorm2d(x.shape[1]),
+                    torch.nn.BatchNorm2d(x.shape[1], momentum=0.05),
                     torch.nn.LeakyReLU(0.2, inplace=True),
                     torch.nn.Conv2d(
                         x.shape[1], x.shape[1], kernel_size=3, padding=1
                     ),
-                    torch.nn.BatchNorm2d(x.shape[1]),
+                    torch.nn.BatchNorm2d(x.shape[1], momentum=0.05),
                     torch.nn.LeakyReLU(0.2, inplace=True),
                 ),
                 checkpoint=True,
@@ -116,7 +116,7 @@ class Image(Experiment):
                         stride=2,
                         padding=2,
                     ),
-                    torch.nn.BatchNorm2d(2 * x.shape[1]),
+                    torch.nn.BatchNorm2d(2 * x.shape[1], momentum=0.05),
                     torch.nn.LeakyReLU(0.2, inplace=True),
                 ),
                 checkpoint=True,
@@ -129,7 +129,7 @@ class Image(Experiment):
                 torch.nn.Conv2d(
                     x.shape[1], self.num_channels, kernel_size=3, padding=1
                 ),
-                torch.nn.BatchNorm2d(self.num_channels),
+                torch.nn.BatchNorm2d(self.num_channels, momentum=0.05),
                 torch.nn.LeakyReLU(0.2, inplace=True),
             ),
         )
@@ -146,7 +146,7 @@ class Image(Experiment):
                 torch.nn.Conv2d(
                     self.num_channels, self.num_channels, kernel_size=1
                 ),
-                torch.nn.BatchNorm2d(self.num_channels),
+                torch.nn.BatchNorm2d(self.num_channels, momentum=0.05),
                 torch.nn.LeakyReLU(0.2, inplace=True),
                 torch.nn.Conv2d(
                     self.num_channels, x["image"].shape[1], kernel_size=1
@@ -163,7 +163,7 @@ class Image(Experiment):
                 torch.nn.Conv2d(
                     self.num_channels, self.num_channels, kernel_size=1
                 ),
-                torch.nn.BatchNorm2d(self.num_channels),
+                torch.nn.BatchNorm2d(self.num_channels, momentum=0.05),
                 torch.nn.LeakyReLU(0.2, inplace=True),
                 torch.nn.Conv2d(
                     self.num_channels, x["image"].shape[1], kernel_size=1

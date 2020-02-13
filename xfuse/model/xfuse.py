@@ -104,7 +104,7 @@ class XFuse(torch.nn.Module):
                     f"{name}-mu",
                     lambda: torch.nn.Sequential(
                         torch.nn.Conv2d(y.shape[1], y.shape[1], 1),
-                        torch.nn.BatchNorm2d(y.shape[1]),
+                        torch.nn.BatchNorm2d(y.shape[1], momentum=0.05),
                         torch.nn.LeakyReLU(0.2, inplace=True),
                         torch.nn.Conv2d(y.shape[1], y.shape[1], 1),
                     ),
@@ -114,7 +114,7 @@ class XFuse(torch.nn.Module):
                     f"{name}-sd",
                     lambda: torch.nn.Sequential(
                         torch.nn.Conv2d(y.shape[1], y.shape[1], 1),
-                        torch.nn.BatchNorm2d(y.shape[1]),
+                        torch.nn.BatchNorm2d(y.shape[1], momentum=0.05),
                         torch.nn.LeakyReLU(0.2, inplace=True),
                         torch.nn.Conv2d(y.shape[1], y.shape[1], 1),
                         torch.nn.Softplus(),

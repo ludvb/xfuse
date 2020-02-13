@@ -248,7 +248,7 @@ class ST(Image):
             dataset = require("dataloader").dataset
             decoder = torch.nn.Sequential(
                 torch.nn.Conv2d(in_channels, in_channels, kernel_size=1),
-                torch.nn.BatchNorm2d(in_channels),
+                torch.nn.BatchNorm2d(in_channels, momentum=0.05),
                 torch.nn.LeakyReLU(0.2, inplace=True),
                 torch.nn.Conv2d(in_channels, 1, kernel_size=1),
                 torch.nn.Softplus(),
@@ -277,7 +277,7 @@ class ST(Image):
                     torch.nn.Conv2d(
                         decoded.shape[1], decoded.shape[1], kernel_size=1
                     ),
-                    torch.nn.BatchNorm2d(decoded.shape[1]),
+                    torch.nn.BatchNorm2d(decoded.shape[1], momentum=0.05),
                     torch.nn.LeakyReLU(0.2, inplace=True),
                 ),
             )(decoded)
