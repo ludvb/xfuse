@@ -293,7 +293,6 @@ class ST(Image):
                 ],
                 dim=1,
             )
-            rim = center_crop(rim, [None, None, *label.shape[-2:]])
             rim = torch.nn.functional.softmax(rim, dim=1)
             return rim
 
@@ -302,6 +301,7 @@ class ST(Image):
         label = center_crop(x["label"], [None, *decoded.shape[-2:]])
 
         rim = checkpoint(_compute_rim, decoded)
+        rim = center_crop(rim, [None, None, *label.shape[-2:]])
         rim = p.sample("rim", Delta(rim))
 
         scale = p.sample(
