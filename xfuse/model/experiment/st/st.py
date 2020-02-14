@@ -455,6 +455,7 @@ class ST(Image):
                     constraint=constraints.positive,
                 ),
             ),
+            infer={"is_global": True},
         )
 
         p.sample(
@@ -476,6 +477,7 @@ class ST(Image):
                     constraint=constraints.positive,
                 ),
             ),
+            infer={"is_global": True},
         )
 
         # Sample metagene profiles
