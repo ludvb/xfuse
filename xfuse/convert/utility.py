@@ -133,7 +133,7 @@ def write_data(
         counts = counts.sum(axis=1, level=0)
 
     log(DEBUG, "writing data to %s", path)
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    os.makedirs(os.path.normpath(os.path.dirname(path)), exist_ok=True)
     with h5py.File(path, "w") as data_file:
         data = (
             counts.astype(pd.SparseDtype("float", 0.0)).sparse.to_coo().tocsr()
