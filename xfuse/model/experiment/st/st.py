@@ -335,11 +335,13 @@ class ST(Image):
         rate_g_effects_baseline = get_param(
             f"rate_g_effects_baseline",
             lambda: self.__init_rate_baseline().log(),
+            lr_multiplier=10.0,
         )
         logits_g_effects_baseline = get_param(
             f"logits_g_effects_baseline",
             # pylint: disable=unnecessary-lambda
             self.__init_logits_baseline,
+            lr_multiplier=10.0,
         )
         rate_g_effects_prior = Normal(
             0.0,
@@ -486,12 +488,14 @@ class ST(Image):
                 f"{_encode_metagene_name(name)}_mu",
                 # pylint: disable=unnecessary-lambda
                 lambda: metagene.profile.float(),
+                lr_multiplier=2.0,
             )
             sd = get_param(
                 f"{_encode_metagene_name(name)}_sd",
                 lambda: 1e-2
                 * torch.ones_like(metagene.profile, device=device).float(),
                 constraint=constraints.positive,
+                lr_multiplier=2.0,
             )
             if len(self.__metagenes) < 2:
                 mu = mu.detach()

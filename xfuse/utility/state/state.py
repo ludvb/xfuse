@@ -1,5 +1,5 @@
 from copy import copy
-from typing import Dict, NamedTuple, OrderedDict
+from typing import Any, Dict, NamedTuple, OrderedDict
 
 import pyro
 import torch
@@ -8,10 +8,16 @@ from ...session import get
 from ...utility.utility import to_device
 
 
+class Param(NamedTuple):
+    r"""Data structure for model parameters"""
+    data: torch.Tensor
+    optim_args: Dict[str, Any] = {}
+
+
 class StateDict(NamedTuple):
     r"""Data structure for the states of modules and non-module parameters"""
     modules: Dict[str, OrderedDict[str, torch.Tensor]]  # type: ignore
-    params: Dict[str, torch.Tensor]
+    params: Dict[str, Param]
     optimizer: Dict[str, Dict[str, torch.Tensor]]
 
 
@@ -32,10 +38,15 @@ def get_state_dict() -> StateDict:
             for name, module in __MODULES.items()
         }
     )
+    param_store = pyro.get_param_store()
     state_dict.params.update(
         {
-            name: param.detach().cpu()
-            for name, param in pyro.get_param_store().items()
+            name: Param(
+                data=param_store[name].detach().cpu(),
+                optim_args=param.optim_args,
+            )
+            for name, param in __STATE_DICT.params.items()
+            if name in param_store
         }
     )
     optimizer = get("optimizer")

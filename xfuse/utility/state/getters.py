@@ -1,9 +1,9 @@
-from typing import Any, Callable, Optional
+from typing import Any, Callable, Dict, Optional
 
 import pyro
 import torch
 
-from .state import __MODULES, __STATE_DICT
+from .state import __MODULES, __STATE_DICT, Param
 from ...session import get
 from ...utility.utility import checkpoint as _checkpoint
 
@@ -47,6 +47,7 @@ def get_module(
 def get_param(
     name: str,
     default_value: Optional[Callable[[], torch.Tensor]] = None,
+    lr_multiplier: float = 1.0,
     **kwargs: Any,
 ) -> torch.Tensor:
     r"""
@@ -57,6 +58,7 @@ def get_param(
     :param default_value: Default value if parameter doesn't exist. The value
     should be "quoted" by encapsulating it in a `Callable` in order to lazify
     its creation.
+    :param lr_multiplier: Learning rate multiplier
     :param kwargs: Arguments passed to :func:`~pyro.sample`.
 
     :returns: The parameter
@@ -66,7 +68,7 @@ def get_param(
     if name in pyro.get_param_store():
         return pyro.param(name)
     try:
-        value = __STATE_DICT.params[name]
+        value = __STATE_DICT.params[name].data
     except KeyError:
         if default_value is None:
             raise RuntimeError(f'Parameter "{name}" does not exist')
@@ -74,5 +76,17 @@ def get_param(
             value = default_value()
         else:
             value = default_value
-        __STATE_DICT.params[name] = value.detach().cpu()
+        __STATE_DICT.params[name] = Param(
+            data=value.detach().cpu(),
+            optim_args={"lr_multiplier": lr_multiplier},
+        )
     return pyro.param(name, value.to(get("default_device")), **kwargs)
+
+
+def get_param_optim_args(name: str) -> Dict[str, Any]:
+    r"""
+    :param name: Parameter name
+    :returns: The optimizer arguments
+    :raises KeyError: If there is no parameter named `name`
+    """
+    return __STATE_DICT.params[name].optim_args

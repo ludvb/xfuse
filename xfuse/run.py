@@ -5,7 +5,6 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 import pandas as pd
-import pyro
 
 from ._config import _ANNOTATED_CONFIG as CONFIG  # type: ignore
 from .analyze import analyses as _analyses
@@ -21,6 +20,7 @@ from .model.experiment.st.metagene_expansion_strategy import (
 )
 from .model.experiment.st.metagene_eval import purge_metagenes
 from .model.experiment.st.metagene_expansion_strategy import Extra
+from .optim import Adam  # type: ignore  # pylint: disable=no-name-in-module
 from .session import Session, get, require
 from .train import test_convergence, train
 from .utility.file import first_unique_filename
@@ -122,7 +122,7 @@ def run(
 
     optimizer = get("optimizer")
     if optimizer is None:
-        optimizer = pyro.optim.Adam({"lr": learning_rate, "amsgrad": True})
+        optimizer = Adam({"amsgrad": True})
 
     def _panic(_session, _err_type, _err, _tb):
         save_session("exception")
@@ -130,6 +130,7 @@ def run(
     with Session(
         model=xfuse,
         genes=genes,
+        learning_rate=learning_rate,
         metagene_expansion_strategy=expansion_strategy,
         optimizer=optimizer,
         dataloader=dataloader,
