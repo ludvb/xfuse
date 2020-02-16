@@ -4,7 +4,6 @@ import h5py
 import numpy as np
 import pandas as pd
 from PIL import Image
-from scipy.ndimage.interpolation import zoom
 from scipy.sparse import csr_matrix
 
 from .utility import (
@@ -12,6 +11,7 @@ from .utility import (
     crop_image,
     labels_from_spots,
     mask_tissue,
+    rescale,
     write_data,
 )
 
@@ -52,14 +52,9 @@ def run(
     if scale_factor is not None:
         tissue_positions[["x", "y"]] *= scale_factor
         spot_radius *= scale_factor
-        image = Image.fromarray(image)
-        image = image.resize(
-            [round(x * scale_factor) for x in image.size],
-            resample=Image.BILINEAR,
-        )
-        image = np.array(image)
+        image = rescale(image, scale_factor, Image.BICUBIC)
         annotation = {
-            k: zoom(v, (scale_factor, scale_factor), order=0)
+            k: rescale(v, scale_factor, Image.NEAREST)
             for k, v in annotation.items()
         }
 

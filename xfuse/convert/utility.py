@@ -4,6 +4,7 @@ import os
 import h5py
 import numpy as np
 import pandas as pd
+from PIL import Image
 
 from ..logging import DEBUG, WARNING, log
 
@@ -17,6 +18,25 @@ class Spot(NamedTuple):
     x: float
     y: float
     r: float
+
+
+def rescale(
+    image: np.ndarray, scaling_factor: float, resample: int = Image.NEAREST
+) -> np.ndarray:
+    r"""
+    Rescales image
+
+    :param image: Image array
+    :param scaling_factor: Scaling factor
+    :param resample: Resampling filter
+    :returns: The rescaled image
+    """
+    image = Image.fromarray(image)
+    image = image.resize(
+        [round(x * scaling_factor) for x in image.size], resample=resample,
+    )
+    image = np.array(image)
+    return image
 
 
 def labels_from_spots(dst: np.ndarray, spots: List[Spot]) -> None:

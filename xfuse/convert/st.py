@@ -3,13 +3,13 @@ from typing import Dict, Optional
 import numpy as np
 import pandas as pd
 from PIL import Image
-from scipy.ndimage.interpolation import zoom
 
 from .utility import (
     Spot,
     crop_image,
     labels_from_spots,
     mask_tissue,
+    rescale,
     write_data,
 )
 
@@ -31,14 +31,9 @@ def run(
         annotation = {}
 
     if scale_factor is not None:
-        image = Image.fromarray(image)
-        image = image.resize(
-            [round(x * scale_factor) for x in image.size],
-            resample=Image.BILINEAR,
-        )
-        image = np.array(image)
+        image = rescale(image, scale_factor, Image.BICUBIC)
         annotation = {
-            k: zoom(v, (scale_factor, scale_factor), order=0)
+            k: rescale(v, scale_factor, Image.NEAREST)
             for k, v in annotation.items()
         }
         if spots is not None:
