@@ -217,7 +217,7 @@ def visualize_metagenes(
 
             def transform(x):
                 x = reduction.transform(x)
-                x = x - a.min(0) / (a.max(0) - a.min(0))
+                x = (x - a.min(0)) / (a.max(0) - a.min(0))
                 x = x.clip(0.0, 1.0)
                 return x
 
