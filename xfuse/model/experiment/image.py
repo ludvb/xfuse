@@ -190,8 +190,7 @@ class Image(Experiment):
 
     def model(self, x, zs):
         decoded = self._decode(zs)
-        with pyro.poutine.scale(self.n / len(x["image"])):
-            return self._sample_image(x, decoded)
+        return self._sample_image(x, decoded)
 
     def guide(self, x):
         return self._encode(x["image"])

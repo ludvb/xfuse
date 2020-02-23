@@ -315,121 +315,118 @@ class ST(Image):
         )
         rim = scale * rim
 
-        rate_mg_prior = Normal(
-            0.0,
-            1e-8
-            + get_param(
-                f"rate_mg_sd",
-                lambda: torch.ones(num_genes),
-                constraint=constraints.positive,
-            ),
-        )
-        rate_mg = torch.stack(
-            [
-                p.sample(_encode_metagene_name(n), rate_mg_prior)
-                for n in self.metagenes
-            ]
-        )
-        rate_mg = p.sample("rate_mg", Delta(rate_mg))
+        with p.poutine.scale(scale=len(x["data"]) / self.n):
+            rate_mg_prior = Normal(
+                0.0,
+                1e-8
+                + get_param(
+                    f"rate_mg_sd",
+                    lambda: torch.ones(num_genes),
+                    constraint=constraints.positive,
+                ),
+            )
+            rate_mg = torch.stack(
+                [
+                    p.sample(_encode_metagene_name(n), rate_mg_prior)
+                    for n in self.metagenes
+                ]
+            )
+            rate_mg = p.sample("rate_mg", Delta(rate_mg))
 
-        rate_g_effects_baseline = get_param(
-            f"rate_g_effects_baseline",
-            lambda: self.__init_rate_baseline().log(),
-            lr_multiplier=10.0,
-        )
-        logits_g_effects_baseline = get_param(
-            f"logits_g_effects_baseline",
-            # pylint: disable=unnecessary-lambda
-            self.__init_logits_baseline,
-            lr_multiplier=10.0,
-        )
-        rate_g_effects_prior = Normal(
-            0.0,
-            1e-8
-            + get_param(
-                f"rate_g_effects_sd",
-                lambda: torch.ones(num_genes),
-                constraint=constraints.positive,
-            ),
-        )
-        rate_g_effects = p.sample("rate_g_effects", rate_g_effects_prior)
-        rate_g_effects = torch.cat(
-            [rate_g_effects_baseline.unsqueeze(0), rate_g_effects]
-        )
-        logits_g_effects_prior = Normal(
-            0.0,
-            1e-8
-            + get_param(
-                f"logits_g_effects_sd",
-                lambda: torch.ones(num_genes),
-                constraint=constraints.positive,
-            ),
-        )
-        logits_g_effects = p.sample(
-            "logits_g_effects", logits_g_effects_prior,
-        )
-        logits_g_effects = torch.cat(
-            [logits_g_effects_baseline.unsqueeze(0), logits_g_effects]
-        )
+            rate_g_effects_baseline = get_param(
+                f"rate_g_effects_baseline",
+                lambda: self.__init_rate_baseline().log(),
+                lr_multiplier=5.0,
+            )
+            logits_g_effects_baseline = get_param(
+                f"logits_g_effects_baseline",
+                # pylint: disable=unnecessary-lambda
+                self.__init_logits_baseline,
+                lr_multiplier=5.0,
+            )
+            rate_g_effects_prior = Normal(
+                0.0,
+                1e-8
+                + get_param(
+                    f"rate_g_effects_sd",
+                    lambda: torch.ones(num_genes),
+                    constraint=constraints.positive,
+                ),
+            )
+            rate_g_effects = p.sample("rate_g_effects", rate_g_effects_prior)
+            rate_g_effects = torch.cat(
+                [rate_g_effects_baseline.unsqueeze(0), rate_g_effects]
+            )
+            logits_g_effects_prior = Normal(
+                0.0,
+                1e-8
+                + get_param(
+                    f"logits_g_effects_sd",
+                    lambda: torch.ones(num_genes),
+                    constraint=constraints.positive,
+                ),
+            )
+            logits_g_effects = p.sample(
+                "logits_g_effects", logits_g_effects_prior,
+            )
+            logits_g_effects = torch.cat(
+                [logits_g_effects_baseline.unsqueeze(0), logits_g_effects]
+            )
 
-        effects = torch.cat(
-            [
-                torch.ones(x["effects"].shape[0], 1).to(x["effects"]),
-                x["effects"],
-            ],
-            1,
-        ).float()
+            effects = torch.cat(
+                [
+                    torch.ones(x["effects"].shape[0], 1).to(x["effects"]),
+                    x["effects"],
+                ],
+                1,
+            ).float()
 
-        logits_g = effects @ logits_g_effects
-        rate_g = effects @ rate_g_effects
-        rate_mg = rate_g[:, None] + rate_mg
+            logits_g = effects @ logits_g_effects
+            rate_g = effects @ rate_g_effects
+            rate_mg = rate_g[:, None] + rate_mg
 
-        with p.poutine.scale(scale=self.n / len(x["data"])):
-            with scope(prefix=self.tag):
-                image_distr = self._sample_image(x, decoded)
+        with scope(prefix=self.tag):
+            image_distr = self._sample_image(x, decoded)
 
-                def _compute_sample_params(
-                    data, label, rim, rate_mg, logits_g
-                ):
-                    nonmissing = label != 0
-                    zero_count_spots = 1 + torch.where(data.sum(1) == 0)[0]
-                    nonpartial = binary_fill_holes(
-                        np.isin(label.cpu(), [0, *zero_count_spots.cpu()])
-                    )
-                    nonpartial = torch.as_tensor(nonpartial).to(nonmissing)
-                    mask = nonpartial & nonmissing
-
-                    if not mask.any():
-                        return (
-                            data[[]],
-                            torch.zeros(0, num_genes).to(rim),
-                            logits_g.expand(0, -1),
-                        )
-
-                    label = label[mask] - 1
-                    idxs, label = torch.unique(label, return_inverse=True)
-                    data = data[idxs]
-
-                    rim = rim[:, mask]
-                    labelonehot = sparseonehot(label)
-                    rim = torch.sparse.mm(labelonehot.t().float(), rim.t())
-
-                    rgs = rim @ rate_mg.exp()
-
-                    return data, rgs, logits_g.expand(len(rgs), -1)
-
-                data, rgs, logits_g = zip(
-                    *it.starmap(
-                        _compute_sample_params,
-                        zip(x["data"], label, rim, rate_mg, logits_g),
-                    )
+            def _compute_sample_params(data, label, rim, rate_mg, logits_g):
+                nonmissing = label != 0
+                zero_count_spots = 1 + torch.where(data.sum(1) == 0)[0]
+                nonpartial = binary_fill_holes(
+                    np.isin(label.cpu(), [0, *zero_count_spots.cpu()])
                 )
+                nonpartial = torch.as_tensor(nonpartial).to(nonmissing)
+                mask = nonpartial & nonmissing
 
-                expression_distr = NegativeBinomial(
-                    total_count=1e-8 + torch.cat(rgs),
-                    logits=torch.cat(logits_g),
+                if not mask.any():
+                    return (
+                        data[[]],
+                        torch.zeros(0, num_genes).to(rim),
+                        logits_g.expand(0, -1),
+                    )
+
+                label = label[mask] - 1
+                idxs, label = torch.unique(label, return_inverse=True)
+                data = data[idxs]
+
+                rim = rim[:, mask]
+                labelonehot = sparseonehot(label)
+                rim = torch.sparse.mm(labelonehot.t().float(), rim.t())
+
+                rgs = rim @ rate_mg.exp()
+
+                return data, rgs, logits_g.expand(len(rgs), -1)
+
+            data, rgs, logits_g = zip(
+                *it.starmap(
+                    _compute_sample_params,
+                    zip(x["data"], label, rim, rate_mg, logits_g),
                 )
-                p.sample("xsg", expression_distr, obs=torch.cat(data))
+            )
+
+            expression_distr = NegativeBinomial(
+                total_count=1e-8 + torch.cat(rgs), logits=torch.cat(logits_g),
+            )
+            p.sample("xsg", expression_distr, obs=torch.cat(data))
 
         return image_distr, expression_distr
 
@@ -514,5 +511,6 @@ class ST(Image):
             _sample_metagene(metagene, name)
 
     def guide(self, x):
-        self._sample_globals()
+        with p.poutine.scale(scale=len(x["data"]) / self.n):
+            self._sample_globals()
         return super().guide(x)
