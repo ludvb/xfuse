@@ -354,6 +354,9 @@ class ST(Image):
                 ),
             )
             rate_g_effects = p.sample("rate_g_effects", rate_g_effects_prior)
+            rate_g_effects = torch.cat(
+                [rate_g_effects_baseline.unsqueeze(0), rate_g_effects]
+            )
             logits_g_effects_prior = Normal(
                 0.0,
                 1e-8
@@ -366,10 +369,20 @@ class ST(Image):
             logits_g_effects = p.sample(
                 "logits_g_effects", logits_g_effects_prior,
             )
+            logits_g_effects = torch.cat(
+                [logits_g_effects_baseline.unsqueeze(0), logits_g_effects]
+            )
 
-            effects = x["effects"].float()
-            logits_g = logits_g_effects_baseline + effects @ logits_g_effects
-            rate_g = rate_g_effects_baseline + effects @ rate_g_effects
+            effects = torch.cat(
+                [
+                    torch.ones(x["effects"].shape[0], 1).to(x["effects"]),
+                    x["effects"],
+                ],
+                1,
+            ).float()
+
+            logits_g = effects @ logits_g_effects
+            rate_g = effects @ rate_g_effects
             rate_mg = rate_g[:, None] + rate_mg
 
         with scope(prefix=self.tag):
