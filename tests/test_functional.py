@@ -63,3 +63,20 @@ def test_restore_session(shared_datadir, script_runner, mocker, tmp_path):
         str(shared_datadir / "test_restore_session.toml"),
     )
     assert ret.success
+
+
+def test_convert_st(shared_datadir, script_runner, tmp_path):
+    r"""Test convert Spatial Transcriptomics Pipeline run"""
+
+    ret = script_runner.run(
+        "xfuse",
+        "convert",
+        "st",
+        "--counts=" + str(shared_datadir / "files" / "st" / "counts.tsv"),
+        "--image=" + str(shared_datadir / "files" / "st" / "image.jpg"),
+        "--transformation-matrix="
+        + str(shared_datadir / "files" / "st" / "transformation.txt"),
+        "--output-file=" + str(tmp_path / "data.h5"),
+    )
+    assert ret.success
+    assert os.path.exists(tmp_path / "data.h5")
