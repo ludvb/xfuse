@@ -129,3 +129,12 @@ BioRxiv preprint: https://www.biorxiv.org/content/10.1101/2020.02.28.963413v1
    #+BEGIN_SRC sh
      tensorboard --logdir my-run
    #+END_SRC
+
+** Stopping and resuming a run
+
+   To stop the run before it has completed, press ~Ctrl+C~.
+   A snapshot of the model state will be saved to the ~--save-path~.
+   The snapshot can be restored by running
+   #+BEGIN_SRC sh
+     xfuse run my-config.toml --save-path my-run --session my-run/exception.session
+   #+END_SRC
