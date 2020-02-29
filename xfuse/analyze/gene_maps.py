@@ -23,7 +23,7 @@ from ..utility.visualization import (
 
 
 def compute_gene_maps(
-    gene_name_regex: str = r".*", normalize: bool = True
+    gene_name_regex: str = r".*", normalize: bool = False
 ) -> None:
     r"""Gene maps analysis function"""
     # pylint: disable=too-many-locals
