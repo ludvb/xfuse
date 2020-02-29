@@ -80,3 +80,22 @@ def test_convert_st(shared_datadir, script_runner, tmp_path):
     )
     assert ret.success
     assert os.path.exists(tmp_path / "data.h5")
+
+
+def test_convert_visium(shared_datadir, script_runner, tmp_path):
+    r"""Test convert Space Ranger run"""
+
+    ret = script_runner.run(
+        "xfuse",
+        "convert",
+        "visium",
+        "--image=" + str(shared_datadir / "files" / "visium" / "image.jpg"),
+        "--bc-matrix=" + str(shared_datadir / "files" / "visium" / "data.h5"),
+        "--tissue-positions="
+        + str(shared_datadir / "files" / "visium" / "tissue_positions.csv"),
+        "--scale-factors="
+        + str(shared_datadir / "files" / "visium" / "scale_factors.json"),
+        "--output-file=" + str(tmp_path / "data.h5"),
+    )
+    assert ret.success
+    assert os.path.exists(tmp_path / "data.h5")
