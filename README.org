@@ -2,6 +2,8 @@
 
 [[https://github.com/ludvb/xfuse/actions?query=workflow%3Abuild+branch%3Amaster][https://github.com/ludvb/xfuse/workflows/build/badge.svg?branch=master]]
 
+BioRxiv preprint: https://www.biorxiv.org/content/10.1101/2020.02.28.963413v1
+
 * Installing
 
   To install XFuse to your home directory, run
