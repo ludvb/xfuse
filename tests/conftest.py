@@ -8,6 +8,7 @@ import pyro
 import pyro.distributions as distr
 import pytest
 import torch
+from scipy.ndimage import label as make_label
 from xfuse.convert.utility import write_data
 from xfuse.data import Data, Dataset
 from xfuse.data.slide import STSlide, FullSlide, Slide
@@ -117,8 +118,20 @@ def toydata(tmp_path):
         columns=[f"g{i + 1}" for i in range(counts.shape[1])],
     )
 
+    annotation1 = np.arange(100) // 10 % 2 == 1
+    annotation1 = annotation1[:, None] & annotation1[None]
+    annotation1, _ = make_label(annotation1)
+    annotation2 = annotation1 == 0
+
     filepath = tmp_path / "data.h5"
-    write_data(counts, image, label, {}, "ST", str(filepath))
+    write_data(
+        counts,
+        image,
+        label,
+        {"annotation1": annotation1, "annotation2": annotation2},
+        "ST",
+        str(filepath),
+    )
 
     design_matrix = design_matrix_from({str(filepath): {"ID": 1}})
     slide = Slide(data=STSlide(str(filepath)), iterator=FullSlide)
