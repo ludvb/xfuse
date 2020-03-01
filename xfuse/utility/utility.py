@@ -1,6 +1,4 @@
-import random
-import re
-from functools import partial, wraps
+from functools import wraps
 from typing import (
     Any,
     Callable,
@@ -14,23 +12,17 @@ from typing import (
     overload,
 )
 
-import h5py
 import numpy as np
 import pandas as pd
-import scipy.sparse as ss
 import torch
 from torch.utils.checkpoint import checkpoint as _checkpoint
 
-from ..logging import INFO, WARNING, log
+from ..logging import WARNING, log
 from ..session import get
-from ..utility.file import extension
 
 __all__ = [
     "checkpoint",
-    "compose",
-    "set_rng_seed",
     "center_crop",
-    "read_data",
     "design_matrix_from",
     "find_device",
     "sparseonehot",
@@ -50,44 +42,6 @@ def checkpoint(function, *args, **kwargs):
     return _checkpoint(function, *args, **kwargs)
 
 
-def compose(f: Callable[..., Any], *gs: Callable[..., Any]):
-    r"""Composes/threads given functions"""
-    return (
-        # pylint: disable=no-value-for-parameter
-        (lambda *args, **kwargs: f(compose(*gs)(*args, **kwargs)))
-        if gs != ()
-        else f
-    )
-
-
-def set_rng_seed(seed: int) -> None:
-    r"""
-    Sets the seed of the :module:`random`, :module:`numpy`, and :module:`torch`
-    RNGs
-    """
-    i32max = np.iinfo(np.int32).max
-    random.seed(seed)
-    n_seed = random.choice(range(i32max + 1))
-    t_seed = random.choice(range(i32max + 1))
-    np.random.seed(n_seed)
-    torch.manual_seed(t_seed)
-    torch.backends.cudnn.deterministic = True  # type: ignore
-    torch.backends.cudnn.benchmark = False  # type: ignore
-    log(
-        INFO,
-        " / ".join(
-            [
-                "random rng seeded with %d",
-                "numpy rng seeded with %d",
-                "torch rng seeded with %d",
-            ]
-        ),
-        seed,
-        n_seed,
-        t_seed,
-    )
-
-
 def center_crop(x, target_shape):
     r"""Crops `x` to the given `target_shape` from the center"""
     return x[
@@ -100,81 +54,6 @@ def center_crop(x, target_shape):
             ]
         )
     ]
-
-
-def read_data(
-    paths: List[str],
-    filter_ambiguous: bool = True,
-    num_genes: Optional[int] = None,
-    genes: List[str] = None,
-) -> pd.DataFrame:
-    r"""Reads data from `paths` and produces the (concatenated) data table"""
-
-    def _load_file(path: str) -> pd.DataFrame:
-        def _csv(sep):
-            return pd.read_csv(path, sep=sep, index_col=0).astype(
-                pd.SparseDtype(np.float32, 0)
-            )
-
-        def _h5():
-            with h5py.File(path, "r") as data:
-                spmatrix = ss.csr_matrix(
-                    (
-                        data["matrix"]["data"],
-                        data["matrix"]["indices"],
-                        data["matrix"]["indptr"],
-                    )
-                )
-                return pd.DataFrame.sparse.from_spmatrix(
-                    spmatrix.astype(np.float32),
-                    columns=data["matrix"]["columns"],
-                    index=pd.Index(data["matrix"]["index"], name="n"),
-                )
-
-        parse_dict: Dict[str, Callable[[], pd.DataFrame]] = {
-            r"csv(:?\.(gz|bz2))$": partial(_csv, sep=","),
-            r"tsv(:?\.(gz|bz2))$": partial(_csv, sep="\t"),
-            r"hdf(:?5)$": _h5,
-            r"he5$": _h5,
-            r"h5$": _h5,
-        }
-
-        log(INFO, "loading data file %s", path)
-        for pattern, parser in parse_dict.items():
-            if re.match(pattern, extension(path)):  # type: ignore
-                return parser()
-        raise NotImplementedError(
-            f"no parser for file {path}"
-            f" (supported file extension patterns:"
-            f' {", ".join(parse_dict.keys())})'
-        )
-
-    ks, xs = zip(*[(p, _load_file(p)) for p in paths])
-    data = pd.concat(xs, keys=ks, join="outer", axis=0, sort=False).fillna(0.0)
-
-    data = data.iloc[:, (data.sum(0) > 0).values]
-
-    if genes is not None:
-        data_ = pd.DataFrame(
-            np.zeros((len(data), len(genes))),
-            columns=genes,
-            index=data.index,
-            dtype=float,
-        )
-        shared_genes = np.intersect1d(genes, data.columns)
-        data_[shared_genes] = data[shared_genes]
-        data = data_
-    elif filter_ambiguous:
-        data = data[[x for x in data.columns if "ambiguous" not in x]]
-
-    if num_genes:
-        if isinstance(num_genes, int):
-            # pylint: disable=invalid-unary-operand-type
-            data = data[data.sum(0).sort_values()[-num_genes:].index]
-        if isinstance(num_genes, list):
-            data = data[num_genes]
-
-    return data
 
 
 def design_matrix_from(

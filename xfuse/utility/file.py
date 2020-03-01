@@ -1,6 +1,5 @@
 import itertools as it
 import os
-from typing import Optional
 
 
 def first_unique_filename(root_name: str) -> str:
@@ -14,16 +13,3 @@ def first_unique_filename(root_name: str) -> str:
         if not os.path.exists(path):
             return path
     raise RuntimeError("Unreachable code path")
-
-
-def extension(path: str) -> Optional[str]:
-    r""" Extract file name extension from path
-
-    >>> extension('./file.ext')
-    'ext'
-    """
-    basename = os.path.basename(path)
-    idx = basename.find(".")
-    if idx == -1:
-        return None
-    return basename[idx + 1 :]
