@@ -4,17 +4,27 @@
 
 BioRxiv preprint: https://www.biorxiv.org/content/10.1101/2020.02.28.963413v1
 
+* Hardware requirements
+
+  XFuse can run on CPU-only hardware, but training new models will take exceedingly long.
+  We recommend running XFuse on a GPU with at least 8 GB of VRAM.
+
+* Software requirements
+
+  XFuse has been tested on GNU/Linux but should run on all major operating systems.
+  The following software is required:
+
+  - Python version 3.8
+  - /Optional/: The ST Tissue Recognition library version 0.1 or later, available from https://github.com/SpatialTranscriptomicsResearch/st_tissue_recognition.
+    This library improves background element masking in visualizations and may improve learning by forcing observed expression values to zero outside the tissue.
+
 * Installing
 
   To install XFuse to your home directory, run
   #+BEGIN_SRC sh
     pip install --user git+https://github.com/ludvb/xfuse@master
   #+END_SRC
-
-* Hardware requirements
-
-  XFuse can run on CPU-only hardware, but training new models will take exceedingly long.
-  We recommend running XFuse on a GPU with at least 8 GB of VRAM.
+  This step should only take a few minutes.
 
 * Getting started
 
@@ -80,7 +90,7 @@ BioRxiv preprint: https://www.biorxiv.org/content/10.1101/2020.02.28.963413v1
 
      [optimization]
      batch_size = 4
-     epochs = -1
+     epochs = 100000
      learning_rate = 0.001
      patch_size = 512
 
@@ -138,3 +148,9 @@ BioRxiv preprint: https://www.biorxiv.org/content/10.1101/2020.02.28.963413v1
    #+BEGIN_SRC sh
      xfuse run my-config.toml --save-path my-run --session my-run/exception.session
    #+END_SRC
+
+** Finishing the run
+
+   Training the model from scratch will take roughly three days on a normal desktop computer with an Nvidia GeForce 20 series graphics card.
+   After training, XFuse runs the analyses specified in the configuration file.
+   Results will be saved to a directory named ~analyses~ in the ~--save-path~.
