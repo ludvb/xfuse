@@ -66,12 +66,13 @@ def crop_image(
     xmin, ymin = np.min(cs, 0)
     xmax, ymax = np.max(cs, 0)
 
-    xmin -= margin * (xmax - xmin)
-    xmax += margin * (xmax - xmin)
-    ymin -= margin * (ymax - ymin)
-    ymax += margin * (ymax - ymin)
+    margin = margin * max(xmax - xmin, ymax - ymin)
 
-    xmin, xmax, ymin, ymax = [int(round(x)) for x in (xmin, xmax, ymin, ymax)]
+    xmin = int(round(xmin - margin))
+    xmax = int(round(xmax + margin))
+    ymin = int(round(ymin - margin))
+    ymax = int(round(ymax + margin))
+
     xmin, ymin = [max(a, 0) for a in (xmin, ymin)]
 
     return image[ymin:ymax, xmin:xmax]
