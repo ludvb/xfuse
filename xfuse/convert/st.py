@@ -46,9 +46,12 @@ def run(
             transformation = transformation @ scale_matrix
 
     if spots is not None:
-        counts = counts.loc[
-            spots[["x", "y"]].apply(lambda x: "x".join(map(str, x)), 1)
-        ]
+        spots.index = spots[["x", "y"]].apply(
+            lambda x: "x".join(map(str, x)), 1
+        )
+        spot_names = np.intersect1d(spots.index, counts.index)
+        spots = spots.loc[spot_names]
+        counts = counts.loc[spot_names]
         xmax, xmin = [f(spots.x) for f in (np.max, np.min)]
         pxmax, pxmin = [
             np.mean(spots.pixel_x[spots.x == x]) for x in (xmax, xmin)
