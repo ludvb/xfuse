@@ -57,7 +57,6 @@ def cli(debug):
 
 
 @click.group("convert")
-@_init
 def _convert():
     r"""Converts data of various formats to the format used by xfuse."""
 
@@ -77,6 +76,7 @@ cli.add_command(_convert)
     type=click.Path(exists=False, writable=True),
     required=True,
 )
+@_init
 def visium(
     image,
     bc_matrix,
@@ -137,6 +137,7 @@ _convert.add_command(visium)
     type=click.Path(exists=False, writable=True),
     required=True,
 )
+@_init
 def st(
     counts, image, spots, transformation_matrix, annotation, scale, output_file
 ):
