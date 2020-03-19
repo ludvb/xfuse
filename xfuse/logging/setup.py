@@ -36,7 +36,7 @@ class Formatter(logging.Formatter):
                 "".join([style, record.levelname, reset_style]),
                 where,
                 ":",
-                record.getMessage(),
+                record.getMessage().split("\n")[0],
             ]
             if x
         )
@@ -46,12 +46,17 @@ def setup_logging(filebuffer=None, fancy_formatting=None):
     r"""Adds a new logging stream"""
     if fancy_formatting is None:
         fancy_formatting = filebuffer.isatty()
+
     if fancy_formatting:
         logging.addLevelName(DEBUG, "🐛")
         logging.addLevelName(INFO, "ℹ")
         logging.addLevelName(WARNING, "⚠ WARNING")
         logging.addLevelName(ERROR, "💔 ERROR")
+
     handler = logging.StreamHandler(filebuffer)
     handler.setFormatter(Formatter(fancy_formatting=fancy_formatting))
     LOGGER.addHandler(handler)
+
+    logging.getLogger("py.warnings").addHandler(handler)
+
     return handler

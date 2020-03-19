@@ -2,8 +2,10 @@
 
 import itertools as it
 import json
+import logging
 import os
 import sys
+import warnings
 from contextlib import ExitStack
 from datetime import datetime as dt
 from functools import wraps
@@ -41,9 +43,12 @@ def _init(f):
     @with_(_DEFAULT_SESSION)
     def _wrapped(*args, **kwargs):
         setup_logging(sys.stderr)
+        logging.captureWarnings(True)
         log(DEBUG, "this is %s %s", __package__, __version__)
         log(DEBUG, "invoked by %s", " ".join(sys.argv))
-        return f(*args, **kwargs)
+        with warnings.catch_warnings():
+            warnings.simplefilter("always")
+            return f(*args, **kwargs)
 
     return _wrapped
 
