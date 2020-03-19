@@ -30,6 +30,7 @@ torch = "^1.5.0"
 torchvision = "^0.6.0"
 tqdm = "^4.41.0"
 umap-learn = "^0.3.10"
+opencv-python = "^4.2.0"
 
 [tool.poetry.dev-dependencies]
 mypy = "^0.761"

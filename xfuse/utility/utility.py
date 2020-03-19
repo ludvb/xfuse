@@ -1,3 +1,4 @@
+import itertools as it
 from functools import wraps
 from typing import (
     Any,
@@ -12,17 +13,20 @@ from typing import (
     overload,
 )
 
+import cv2 as cv
 import numpy as np
 import pandas as pd
 import torch
+from scipy.ndimage.morphology import binary_fill_holes
 from torch.utils.checkpoint import checkpoint as _checkpoint
 
-from ..logging import WARNING, log
+from ..logging import DEBUG, WARNING, log
 from ..session import get
 
 __all__ = [
     "checkpoint",
     "center_crop",
+    "compute_tissue_mask",
     "design_matrix_from",
     "find_device",
     "sparseonehot",
@@ -54,6 +58,49 @@ def center_crop(x, target_shape):
             ]
         )
     ]
+
+
+def compute_tissue_mask(
+    image: np.ndarray,
+    initial_mask: Optional[np.ndarray] = None,
+    convergence_threshold: float = 0.001,
+) -> np.ndarray:
+    r"""
+    Computes boolean mask indicating likely foreground elements in histology
+    image.
+    """
+    # pylint: disable=no-member
+    # ^ pylint fails to identify cv.* members
+    if initial_mask is None:
+        initial_mask = np.zeros(image.shape[:2], dtype=np.bool)
+        initial_mask_center = center_crop(
+            initial_mask,
+            [int(round(x * 0.8)) for x in iter(initial_mask.shape)],
+        )
+        initial_mask_center[...] = True
+
+    mask = cv.GC_PR_BGD * np.ones(image.shape[:2], dtype=np.uint8)
+    mask[initial_mask] = cv.GC_PR_FGD
+
+    bgd_model = np.zeros((1, 65), np.float64)
+    fgd_model = bgd_model.copy()
+
+    log(DEBUG, "Computing tissue mask:")
+
+    for i in it.count(1):
+        old_mask = mask.copy()
+        cv.grabCut(
+            image, mask, None, bgd_model, fgd_model, 1, cv.GC_INIT_WITH_MASK,
+        )
+        prop_changed = (mask != old_mask).sum() / np.prod(mask.shape)
+        log(DEBUG, f"  Iteration {i}: {prop_changed=}")
+        if prop_changed < convergence_threshold:
+            break
+
+    mask = mask == cv.GC_PR_FGD
+    mask = binary_fill_holes(mask)
+
+    return mask
 
 
 def design_matrix_from(
