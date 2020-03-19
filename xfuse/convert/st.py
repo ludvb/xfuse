@@ -61,6 +61,12 @@ def run(
             )
         )
     else:
+        warnings.warn(
+            "Converting data from the Spatial Transcriptomics pipeline"
+            " without a spot detector file has been deprecated and will be"
+            " removed in a future version.",
+            DeprecationWarning,
+        )
         coordinates = np.array(
             [
                 [float(x), float(y)]

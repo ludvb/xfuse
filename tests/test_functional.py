@@ -74,8 +74,7 @@ def test_convert_st(shared_datadir, script_runner, tmp_path):
         "st",
         "--counts=" + str(shared_datadir / "files" / "st" / "counts.tsv"),
         "--image=" + str(shared_datadir / "files" / "st" / "image.jpg"),
-        "--transformation-matrix="
-        + str(shared_datadir / "files" / "st" / "transformation.txt"),
+        "--spots=" + str(shared_datadir / "files" / "st" / "spots.tsv"),
         "--output-file=" + str(tmp_path / "data.h5"),
     )
     assert ret.success
