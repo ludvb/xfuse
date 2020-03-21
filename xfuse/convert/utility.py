@@ -104,7 +104,9 @@ def mask_tissue(
 
     counts.index += 1
     label[label != 0] += 1
-    label[~mask.astype(bool) & (label == 0)] = 1
+
+    in_mask = np.unique(label[mask & (label != 0)])
+    label[~mask.astype(bool) & ~np.isin(label, in_mask)] = 1
 
     counts = pd.concat(
         [
