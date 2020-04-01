@@ -17,7 +17,7 @@ import cv2 as cv
 import numpy as np
 import pandas as pd
 import torch
-from scipy.ndimage.morphology import binary_fill_holes
+from scipy.ndimage.morphology import binary_dilation
 from torch.utils.checkpoint import checkpoint as _checkpoint
 
 from ..logging import DEBUG, WARNING, log
@@ -64,6 +64,7 @@ def compute_tissue_mask(
     image: np.ndarray,
     initial_mask: Optional[np.ndarray] = None,
     convergence_threshold: float = 0.0001,
+    expansion_size: float = 0.001,
 ) -> np.ndarray:
     r"""
     Computes boolean mask indicating likely foreground elements in histology
@@ -98,7 +99,15 @@ def compute_tissue_mask(
             break
 
     mask = mask == cv.GC_PR_FGD
-    mask = binary_fill_holes(mask)
+
+    # Expand foreground
+    if expansion_size > 0:
+        mask = binary_dilation(
+            mask,
+            iterations=int(
+                np.floor(expansion_size * np.sqrt(np.prod(mask.shape)))
+            ),
+        )
 
     return mask
 
