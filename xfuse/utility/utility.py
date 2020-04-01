@@ -63,7 +63,7 @@ def center_crop(x, target_shape):
 def compute_tissue_mask(
     image: np.ndarray,
     initial_mask: Optional[np.ndarray] = None,
-    convergence_threshold: float = 0.001,
+    convergence_threshold: float = 0.0001,
 ) -> np.ndarray:
     r"""
     Computes boolean mask indicating likely foreground elements in histology
