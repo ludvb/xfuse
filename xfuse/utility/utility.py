@@ -17,6 +17,7 @@ import cv2 as cv
 import numpy as np
 import pandas as pd
 import torch
+from scipy.ndimage import label
 from scipy.ndimage.morphology import binary_dilation
 from torch.utils.checkpoint import checkpoint as _checkpoint
 
@@ -64,6 +65,7 @@ def compute_tissue_mask(
     image: np.ndarray,
     initial_mask: Optional[np.ndarray] = None,
     convergence_threshold: float = 0.0001,
+    size_threshold: float = 0.001,
     expansion_size: float = 0.001,
 ) -> np.ndarray:
     r"""
@@ -99,6 +101,14 @@ def compute_tissue_mask(
             break
 
     mask = mask == cv.GC_PR_FGD
+
+    # Remove small foreground specks
+    labels, _ = label(mask)
+    labels_unique, label_counts = np.unique(labels, return_counts=True)
+    small_labels = labels_unique[
+        label_counts < size_threshold ** 2 * np.prod(mask.shape)
+    ]
+    mask[np.isin(labels, small_labels)] = False
 
     # Expand foreground
     if expansion_size > 0:
