@@ -76,6 +76,7 @@ cli.add_command(_convert)
 @click.option("--annotation", type=click.File("rb"))
 @click.option("--scale-factors", type=click.File("rb"), required=True)
 @click.option("--scale", type=float)
+@click.option("--mask/--no-mask", default=True)
 @click.option(
     "--output-file",
     type=click.Path(exists=False, writable=True),
@@ -89,6 +90,7 @@ def visium(
     annotation,
     scale_factors,
     scale,
+    mask,
     output_file,
 ):
     r"""Converts 10X Visium data"""
@@ -117,6 +119,7 @@ def visium(
             output_file,
             annotation=annotation,
             scale_factor=scale,
+            mask=mask,
         )
 
 
@@ -130,6 +133,7 @@ _convert.add_command(visium)
 @click.option("--transformation-matrix", type=click.File("rb"))
 @click.option("--annotation", type=click.File("rb"))
 @click.option("--scale", type=float)
+@click.option("--mask/--no-mask", default=True)
 @click.option(
     "--output-file",
     type=click.Path(exists=False, writable=True),
@@ -137,7 +141,14 @@ _convert.add_command(visium)
 )
 @_init
 def st(
-    counts, image, spots, transformation_matrix, annotation, scale, output_file
+    counts,
+    image,
+    spots,
+    transformation_matrix,
+    annotation,
+    mask,
+    scale,
+    output_file,
 ):
     r"""Converts Spatial Transcriptomics ("ST") data"""
     if spots is not None and transformation_matrix is not None:
@@ -169,6 +180,7 @@ def st(
         transformation=transformation,
         annotation=annotation,
         scale_factor=scale,
+        mask=mask,
     )
 
 
