@@ -1,7 +1,7 @@
 from functools import partial, reduce
 from operator import add
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 import numpy as np
 import pandas as pd
@@ -35,7 +35,6 @@ def run(
     ](),
     network_depth: int = CONFIG["xfuse"].value["network_depth"].value,
     network_width: int = CONFIG["xfuse"].value["network_width"].value,
-    genes: List[str] = CONFIG["xfuse"].value["genes"].value,
     min_counts: int = CONFIG["xfuse"].value["min_counts"].value,
     patch_size: int = CONFIG["optimization"].value["patch_size"].value,
     batch_size: int = CONFIG["optimization"].value["batch_size"].value,
