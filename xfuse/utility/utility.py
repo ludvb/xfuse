@@ -18,7 +18,6 @@ import numpy as np
 import pandas as pd
 import torch
 from scipy.ndimage import label
-from scipy.ndimage.morphology import binary_dilation
 from torch.utils.checkpoint import checkpoint as _checkpoint
 
 from ..logging import DEBUG, WARNING, log
@@ -28,8 +27,10 @@ __all__ = [
     "checkpoint",
     "center_crop",
     "compute_tissue_mask",
+    "cleanup_mask",
     "design_matrix_from",
     "find_device",
+    "remove_fg_elements",
     "sparseonehot",
     "isoftplus",
     "to_device",
@@ -66,7 +67,6 @@ def compute_tissue_mask(
     initial_mask: Optional[np.ndarray] = None,
     convergence_threshold: float = 0.0001,
     size_threshold: float = 0.001,
-    expansion_size: float = 0.001,
 ) -> np.ndarray:
     r"""
     Computes boolean mask indicating likely foreground elements in histology
@@ -101,24 +101,15 @@ def compute_tissue_mask(
             break
 
     mask = mask == cv.GC_PR_FGD
+    mask = cleanup_mask(mask, size_threshold)
 
-    # Remove small foreground specks
-    labels, _ = label(mask)
-    labels_unique, label_counts = np.unique(labels, return_counts=True)
-    small_labels = labels_unique[
-        label_counts < size_threshold ** 2 * np.prod(mask.shape)
-    ]
-    mask[np.isin(labels, small_labels)] = False
+    return mask
 
-    # Expand foreground
-    if expansion_size > 0:
-        mask = binary_dilation(
-            mask,
-            iterations=int(
-                np.floor(expansion_size * np.sqrt(np.prod(mask.shape)))
-            ),
-        )
 
+def cleanup_mask(mask: np.ndarray, size_threshold: float):
+    r"""Removes small background and foreground elements"""
+    mask = ~remove_fg_elements(~mask, size_threshold)
+    mask = remove_fg_elements(mask, size_threshold)
     return mask
 
 
@@ -201,6 +192,17 @@ def find_device(x: Any) -> torch.device:
                 pass
 
     raise NoDevice(f"Failed to find a device associated with {x}")
+
+
+def remove_fg_elements(mask, size_threshold: float):
+    r"""Removes small foreground elements"""
+    labels, _ = label(mask)
+    labels_unique, label_counts = np.unique(labels, return_counts=True)
+    small_labels = labels_unique[
+        label_counts < size_threshold ** 2 * np.prod(mask.shape)
+    ]
+    mask[np.isin(labels, small_labels)] = False
+    return mask
 
 
 def sparseonehot(labels: torch.Tensor, num_classes: Optional[int] = None):

@@ -6,7 +6,6 @@ import numpy as np
 import pyro
 import torch
 from imageio import imwrite
-from scipy.ndimage.morphology import binary_fill_holes
 from tqdm import tqdm
 
 from .analyze import Analysis, _register_analysis
@@ -15,6 +14,7 @@ from ..data.slide import FullSlide, Slide
 from ..data.utility.misc import make_dataloader
 from ..logging import WARNING, log
 from ..session import Session, require
+from ..utility import cleanup_mask
 from ..utility.visualization import (
     greyscale2colormap,
     mask_background,
@@ -78,7 +78,7 @@ def compute_gene_maps(
             > 0.01 * model_trace.nodes["scale"]["value"].max()
         )
         mask = mask.squeeze().cpu().numpy()
-        mask = binary_fill_holes(mask)
+        mask = cleanup_mask(mask, 0.01)
         for name, rate_m in progress:
             progress.set_description(name)
             gene_map = torch.einsum("fyx,f->yx", rate_im[0], rate_m.exp())

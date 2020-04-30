@@ -5,7 +5,7 @@ import numpy as np
 import pyro
 import torch
 from PIL import Image
-from scipy.ndimage.morphology import binary_fill_holes, distance_transform_edt
+from scipy.ndimage.morphology import distance_transform_edt
 from sklearn.decomposition import PCA
 from umap import UMAP
 
@@ -14,6 +14,7 @@ from ..data.slide import FullSlide, Slide
 from ..data.utility.misc import make_dataloader
 from ..logging import WARNING, log
 from ..session import Session, get, require
+from ..utility import center_crop, cleanup_mask
 
 
 __all__ = ["reduce_last_dimension", "visualize_metagenes"]
@@ -123,15 +124,18 @@ def visualize_metagenes(
     def _compute_st_activation(x):
         with pyro.poutine.trace() as guide_trace:
             model.guide(x)
+
         with pyro.poutine.replay(trace=guide_trace.trace):
             with pyro.poutine.trace() as model_trace:
                 model.model(x)
+
         activation = (
             model_trace.trace.nodes["rim"]["fn"]
             .mean[0]
             .permute(1, 2, 0)
             .numpy()
         )
+
         scale = (
             model_trace.trace.nodes["scale"]["fn"]
             .mean[0]
@@ -139,13 +143,21 @@ def visualize_metagenes(
             .numpy()
         )
         scale = scale / scale.max()
-        mask = (
+
+        zero_label = np.isin(
+            center_crop(x["ST"]["label"][0], activation.shape[:2]),
+            torch.where(x["ST"]["data"][0].sum(1) == 0)[0] + 1,
+        )
+        thresholded_scale = (
             model_trace.trace.nodes["scale"]["value"]
             > 0.01 * model_trace.trace.nodes["scale"]["value"].max()
         )
-        mask = mask.squeeze().cpu().numpy()
-        mask = binary_fill_holes(mask)
+        thresholded_scale = thresholded_scale.squeeze().cpu().numpy()
+        mask = ~zero_label & thresholded_scale
+        mask = cleanup_mask(mask, 0.01)
+
         name = list(model.get_experiment("ST").metagenes.keys())
+
         return activation, scale, mask, name
 
     compute_fn = {"ST": _compute_st_activation}
