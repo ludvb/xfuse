@@ -108,7 +108,7 @@ def compute_metagene_summary(method: str = "pca") -> None:
     dataloader = require("dataloader")
     save_path = require("save_path")
 
-    output_dir = os.path.join(save_path, f"metagenes")
+    output_dir = os.path.join(save_path, "metagenes")
     os.makedirs(output_dir, exist_ok=True)
 
     with Session(

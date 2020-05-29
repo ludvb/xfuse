@@ -1,4 +1,6 @@
 # type: ignore
+# pylint: disable=isinstance-second-argument-not-valid-type
+# ^ due to https://github.com/PyCQA/pylint/issues/3507
 
 from copy import deepcopy
 from inspect import signature

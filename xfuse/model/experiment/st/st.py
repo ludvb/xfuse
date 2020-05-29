@@ -62,7 +62,7 @@ class ST(Image):
             metagenes = [MetageneDefault(0.0, None)]
 
         if len(metagenes) == 0:
-            raise ValueError(f"Needs at least one metagene")
+            raise ValueError("Needs at least one metagene")
 
         self.__metagenes: Dict[str, MetageneDefault] = {}
         self.__metagene_queue: List[str] = []
@@ -320,7 +320,7 @@ class ST(Image):
                 0.0,
                 1e-8
                 + get_param(
-                    f"rate_mg_sd",
+                    "rate_mg_sd",
                     lambda: torch.ones(num_genes),
                     constraint=constraints.positive,
                 ),
@@ -334,12 +334,12 @@ class ST(Image):
             rate_mg = p.sample("rate_mg", Delta(rate_mg))
 
             rate_g_effects_baseline = get_param(
-                f"rate_g_effects_baseline",
+                "rate_g_effects_baseline",
                 lambda: self.__init_rate_baseline().log(),
                 lr_multiplier=5.0,
             )
             logits_g_effects_baseline = get_param(
-                f"logits_g_effects_baseline",
+                "logits_g_effects_baseline",
                 # pylint: disable=unnecessary-lambda
                 self.__init_logits_baseline,
                 lr_multiplier=5.0,
@@ -348,7 +348,7 @@ class ST(Image):
                 0.0,
                 1e-8
                 + get_param(
-                    f"rate_g_effects_sd",
+                    "rate_g_effects_sd",
                     lambda: torch.ones(num_genes),
                     constraint=constraints.positive,
                 ),
@@ -361,7 +361,7 @@ class ST(Image):
                 0.0,
                 1e-8
                 + get_param(
-                    f"logits_g_effects_sd",
+                    "logits_g_effects_sd",
                     lambda: torch.ones(num_genes),
                     constraint=constraints.positive,
                 ),
@@ -436,17 +436,17 @@ class ST(Image):
         num_genes = len(dataset.genes)
 
         p.sample(
-            f"rate_g_effects",
+            "rate_g_effects",
             Normal(
                 get_param(
-                    f"rate_g_effects_mu",
+                    "rate_g_effects_mu",
                     lambda: torch.zeros(
                         dataset.data.design.shape[0], num_genes, device=device
                     ),
                 ),
                 1e-8
                 + get_param(
-                    f"rate_g_effects_sd",
+                    "rate_g_effects_sd",
                     lambda: 1e-2
                     * torch.ones(
                         dataset.data.design.shape[0], num_genes, device=device
@@ -458,17 +458,17 @@ class ST(Image):
         )
 
         p.sample(
-            f"logits_g_effects",
+            "logits_g_effects",
             Normal(
                 get_param(
-                    f"logits_g_effects_mu",
+                    "logits_g_effects_mu",
                     lambda: torch.zeros(
                         dataset.data.design.shape[0], num_genes, device=device
                     ),
                 ),
                 1e-8
                 + get_param(
-                    f"logits_g_effects_sd",
+                    "logits_g_effects_sd",
                     lambda: 1e-2
                     * torch.ones(
                         dataset.data.design.shape[0], num_genes, device=device

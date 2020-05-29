@@ -18,7 +18,7 @@ class ELBO(StatsHandler):
         except TypeError:
             training_data.elbo_short = msg["value"]
             training_data.elbo_long = msg["value"]
-        self.add_scalar(f"loss/elbo", msg["value"])
+        self.add_scalar("loss/elbo", msg["value"])
 
     def _select_msg(self, type, **msg):
         # pylint: disable=arguments-differ

@@ -27,7 +27,7 @@ def compute_differential_expression(
     save_path = require("save_path")
     model = require("model")
 
-    output_dir = os.path.join(save_path, f"differential_expression")
+    output_dir = os.path.join(save_path, "differential_expression")
 
     with Session(
         default_device=torch.device("cpu"), pyro_stack=[]
