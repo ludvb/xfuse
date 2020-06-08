@@ -148,9 +148,21 @@ def visualize_metagenes(
             center_crop(x["ST"]["label"][0], activation.shape[:2]),
             torch.where(x["ST"]["data"][0].sum(1) == 0)[0] + 1,
         )
-        thresholded_scale = (
+        max_val = (
             model_trace.trace.nodes["scale"]["value"]
-            > 0.01 * model_trace.trace.nodes["scale"]["value"].max()
+            .flatten()
+            .kthvalue(
+                int(
+                    round(
+                        0.95
+                        * model_trace.trace.nodes["scale"]["value"].numel()
+                    )
+                )
+            )
+            .values
+        )
+        thresholded_scale = (
+            model_trace.trace.nodes["scale"]["value"] > 0.01 * max_val
         )
         thresholded_scale = thresholded_scale.squeeze().cpu().numpy()
         mask = ~zero_label & thresholded_scale
