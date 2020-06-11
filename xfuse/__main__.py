@@ -77,6 +77,7 @@ cli.add_command(_convert)
 @click.option("--scale-factors", type=click.File("rb"), required=True)
 @click.option("--scale", type=float)
 @click.option("--mask/--no-mask", default=True)
+@click.option("--rotate/--no-rotate", default=False)
 @click.option(
     "--output-file",
     type=click.Path(exists=False, writable=True),
@@ -91,6 +92,7 @@ def visium(
     scale_factors,
     scale,
     mask,
+    rotate,
     output_file,
 ):
     r"""Converts 10X Visium data"""
@@ -120,6 +122,7 @@ def visium(
             annotation=annotation,
             scale_factor=scale,
             mask=mask,
+            rotate=rotate,
         )
 
 
@@ -134,6 +137,7 @@ _convert.add_command(visium)
 @click.option("--annotation", type=click.File("rb"))
 @click.option("--scale", type=float)
 @click.option("--mask/--no-mask", default=True)
+@click.option("--rotate/--no-rotate", default=False)
 @click.option(
     "--output-file",
     type=click.Path(exists=False, writable=True),
@@ -146,8 +150,9 @@ def st(
     spots,
     transformation_matrix,
     annotation,
-    mask,
     scale,
+    mask,
+    rotate,
     output_file,
 ):
     r"""Converts Spatial Transcriptomics ("ST") data"""
@@ -181,6 +186,7 @@ def st(
         annotation=annotation,
         scale_factor=scale,
         mask=mask,
+        rotate=rotate,
     )
 
 

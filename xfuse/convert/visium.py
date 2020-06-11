@@ -8,7 +8,6 @@ from scipy.sparse import csr_matrix
 
 from .utility import (
     Spot,
-    crop_image,
     labels_from_spots,
     mask_tissue,
     rescale,
@@ -25,6 +24,7 @@ def run(
     annotation: Optional[Dict[str, np.ndarray]] = None,
     scale_factor: Optional[float] = None,
     mask: bool = True,
+    rotate: bool = False,
 ) -> None:
     r"""
     Converts data from the 10X SpaceRanger pipeline for visium arrays into
@@ -68,10 +68,6 @@ def run(
     label = np.zeros(image.shape[:2]).astype(np.int16)
     labels_from_spots(label, spots)
 
-    image = crop_image(image, spots)
-    label = crop_image(label, spots)
-    annotation = {k: crop_image(v, spots) for k, v in annotation.items()}
-
     if mask:
         counts, label = mask_tissue(image, counts, label)
 
@@ -81,5 +77,6 @@ def run(
         label,
         type_label="ST",
         annotation=annotation,
+        auto_rotate=rotate,
         path=output_file,
     )
