@@ -74,7 +74,7 @@ cli.add_command(_convert)
 @click.option("--bc-matrix", type=click.File("rb"), required=True)
 @click.option("--tissue-positions", type=click.File("rb"), required=True)
 @click.option("--annotation", type=click.File("rb"))
-@click.option("--scale-factors", type=click.File("rb"))
+@click.option("--scale-factors", type=click.File("rb"), required=True)
 @click.option("--scale", type=float)
 @click.option(
     "--output-file",
@@ -96,15 +96,8 @@ def visium(
     tissue_positions = tissue_positions[[4, 5]]
     tissue_positions = tissue_positions.rename(columns={4: "y", 5: "x"})
 
-    if scale_factors:
-        scale_factors = json.load(scale_factors)
-        spot_radius = scale_factors["spot_diameter_fullres"] / 2
-        spot_radius = spot_radius * scale_factors["tissue_hires_scalef"]
-        tissue_positions = (
-            tissue_positions * scale_factors["tissue_hires_scalef"]
-        )
-    else:
-        spot_radius = 255.1463437163131 / 2
+    scale_factors = json.load(scale_factors)
+    spot_radius = scale_factors["spot_diameter_fullres"] / 2
 
     Image.MAX_IMAGE_PIXELS = None
     image = imread(image)
