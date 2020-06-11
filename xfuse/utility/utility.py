@@ -63,7 +63,6 @@ def design_matrix_from(
     r"""
     Constructs the design matrix from the design specified in the design file
     """
-
     design_table = pd.concat(
         [
             pd.DataFrame({k: [v] for k, v in v.items()}, index=[k])
@@ -72,21 +71,23 @@ def design_matrix_from(
         sort=True,
     )
 
-    if covariates is not None:
-        for covariate, values in covariates:
-            if covariate not in design_table:
-                design_table[covariate] = 0
-            design_table[covariate] = design_table[covariate].astype(
-                "category"
-            )
-            design_table[covariate].cat.set_categories(values, inplace=True)
-        design_table = design_table[[x for x, _ in covariates]]
-    else:
-        if len(design_table.columns) == 0:
-            return pd.DataFrame(
-                np.zeros((0, len(design_table))), columns=design_table.index
-            )
-        design_table = design_table.astype("category")
+    if covariates is None:
+        covariates = [
+            (k, list(map(str, xs.unique().tolist())))
+            for k, xs in design_table.iteritems()
+        ]
+
+    if len(covariates) == 0:
+        return pd.DataFrame(
+            np.zeros((0, len(design_table))), columns=design_table.index
+        )
+
+    for covariate, values in covariates:
+        if covariate not in design_table:
+            design_table[covariate] = 0
+        design_table[covariate] = design_table[covariate].astype("category")
+        design_table[covariate].cat.set_categories(values, inplace=True)
+    design_table = design_table[[x for x, _ in covariates]]
 
     for covariate in design_table:
         if np.any(pd.isna(design_table[covariate])):
