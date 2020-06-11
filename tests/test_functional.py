@@ -72,7 +72,7 @@ def test_restore_session(
         "run",
         f"--save-path={tmp_path}",
         str(shared_datadir / config),
-        f"--session=" + str(tmp_path / "final.session"),
+        "--session=" + str(tmp_path / "final.session"),
     )
     assert ret.success
 
