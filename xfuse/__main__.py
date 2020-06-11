@@ -286,14 +286,17 @@ def run(project_file, save_path, session):
                 ]
             )
 
-        with Session(covariates=covariates):
+        genes = get("genes")
+        if genes is None and config["xfuse"]["genes"] != []:
+            genes = config["xfuse"]["genes"]
+
+        with Session(covariates=covariates, genes=genes):
             _run(
                 design,
                 analyses=config["analyses"],
                 expansion_strategy=expansion_strategy,
                 network_depth=config["xfuse"]["network_depth"],
                 network_width=config["xfuse"]["network_width"],
-                genes=config["xfuse"]["genes"],
                 min_counts=config["xfuse"]["min_counts"],
                 patch_size=config["optimization"]["patch_size"],
                 batch_size=config["optimization"]["batch_size"],
