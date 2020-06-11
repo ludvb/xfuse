@@ -24,6 +24,7 @@ def run(
     output_file: str,
     annotation: Optional[Dict[str, np.ndarray]] = None,
     scale_factor: Optional[float] = None,
+    mask: bool = True,
 ) -> None:
     r"""
     Converts data from the 10X SpaceRanger pipeline for visium arrays into
@@ -71,7 +72,8 @@ def run(
     label = crop_image(label, spots)
     annotation = {k: crop_image(v, spots) for k, v in annotation.items()}
 
-    counts, label = mask_tissue(image, counts, label)
+    if mask:
+        counts, label = mask_tissue(image, counts, label)
 
     write_data(
         counts,

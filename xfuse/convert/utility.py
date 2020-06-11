@@ -7,6 +7,7 @@ import pandas as pd
 from PIL import Image
 
 from ..logging import DEBUG, WARNING, log
+from ..utility import compute_tissue_mask
 
 
 class Spot(NamedTuple):
@@ -85,22 +86,7 @@ def mask_tissue(
     Detects the tissue in `image`. The area outside of the tissue is given a
     new label with zero counts everywhere.
     """
-    try:
-        # pylint: disable=import-outside-toplevel
-        import tissue_recognition as tr
-    except ImportError:
-        log(
-            WARNING,
-            "Tissue masking requires the ST Tissue Recognition library"
-            # pylint: disable=line-too-long
-            " (https://github.com/SpatialTranscriptomicsResearch/st_tissue_recognition)."
-            " This step will be skipped.",
-        )
-        return counts, label
-
-    mask = np.zeros(image.shape[:2], dtype=np.uint8)
-    tr.recognize_tissue(image.copy(), mask)
-    mask = tr.get_binary_mask(mask)
+    mask = compute_tissue_mask(image)
 
     counts.index += 1
     label[label != 0] += 1

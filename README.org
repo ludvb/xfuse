@@ -12,11 +12,8 @@ BioRxiv preprint: https://www.biorxiv.org/content/10.1101/2020.02.28.963413v1
 * Software requirements
 
   XFuse has been tested on GNU/Linux but should run on all major operating systems.
-  The following software is required:
-
-  - Python version 3.8
-  - /Optional/: The ST Tissue Recognition library version 0.1 or later, available from https://github.com/SpatialTranscriptomicsResearch/st_tissue_recognition.
-    This library improves background element masking in visualizations and may improve learning by forcing observed expression values to zero outside the tissue.
+  XFuse requires Python 3.8.
+  All other dependencies are pulled in by ~pip~ during the installation.
 
 * Installing
 
