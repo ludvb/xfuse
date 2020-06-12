@@ -66,7 +66,7 @@ def compute_tissue_mask(
     image: np.ndarray,
     initial_mask: Optional[np.ndarray] = None,
     convergence_threshold: float = 0.0001,
-    size_threshold: float = 0.001,
+    size_threshold: float = 0.01,
 ) -> np.ndarray:
     r"""
     Computes boolean mask indicating likely foreground elements in histology
