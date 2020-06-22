@@ -12,12 +12,12 @@ from scipy.spatial.distance import cdist, pdist
 from sklearn.mixture import GaussianMixture
 
 from ..logging import DEBUG, INFO, WARNING, log
-from ..utility import rescale
 from .utility import (
     Spot,
     crop_image,
     labels_from_spots,
     mask_tissue,
+    rescale,
     write_data,
 )
 

@@ -5,12 +5,12 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 
-from ..utility import rescale
 from .utility import (
     Spot,
     crop_image,
     labels_from_spots,
     mask_tissue,
+    rescale,
     write_data,
 )
 
