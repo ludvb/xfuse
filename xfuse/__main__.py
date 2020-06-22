@@ -125,8 +125,8 @@ def visium(
             }
 
     num_header_lines = 0
-    frame_map = None
-    spot_map = None
+    frame_map = dict()
+    spot_map = dict()
     with open(genepix_data, "r") as fp:
         for line in fp:
             if all(x in line for x in ("Name", "X", "Y")):
