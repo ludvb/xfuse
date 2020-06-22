@@ -7,6 +7,7 @@ from typing import (
     Dict,
     List,
     Optional,
+    Sequence,
     Tuple,
     Union,
     cast,
@@ -17,7 +18,9 @@ import cv2 as cv
 import numpy as np
 import pandas as pd
 import torch
+from PIL import Image
 from scipy.ndimage import label
+from scipy.ndimage.morphology import binary_fill_holes
 from torch.utils.checkpoint import checkpoint as _checkpoint
 
 from ..logging import DEBUG, WARNING, log
@@ -31,6 +34,8 @@ __all__ = [
     "design_matrix_from",
     "find_device",
     "remove_fg_elements",
+    "rescale",
+    "resize",
     "sparseonehot",
     "isoftplus",
     "to_device",
@@ -64,7 +69,6 @@ def center_crop(x, target_shape):
 
 def compute_tissue_mask(
     image: np.ndarray,
-    initial_mask: Optional[np.ndarray] = None,
     convergence_threshold: float = 0.0001,
     size_threshold: float = 0.01,
 ) -> np.ndarray:
@@ -74,16 +78,16 @@ def compute_tissue_mask(
     """
     # pylint: disable=no-member
     # ^ pylint fails to identify cv.* members
-    if initial_mask is None:
-        initial_mask = np.zeros(image.shape[:2], dtype=np.bool)
-        initial_mask_center = center_crop(
-            initial_mask,
-            [int(round(x * 0.8)) for x in iter(initial_mask.shape)],
-        )
-        initial_mask_center[...] = True
+    scale_factor = 1000 / max(image.shape)
+    original_shape = image.shape[:2]
+    reduced_shape = tuple(int(round(scale_factor * x)) for x in original_shape)
+    image = resize(image, target_shape=reduced_shape, resample=Image.NEAREST)
 
-    mask = cv.GC_PR_BGD * np.ones(image.shape[:2], dtype=np.uint8)
-    mask[initial_mask] = cv.GC_PR_FGD
+    initial_mask = binary_fill_holes(
+        cv.blur(cv.Canny(image, 100, 200), (5, 5))
+    )
+    mask = np.where(initial_mask, cv.GC_PR_FGD, cv.GC_PR_BGD)
+    mask = mask.astype(np.uint8)
 
     bgd_model = np.zeros((1, 65), np.float64)
     fgd_model = bgd_model.copy()
@@ -102,6 +106,7 @@ def compute_tissue_mask(
 
     mask = mask == cv.GC_PR_FGD
     mask = cleanup_mask(mask, size_threshold)
+    mask = resize(mask, target_shape=original_shape, resample=Image.NEAREST)
 
     return mask
 
@@ -203,6 +208,42 @@ def remove_fg_elements(mask, size_threshold: float):
     ]
     mask[np.isin(labels, small_labels)] = False
     return mask
+
+
+def rescale(
+    image: np.ndarray, scaling_factor: float, resample: int = Image.NEAREST
+) -> np.ndarray:
+    r"""
+    Rescales image
+
+    :param image: Image array
+    :param scaling_factor: Scaling factor
+    :param resample: Resampling filter
+    :returns: The rescaled image
+    """
+    target_shape = tuple(
+        int(round(x * scaling_factor)) for x in image.shape[:2]
+    )
+    return resize(image, target_shape=target_shape, resample=resample)
+
+
+def resize(
+    image: np.ndarray,
+    target_shape: Sequence[int],
+    resample: int = Image.NEAREST,
+) -> np.ndarray:
+    r"""
+    Rescales image
+
+    :param image: Image array
+    :param target_shape: Target shape
+    :param resample: Resampling filter
+    :returns: The rescaled image
+    """
+    image = Image.fromarray(image)
+    image = image.resize(target_shape[::-1], resample=resample)
+    image = np.array(image)
+    return image
 
 
 def sparseonehot(labels: torch.Tensor, num_classes: Optional[int] = None):

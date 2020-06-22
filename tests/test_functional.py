@@ -4,6 +4,7 @@ import os
 
 import pytest
 
+import xfuse
 from xfuse.session import Session, Unset, get
 from xfuse.session.items.training_data import TrainingData
 from xfuse.utility.state import get_state_dict, reset_state
@@ -85,7 +86,7 @@ def test_convert_st(shared_datadir, script_runner, tmp_path):
         "convert",
         "st",
         "--counts=" + str(shared_datadir / "files" / "st" / "counts.tsv"),
-        "--image=" + str(shared_datadir / "files" / "st" / "image.jpg"),
+        "--tissue-image=" + str(shared_datadir / "files" / "st" / "image.jpg"),
         "--spots=" + str(shared_datadir / "files" / "st" / "spots.tsv"),
         "--output-file=" + str(tmp_path / "data.h5"),
     )
@@ -93,19 +94,37 @@ def test_convert_st(shared_datadir, script_runner, tmp_path):
     assert os.path.exists(tmp_path / "data.h5")
 
 
-def test_convert_visium(shared_datadir, script_runner, tmp_path):
+def test_convert_visium(shared_datadir, script_runner, mocker, tmp_path):
     r"""Test convert Space Ranger run"""
+
+    # pylint: disable=protected-access
+    _find_keypoints = xfuse.convert.visium._find_keypoints
+    mocker.patch(
+        "xfuse.convert.visium._find_keypoints",
+        lambda image, **detection_params: _find_keypoints(
+            image,
+            filterByArea=False,
+            filterByConvexity=False,
+            **detection_params,
+        ),
+    )
+    # ^ Test data uses spots with different sizes and slightly irregular
+    #   shapes. Patch `_find_keypoints` to disregard those differences.
 
     ret = script_runner.run(
         "xfuse",
         "convert",
         "visium",
-        "--image=" + str(shared_datadir / "files" / "visium" / "image.jpg"),
+        "--tissue-image="
+        + str(shared_datadir / "files" / "visium" / "image.png"),
         "--bc-matrix=" + str(shared_datadir / "files" / "visium" / "data.h5"),
-        "--tissue-positions="
-        + str(shared_datadir / "files" / "visium" / "tissue_positions.csv"),
-        "--scale-factors="
-        + str(shared_datadir / "files" / "visium" / "scale_factors.json"),
+        "--barcode-list="
+        + str(shared_datadir / "files" / "visium" / "barcode_list.tsv"),
+        "--genepix-data="
+        + str(shared_datadir / "files" / "visium" / "genepix_data.gpr"),
+        "--well=A1",
+        "--slide-image="
+        + str(shared_datadir / "files" / "visium" / "slide_image.png"),
         "--output-file=" + str(tmp_path / "data.h5"),
     )
     assert ret.success

@@ -550,6 +550,18 @@ version = "0.2.8"
 pyasn1 = ">=0.4.6,<0.5.0"
 
 [[package]]
+category = "main"
+description = "Pure Numpy Implementation of the Coherent Point Drift Algorithm"
+name = "pycpd"
+optional = false
+python-versions = "*"
+version = "2.0.0"
+
+[package.dependencies]
+future = "*"
+numpy = "*"
+
+[[package]]
 category = "dev"
 description = "python code static checker"
 name = "pylint"
@@ -1004,7 +1016,7 @@ python-versions = "*"
 version = "1.12.1"
 
 [metadata]
-content-hash = "5061dab4a59a0da5ea8e04793d89638bef3f6ee69a6a1a94c40bec7d799ea51c"
+content-hash = "23a682ad52a300629cf526e375ecdeb94e7a552c8c79dffc7c80bf0db403970d"
 python-versions = "^3.8.0"
 
 [metadata.files]
@@ -1520,6 +1532,10 @@ pyasn1-modules = [
     {file = "pyasn1_modules-0.2.8-py3.5.egg", hash = "sha256:426edb7a5e8879f1ec54a1864f16b882c2837bfd06eee62f2c982315ee2473ed"},
     {file = "pyasn1_modules-0.2.8-py3.6.egg", hash = "sha256:cbac4bc38d117f2a49aeedec4407d23e8866ea4ac27ff2cf7fb3e5b570df19e0"},
     {file = "pyasn1_modules-0.2.8-py3.7.egg", hash = "sha256:c29a5e5cc7a3f05926aff34e097e84f8589cd790ce0ed41b67aed6857b26aafd"},
+]
+pycpd = [
+    {file = "pycpd-2.0.0-py3-none-any.whl", hash = "sha256:c4d80a3db47919e27e3109e7f47cb41c442babced6f9126caa728bd18a28103a"},
+    {file = "pycpd-2.0.0.tar.gz", hash = "sha256:d0ae86c8f490d10ea9ad1d6067891197f1d5e948f23dcb7a59aadaee9ece5c9e"},
 ]
 pylint = [
     {file = "pylint-2.5.2-py3-none-any.whl", hash = "sha256:dd506acce0427e9e08fb87274bcaa953d38b50a58207170dbf5b36cf3e16957b"},

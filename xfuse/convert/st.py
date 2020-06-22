@@ -5,19 +5,19 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 
+from ..utility import rescale
 from .utility import (
     Spot,
     crop_image,
     labels_from_spots,
     mask_tissue,
-    rescale,
     write_data,
 )
 
 
 def run(
     counts: pd.DataFrame,
-    image: np.ndarray,
+    tissue_image: np.ndarray,
     output_file: str,
     spots: Optional[pd.DataFrame] = None,
     transformation: Optional[np.ndarray] = None,
@@ -33,7 +33,7 @@ def run(
         annotation = {}
 
     if scale_factor is not None:
-        image = rescale(image, scale_factor, Image.BICUBIC)
+        tissue_image = rescale(tissue_image, scale_factor, Image.BICUBIC)
         annotation = {
             k: rescale(v, scale_factor, Image.NEAREST)
             for k, v in annotation.items()
@@ -84,26 +84,30 @@ def run(
             coordinates = coordinates @ transformation
             coordinates = coordinates[:, :2]
         else:
-            coordinates[:, 0] = (coordinates[:, 0] - 1) / 32 * image.shape[1]
-            coordinates[:, 1] = (coordinates[:, 1] - 1) / 34 * image.shape[0]
-        radius = np.sqrt(np.product(image.shape[:2]) / 32 / 34) / 4
+            coordinates[:, 0] = (
+                (coordinates[:, 0] - 1) / 32 * tissue_image.shape[1]
+            )
+            coordinates[:, 1] = (
+                (coordinates[:, 1] - 1) / 34 * tissue_image.shape[0]
+            )
+        radius = np.sqrt(np.product(tissue_image.shape[:2]) / 32 / 34) / 4
         spots = [Spot(x=x, y=y, r=radius) for x, y in coordinates]
 
     counts.index = pd.Index([*range(1, counts.shape[0] + 1)], name="n")
 
-    label = np.zeros(image.shape[:2]).astype(np.int16)
+    label = np.zeros(tissue_image.shape[:2]).astype(np.int16)
     labels_from_spots(label, spots)
 
-    image = crop_image(image, spots)
+    tissue_image = crop_image(tissue_image, spots)
     label = crop_image(label, spots)
     annotation = {k: crop_image(v, spots) for k, v in annotation.items()}
 
     if mask:
-        counts, label = mask_tissue(image, counts, label)
+        counts, label = mask_tissue(tissue_image, counts, label)
 
     write_data(
         counts,
-        image,
+        tissue_image,
         label,
         type_label="ST",
         annotation=annotation,
