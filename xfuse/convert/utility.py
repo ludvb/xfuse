@@ -34,7 +34,8 @@ def rescale(
     """
     image = Image.fromarray(image)
     image = image.resize(
-        [round(x * scaling_factor) for x in image.size], resample=resample,
+        [int(round(x * scaling_factor)) for x in image.size],
+        resample=resample,
     )
     image = np.array(image)
     return image

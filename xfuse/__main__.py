@@ -1,7 +1,6 @@
 # pylint: disable=missing-docstring, invalid-name, too-many-instance-attributes
 
 import itertools as it
-import json
 import logging
 import os
 import sys
@@ -70,11 +69,30 @@ cli.add_command(_convert)
 
 
 @click.command()
-@click.option("--image", type=click.File("rb"), required=True)
+@click.option("--tissue-image", type=click.File("rb"), required=True)
 @click.option("--bc-matrix", type=click.File("rb"), required=True)
-@click.option("--tissue-positions", type=click.File("rb"), required=True)
+@click.option(
+    "--barcode-list",
+    type=click.Path(
+        exists=True, readable=True, resolve_path=True, dir_okay=False
+    ),
+    required=True,
+)
+@click.option(
+    "--genepix-data",
+    type=click.Path(
+        exists=True, readable=True, resolve_path=True, dir_okay=False
+    ),
+    required=True,
+)
+@click.option("--well", type=str, required=True)
+@click.option(
+    "--slide-image",
+    type=click.Path(
+        exists=True, readable=True, resolve_path=True, dir_okay=False
+    ),
+)
 @click.option("--annotation", type=click.File("rb"))
-@click.option("--scale-factors", type=click.File("rb"), required=True)
 @click.option("--scale", type=float)
 @click.option("--mask/--no-mask", default=True)
 @click.option(
@@ -84,25 +102,21 @@ cli.add_command(_convert)
 )
 @_init
 def visium(
-    image,
+    tissue_image,
     bc_matrix,
-    tissue_positions,
+    barcode_list,
+    genepix_data,
+    well,
+    slide_image,
     annotation,
-    scale_factors,
     scale,
     mask,
     output_file,
 ):
     r"""Converts 10X Visium data"""
-    tissue_positions = pd.read_csv(tissue_positions, index_col=0, header=None)
-    tissue_positions = tissue_positions[[4, 5]]
-    tissue_positions = tissue_positions.rename(columns={4: "y", 5: "x"})
-
-    scale_factors = json.load(scale_factors)
-    spot_radius = scale_factors["spot_diameter_fullres"] / 2
-
+    # pylint: disable=too-many-locals
     Image.MAX_IMAGE_PIXELS = None
-    image = imread(image)
+    tissue_image = imread(tissue_image)
 
     if annotation:
         with h5py.File(annotation, "r") as annotation_file:
@@ -110,13 +124,88 @@ def visium(
                 k: annotation_file[k][()] for k in annotation_file.keys()
             }
 
+    num_header_lines = 0
+    frame_map = dict()
+    spot_map = dict()
+    with open(genepix_data, "r") as fp:
+        for line in fp:
+            if all(x in line for x in ("Name", "X", "Y")):
+                break
+            num_header_lines += 1
+            if "BlockMapFiducials" in line:
+                frame_map = {
+                    k.strip(): int(v)
+                    for k, v in [
+                        entry.split(":")
+                        for entry in line[line.find("=") + 1 :]
+                        .rstrip('\n"')
+                        .split(",")
+                    ]
+                }
+            elif "BlockMapOligos" in line:
+                spot_map = {
+                    k.strip(): int(v)
+                    for k, v in [
+                        entry.split(":")
+                        for entry in line[line.find("=") + 1 :]
+                        .rstrip('\n"')
+                        .split(",")
+                    ]
+                }
+        else:
+            raise ValueError("Invalid frame data")
+    if set(frame_map) != set(spot_map) or len(frame_map) == 0:
+        raise ValueError("Malformed GenePix data")
+    genepix_data = pd.read_csv(
+        genepix_data, sep="\t", skiprows=num_header_lines
+    )
+    try:
+        frame_block = frame_map[well]
+        spot_block = spot_map[well]
+    except KeyError:
+        raise ValueError(
+            "Invalid well (IDs present in data: {})".format(
+                np.intersect1d(frame_map.keys(), spot_map.keys())
+            )
+        )
+    filtered_genepix_data = pd.concat(
+        [
+            genepix_data[
+                (genepix_data.Block == frame_block)
+                & (genepix_data.Name == "FRAME")
+            ],
+            genepix_data[genepix_data.Block == spot_block],
+        ]
+    )
+
+    if slide_image is not None:
+        slide_image = imread(slide_image)
+
+        # Extract slide based on GenePix data
+        # TODO Can we always assume that frame_map is sorted by slide position?
+        #      Can we do the extraction more reliably?
+        slide_height = slide_image.shape[0] // len(frame_map)
+        slide_position = np.argmax(np.array(list(frame_map)) == well)
+        slide_min = int(np.floor(slide_position * slide_height))
+        slide_max = int(np.ceil((slide_position + 1) * slide_height))
+        slide_image = slide_image[slide_min:slide_max]
+
+    barcode_list = pd.read_csv(
+        barcode_list,
+        sep="\t",
+        header=None,
+        names=["Barcode", "Column", "Row"],
+        index_col=0,
+    )
+
     with h5py.File(bc_matrix, "r") as data:
         convert.visium.run(
-            image,
-            data,
-            tissue_positions,
-            spot_radius,
-            output_file,
+            tissue_image=tissue_image,
+            bc_matrix=data,
+            genepix_data=filtered_genepix_data,
+            barcode_list=barcode_list,
+            output_file=output_file,
+            slide_image=slide_image,
             annotation=annotation,
             scale_factor=scale,
             mask=mask,
@@ -128,7 +217,7 @@ _convert.add_command(visium)
 
 @click.command()
 @click.option("--counts", type=click.File("rb"), required=True)
-@click.option("--image", type=click.File("rb"), required=True)
+@click.option("--tissue-image", type=click.File("rb"), required=True)
 @click.option("--spots", type=click.File("rb"))
 @click.option("--transformation-matrix", type=click.File("rb"))
 @click.option("--annotation", type=click.File("rb"))
@@ -142,7 +231,7 @@ _convert.add_command(visium)
 @_init
 def st(
     counts,
-    image,
+    tissue_image,
     spots,
     transformation_matrix,
     annotation,
@@ -166,7 +255,7 @@ def st(
     else:
         transformation = None
     counts_data = pd.read_csv(counts, sep="\t", index_col=0)
-    image_data = imread(image)
+    image_data = imread(tissue_image)
     if annotation:
         with h5py.File(annotation, "r") as annotation_file:
             annotation = {
