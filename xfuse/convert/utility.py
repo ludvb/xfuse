@@ -3,6 +3,7 @@ import os
 
 import h5py
 import numpy as np
+import cv2 as cv
 import pandas as pd
 from PIL import Image
 
@@ -58,25 +59,44 @@ def labels_from_spots(dst: np.ndarray, spots: List[Spot]) -> None:
         ] = i
 
 
-def crop_image(
-    image: np.ndarray, spots: List[Spot], margin: float = 0.12
+def find_min_bbox(
+    mask: np.ndarray, rotate: bool = True,
+) -> Tuple[Tuple[float, float], Tuple[float, float], float]:
+    r""""Finds the mininum bounding box enclosing a given image mask"""
+    contour, _ = cv.findContours(
+        mask.astype(np.uint8), cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE
+    )
+    if rotate:
+        return cv.minAreaRect(np.concatenate(contour))
+    x, y, w, h = cv.boundingRect(np.concatenate(contour))
+    return ((x + w // 2, y + h // 2), (w, h), 0.0)
+
+
+def crop_to_rect(
+    img: np.ndarray,
+    rect: Tuple[Tuple[float, float], Tuple[float, float], float],
+    interpolation_method: int = cv.INTER_LINEAR,
+    margin: float = 0.12,
 ) -> np.ndarray:
-    r"""Crops `image`, keeping a fixed minimum margin to the `spots`."""
-    cs = [[s.x, s.y] for s in spots]
-
-    xmin, ymin = np.min(cs, 0)
-    xmax, ymax = np.max(cs, 0)
-
-    margin = margin * max(xmax - xmin, ymax - ymin)
-
-    xmin = int(round(xmin - margin))
-    xmax = int(round(xmax + margin))
-    ymin = int(round(ymin - margin))
-    ymax = int(round(ymax + margin))
-
-    xmin, ymin = [max(a, 0) for a in (xmin, ymin)]
-
-    return image[ymin:ymax, xmin:xmax]
+    r""""Crops image to rectangle"""
+    width, height = rect[1]
+    px_margin = margin * max(width, height)
+    width = int(np.round(width + 2 * px_margin))
+    height = int(np.round(height + 2 * px_margin))
+    rect = (rect[0], (width, height), rect[2])
+    box_src = cv.boxPoints(rect)
+    box_dst = np.array(
+        [[0, height - 1], [0, 0], [width - 1, 0], [width - 1, height - 1]],
+        dtype=np.float32,
+    )
+    transform = cv.getPerspectiveTransform(box_src, box_dst)
+    return cv.warpPerspective(
+        img,
+        transform,
+        (width, height),
+        flags=interpolation_method,
+        borderMode=cv.BORDER_REPLICATE,
+    )
 
 
 def mask_tissue(
@@ -114,6 +134,7 @@ def write_data(
     label: np.ndarray,
     annotation: Dict[str, np.ndarray],
     type_label: str,
+    auto_rotate: bool = False,
     path: str = "data.h5",
 ) -> None:
     r"""Writes data to the format used by XFuse."""
@@ -140,6 +161,15 @@ def write_data(
             " Counts will be summed by column name.",
         )
         counts = counts.sum(axis=1, level=0)
+
+    data_mask = ~np.isin(label, [0, *counts.index[counts.sum(1) == 0]])
+    rect = find_min_bbox(data_mask, rotate=auto_rotate)
+    image = crop_to_rect(image, rect, interpolation_method=cv.INTER_CUBIC)
+    label = crop_to_rect(label, rect, interpolation_method=cv.INTER_NEAREST)
+    annotation = {
+        k: crop_to_rect(v, rect, interpolation_method=cv.INTER_NEAREST)
+        for k, v in annotation.items()
+    }
 
     log(DEBUG, "writing data to %s", path)
     os.makedirs(os.path.normpath(os.path.dirname(path)), exist_ok=True)

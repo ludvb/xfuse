@@ -121,16 +121,17 @@ def toydata(tmp_path):
     annotation1 = np.arange(100) // 10 % 2 == 1
     annotation1 = annotation1[:, None] & annotation1[None]
     annotation1, _ = make_label(annotation1)
-    annotation2 = annotation1 == 0
+    annotation2 = (annotation1 == 0).astype(np.uint8)
 
     filepath = tmp_path / "data.h5"
     write_data(
         counts,
         image,
         label,
-        {"annotation1": annotation1, "annotation2": annotation2},
-        "ST",
-        str(filepath),
+        type_label="ST",
+        annotation={"annotation1": annotation1, "annotation2": annotation2},
+        auto_rotate=True,
+        path=str(filepath),
     )
 
     design_matrix = design_matrix_from({str(filepath): {"ID": 1}})
