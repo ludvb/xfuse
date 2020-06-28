@@ -389,13 +389,14 @@ class ST(Image):
             image_distr = self._sample_image(x, decoded)
 
             def _compute_sample_params(data, label, rim, rate_mg, logits_g):
-                nonmissing = label != 0
-                zero_count_spots = 1 + torch.where(data.sum(1) == 0)[0]
-                nonpartial = binary_fill_holes(
-                    np.isin(label.cpu(), [0, *zero_count_spots.cpu()])
+                zero_count_idxs = 1 + torch.where(data.sum(1) == 0)[0]
+                zero_count_mask = np.isin(
+                    label.cpu(), [0, *zero_count_idxs.cpu()]
                 )
-                nonpartial = torch.as_tensor(nonpartial).to(nonmissing)
-                mask = nonpartial & nonmissing
+                partial_mask = np.invert(binary_fill_holes(zero_count_mask))
+                partial_idxs = np.unique(label.cpu()[partial_mask])
+                mask = np.invert(np.isin(label.cpu(), [0, *partial_idxs]))
+                mask = torch.as_tensor(mask, device=label.device)
 
                 if not mask.any():
                     return (
