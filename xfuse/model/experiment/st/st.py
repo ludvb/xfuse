@@ -393,9 +393,9 @@ class ST(Image):
                 zero_count_mask = np.isin(
                     label.cpu(), [0, *zero_count_idxs.cpu()]
                 )
-                partial_mask = ~binary_fill_holes(zero_count_mask)
+                partial_mask = np.invert(binary_fill_holes(zero_count_mask))
                 partial_idxs = np.unique(label.cpu()[partial_mask])
-                mask = ~np.isin(label.cpu(), [0, *partial_idxs])
+                mask = np.invert(np.isin(label.cpu(), [0, *partial_idxs]))
                 mask = torch.as_tensor(mask, device=label.device)
 
                 if not mask.any():
