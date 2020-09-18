@@ -390,11 +390,14 @@ class ST(Image):
 
             def _compute_sample_params(data, label, rim, rate_mg, logits_g):
                 zero_count_idxs = 1 + torch.where(data.sum(1) == 0)[0]
-                zero_count_mask = np.isin(
-                    label.cpu(), [0, *zero_count_idxs.cpu()]
+                partial_idxs = np.unique(
+                    torch.cat(
+                        [label[0], label[-1], label[:, 0], label[:, -1]]
+                    ).cpu()
                 )
-                partial_mask = np.invert(binary_fill_holes(zero_count_mask))
-                partial_idxs = np.unique(label.cpu()[partial_mask])
+                partial_idxs = np.setdiff1d(
+                    partial_idxs, zero_count_idxs.cpu().numpy()
+                )
                 mask = np.invert(np.isin(label.cpu(), [0, *partial_idxs]))
                 mask = torch.as_tensor(mask, device=label.device)
 
