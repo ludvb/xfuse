@@ -14,7 +14,7 @@ class FullSlide(SlideIterator):
 
     def __getitem__(self, idx):
         if self._slide.type == "ST":
-            image = self._slide.image[()]
+            image = self._slide.image[()].transpose(2, 0, 1)
             label = self._slide.label[()]
             return self._slide.prepare_data(image, label)
         raise NotImplementedError()

@@ -11,6 +11,7 @@ from scipy.sparse import csr_matrix
 
 from ..logging import DEBUG, log
 from ..utility.mask import compute_tissue_mask
+from ..utility.visualization import _normalize
 
 
 class Spot(NamedTuple):
@@ -174,6 +175,11 @@ def write_data(
             for k, v in annotation.items()
         }
 
+    image = _normalize(image.astype(np.float32), axis=(0, 1)) * 2 - 1
+    image = 0.9 * image
+    # ^ reduce contrast to alleviate tension in the extremes due to the tanh
+    #   activation in the image decoder
+
     log(DEBUG, "Writing data to %s", path)
     os.makedirs(os.path.normpath(os.path.dirname(path)), exist_ok=True)
     with h5py.File(path, "w") as data_file:
@@ -199,7 +205,7 @@ def write_data(
         data_file.create_dataset(
             "counts/index", counts.index.shape, int, counts.index.astype(int)
         )
-        data_file.create_dataset("image", image.shape, np.uint8, image)
+        data_file.create_dataset("image", image.shape, np.float32, image)
         data_file.create_dataset("label", label.shape, np.int16, label)
         data_file.create_group("annotation", track_order=True)
         for k, v in annotation.items():
