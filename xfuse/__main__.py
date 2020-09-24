@@ -194,6 +194,41 @@ _convert.add_command(st)
 
 
 @click.command()
+@click.option("--tissue-image", type=click.File("rb"), required=True)
+@click.option("--annotation", type=click.File("rb"))
+@click.option("--scale", type=float)
+@click.option("--mask/--no-mask", default=True)
+@click.option("--rotate/--no-rotate", default=False)
+@click.option(
+    "--output-file",
+    type=click.Path(exists=False, writable=True),
+    required=True,
+)
+@_init
+def image(
+    tissue_image, annotation, scale, mask, rotate, output_file,
+):
+    r"""Converts image data file without any expression data"""
+    image_data = imread(tissue_image)
+    if annotation:
+        with h5py.File(annotation, "r") as annotation_file:
+            annotation = {
+                k: annotation_file[k][()] for k in annotation_file.keys()
+            }
+    convert.image.run(
+        image_data,
+        output_file,
+        annotation=annotation,
+        scale_factor=scale,
+        mask=mask,
+        rotate=rotate,
+    )
+
+
+_convert.add_command(image)
+
+
+@click.command()
 @click.argument("target", type=click.Path(), default=f"{__package__}.toml")
 @click.argument(
     "slides", type=click.Path(exists=True, dir_okay=False), nargs=-1
