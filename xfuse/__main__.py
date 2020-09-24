@@ -84,7 +84,7 @@ cli.add_command(_convert)
     required=True,
 )
 @_init
-def visium(
+def _convert_visium(
     image,
     bc_matrix,
     tissue_positions,
@@ -126,7 +126,7 @@ def visium(
         )
 
 
-_convert.add_command(visium)
+_convert.add_command(_convert_visium, "visium")
 
 
 @click.command()
@@ -144,7 +144,7 @@ _convert.add_command(visium)
     required=True,
 )
 @_init
-def st(
+def _convert_st(
     counts,
     image,
     spots,
@@ -190,11 +190,11 @@ def st(
     )
 
 
-_convert.add_command(st)
+_convert.add_command(_convert_st, "st")
 
 
 @click.command()
-@click.option("--tissue-image", type=click.File("rb"), required=True)
+@click.option("--image", type=click.File("rb"), required=True)
 @click.option("--annotation", type=click.File("rb"))
 @click.option("--scale", type=float)
 @click.option("--mask/--no-mask", default=True)
@@ -205,11 +205,11 @@ _convert.add_command(st)
     required=True,
 )
 @_init
-def image(
-    tissue_image, annotation, scale, mask, rotate, output_file,
+def _convert_image(
+    image, annotation, scale, mask, rotate, output_file,
 ):
     r"""Converts image without any associated expression data"""
-    image_data = imread(tissue_image)
+    image_data = imread(image)
     if annotation:
         with h5py.File(annotation, "r") as annotation_file:
             annotation = {
@@ -225,7 +225,7 @@ def image(
     )
 
 
-_convert.add_command(image)
+_convert.add_command(_convert_image, "image")
 
 
 @click.command()

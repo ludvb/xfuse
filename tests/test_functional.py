@@ -85,7 +85,7 @@ def test_convert_image(extra_args, shared_datadir, script_runner, tmp_path):
         "xfuse",
         "convert",
         "image",
-        "--tissue-image=" + str(shared_datadir / "files" / "st" / "image.jpg"),
+        "--image=" + str(shared_datadir / "files" / "st" / "image.jpg"),
         "--output-file=" + str(tmp_path / "data.h5"),
         *extra_args,
     )
