@@ -31,7 +31,7 @@ def run(
 
     if mask:
         mask = compute_tissue_mask(tissue_image)
-        label = (mask == 0).astype(np.uint8)
+        label = np.array(mask == 0, dtype=np.int16)
     else:
         label = np.zeros(tissue_image.shape[:2], dtype=np.int16)
 
