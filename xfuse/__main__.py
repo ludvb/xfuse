@@ -208,7 +208,7 @@ _convert.add_command(st)
 def image(
     tissue_image, annotation, scale, mask, rotate, output_file,
 ):
-    r"""Converts image data file without any expression data"""
+    r"""Converts image without any associated expression data"""
     image_data = imread(tissue_image)
     if annotation:
         with h5py.File(annotation, "r") as annotation_file:
