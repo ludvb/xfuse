@@ -1,31 +1,32 @@
+import logging
 import os
-from typing import Optional, Union
+from _io import TextIOWrapper
+from typing import List, Optional, Union
 
-from ...logging import DEBUG, LOGGER, log
-from ...logging.setup import setup_logging
+from ...logging import ERROR, LOGGER, log
+from ...logging.formatter import Formatter
 from .. import SessionItem, Unset, register_session_item
 
-_LOG_HANDLER = None
-_FILE_STREAM = None
 
+def _setter(filebuffers: Union[List[TextIOWrapper], Unset]):
+    warnings_logger = logging.getLogger("py.warnings")
+    while warnings_logger.handlers != []:
+        warnings_logger.removeHandler(warnings_logger.handlers[0])
 
-def _setter(path: Optional[Union[str, Unset]]):
-    # pylint: disable=global-statement
-    global _FILE_STREAM, _LOG_HANDLER
-    if _LOG_HANDLER is not None:
-        LOGGER.removeHandler(_LOG_HANDLER)
-        _LOG_HANDLER = None
-    if _FILE_STREAM is not None:
-        _FILE_STREAM.close()
-        _FILE_STREAM = None
-    if isinstance(path, str):
-        log(DEBUG, "opening log file stream: %s", path)
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        _FILE_STREAM = open(path, "a")
-        _LOG_HANDLER = setup_logging(_FILE_STREAM)
-        LOGGER.addHandler(_LOG_HANDLER)
+    while LOGGER.handlers != []:
+        LOGGER.removeHandler(LOGGER.handlers[0])
+
+    if isinstance(filebuffers, List):
+        for filebuffer in filebuffers:
+            fancy_formatting = filebuffer.isatty()
+
+            handler = logging.StreamHandler(filebuffer)
+            handler.setFormatter(Formatter(fancy_formatting=fancy_formatting))
+
+            LOGGER.addHandler(handler)
+            logging.getLogger("py.warnings").addHandler(handler)
 
 
 register_session_item(
-    "log_file", SessionItem(setter=_setter, default=None, persistent=False)
+    "log_file", SessionItem(setter=_setter, default=[], persistent=False),
 )

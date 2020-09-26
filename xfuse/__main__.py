@@ -25,7 +25,6 @@ from ._config import (  # type: ignore
     merge_config,
 )
 from .logging import DEBUG, INFO, WARNING, log
-from .logging.setup import setup_logging
 from .model.experiment.st.metagene_expansion_strategy import (
     STRATEGIES as expansion_strategies,
 )
@@ -35,20 +34,18 @@ from .utility import design_matrix_from, temp_attr, with_
 from .utility.file import first_unique_filename
 from .session.io import load_session
 
+
 _DEFAULT_SESSION = Session()
+
+sys.excepthook = lambda *_: None
 
 
 def _init(f):
     @wraps(f)
     @with_(_DEFAULT_SESSION)
     def _wrapped(*args, **kwargs):
-        setup_logging(sys.stderr)
         logging.captureWarnings(True)
-        log(DEBUG, "this is %s %s", __package__, __version__)
-        log(DEBUG, "invoked by %s", " ".join(sys.argv))
-        with warnings.catch_warnings():
-            warnings.simplefilter("always")
-            return f(*args, **kwargs)
+        return f(*args, **kwargs)
 
     return _wrapped
 
@@ -265,20 +262,13 @@ def run(project_file, save_path, session):
     The configuration file can be created manually or using the `init`
     subcommand.
     """
-    session_stack = []
-    if session is not None:
-        session_stack.append(load_session(session))
-    session_stack.append(
-        Session(
-            save_path=save_path,
-            log_file=first_unique_filename(os.path.join(save_path, "log")),
-        )
-    )
-
-    with ExitStack() as stack:
-        for session_context in session_stack:
-            stack.enter_context(session_context)
-
+    base_session = load_session(session) if session is not None else Session()
+    os.makedirs(save_path, exist_ok=True)
+    with open(
+        first_unique_filename(os.path.join(save_path, "log")), "w"
+    ) as log_file, base_session, Session(
+        save_path=save_path, log_file=[sys.stderr, log_file]
+    ):
         config = dict(tomlkit.loads(project_file.read().decode()))
         config = merge_config(config)
 

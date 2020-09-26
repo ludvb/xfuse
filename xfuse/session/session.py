@@ -1,3 +1,4 @@
+from traceback import format_exc
 from typing import Any, Dict, List
 
 from ..logging import DEBUG, ERROR, LOGGER, WARNING, log
@@ -54,7 +55,7 @@ class Session:
                     f.f_code.co_name,
                     None,
                 )
-                log(ERROR, "session panic! %s", str(err))
+                log(ERROR, "\n%s", format_exc())
                 panic_handler = get("panic")
                 if not isinstance(panic_handler, Unset):
                     panic_handler(get_session(), err_type, err, tb)
