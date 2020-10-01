@@ -13,7 +13,6 @@ from pyro.distributions import (  # pylint: disable=no-name-in-module
     NegativeBinomial,
     Normal,
 )
-from scipy.ndimage.morphology import binary_fill_holes
 from torch.distributions import transform_to
 
 from ....data import Data, Dataset
