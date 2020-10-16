@@ -320,7 +320,7 @@ class ST(Image):
                 0.0,
                 1e-8
                 + get_param(
-                    "rate_mg_sd",
+                    "rate_mg_prior_sd",
                     lambda: torch.ones(num_genes),
                     constraint=constraints.positive,
                 ),
@@ -348,7 +348,7 @@ class ST(Image):
                 0.0,
                 1e-8
                 + get_param(
-                    "rate_g_effects_sd",
+                    "rate_g_effects_prior_sd",
                     lambda: torch.ones(num_genes),
                     constraint=constraints.positive,
                 ),
@@ -361,7 +361,7 @@ class ST(Image):
                 0.0,
                 1e-8
                 + get_param(
-                    "logits_g_effects_sd",
+                    "logits_g_effects_prior_sd",
                     lambda: torch.ones(num_genes),
                     constraint=constraints.positive,
                 ),
