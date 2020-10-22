@@ -2,6 +2,7 @@ import itertools as it
 from typing import Any, Dict
 
 import numpy as np
+import pandas as pd
 import torch
 from torch.utils.data.dataloader import default_collate  # type: ignore
 
@@ -112,6 +113,10 @@ def make_dataloader(dataset: Dataset, **kwargs: Any) -> DataLoader:
             # instead.
             data = [y.pop("data") for y in ys]
 
+            # collate effects as dataframe to keep its metadata
+            effects = pd.concat([y.pop("effects") for y in ys], axis=1)
+            effects = effects.transpose()
+
             # Crop image sizes to the minimum size over the batch
             min_size = {}
             for y in ys:
@@ -129,7 +134,7 @@ def make_dataloader(dataset: Dataset, **kwargs: Any) -> DataLoader:
                     if k in y and isinstance(y[k], torch.Tensor):
                         y[k] = center_crop(y[k], v.numpy().tolist())
 
-            return {"data": data, **default_collate(ys)}
+            return {"data": data, "effects": effects, **default_collate(ys)}
 
         return {
             k: _collate([_remove_key(v) for v in vs])

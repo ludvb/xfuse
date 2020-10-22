@@ -12,6 +12,8 @@ from pyro.distributions import (  # pylint: disable=no-name-in-module
     Delta,
     NegativeBinomial,
     Normal,
+    OneHotCategorical,
+    RelaxedOneHotCategoricalStraightThrough,
 )
 from torch.distributions import transform_to
 
@@ -28,7 +30,7 @@ from ....utility.state import (
     get_state_dict,
     load_state_dict,
 )
-from ....utility.tensor import checkpoint, sparseonehot, isoftplus
+from ....utility.tensor import checkpoint, isoftplus, sparseonehot, to_device
 from ..image import Image
 
 
@@ -373,17 +375,22 @@ class ST(Image):
                 [logits_g_effects_baseline.unsqueeze(0), logits_g_effects]
             )
 
-            effects = torch.cat(
-                [
-                    torch.ones(x["effects"].shape[0], 1).to(x["effects"]),
-                    x["effects"],
-                ],
-                1,
-            ).float()
+        effects = []
+        for covariate, vals in get("covariates"):
+            effect = p.sample(
+                f"effect-{covariate}",
+                OneHotCategorical(
+                    to_device(torch.ones(len(vals))) / len(vals)
+                ),
+            )
+            effects.append(effect)
+        effects = torch.cat(
+            [to_device(torch.ones(x["effects"].shape[0], 1)), *effects,], 1,
+        ).float()
 
-            logits_g = effects @ logits_g_effects
-            rate_g = effects @ rate_g_effects
-            rate_mg = rate_g[:, None] + rate_mg
+        logits_g = effects @ logits_g_effects
+        rate_g = effects @ rate_g_effects
+        rate_mg = rate_g[:, None] + rate_mg
 
         with scope(prefix=self.tag):
             image_distr = self._sample_image(x, decoded)
@@ -519,4 +526,24 @@ class ST(Image):
     def guide(self, x):
         with p.poutine.scale(scale=len(x["data"]) / self.n):
             self._sample_globals()
+        for covariate, _ in get("covariates"):
+            is_observed = x["effects"][covariate].values.any(1)
+            effect_distr = RelaxedOneHotCategoricalStraightThrough(
+                temperature=to_device(torch.tensor(0.1)),
+                logits=torch.stack(
+                    [
+                        get_param(
+                            f"effect-{covariate}-{sample}-logits",
+                            torch.zeros(len(vals)),
+                        )
+                        for sample, vals in x["effects"][covariate].iterrows()
+                    ]
+                ),
+            )
+            with p.poutine.mask(mask=~to_device(torch.as_tensor(is_observed))):
+                effect = p.sample(f"effect-{covariate}-all", effect_distr)
+            effect[is_observed] = torch.as_tensor(
+                x["effects"][covariate].values[is_observed]
+            ).to(effect)
+            p.sample(f"effect-{covariate}", Delta(effect))
         return super().guide(x)

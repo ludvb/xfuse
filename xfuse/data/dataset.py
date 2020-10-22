@@ -92,7 +92,7 @@ class Dataset(torch.utils.data.Dataset):
             **self._data_iterators[slide].__getitem__(
                 self.observations["idx"].iloc[idx]
             ),
-            effects=torch.as_tensor(self._data.design[slide].values),
+            effects=self._data.design[slide],
         )
 
     def __iter__(self):
