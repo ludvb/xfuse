@@ -3,7 +3,6 @@ from typing import Any, Dict
 
 import numpy as np
 import torch
-from scipy.ndimage.morphology import binary_fill_holes
 from torch.utils.data.dataloader import default_collate  # type: ignore
 
 from ...session import get
