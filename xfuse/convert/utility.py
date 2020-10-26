@@ -6,6 +6,7 @@ import numpy as np
 import cv2 as cv
 import pandas as pd
 from PIL import Image
+from scipy.sparse import csr_matrix
 
 from ..logging import DEBUG, WARNING, log
 from ..utility import compute_tissue_mask
@@ -162,21 +163,22 @@ def write_data(
         )
         counts = counts.sum(axis=1, level=0)
 
-    data_mask = ~np.isin(label, [0, *counts.index[counts.sum(1) == 0]])
-    rect = find_min_bbox(data_mask, rotate=auto_rotate)
-    image = crop_to_rect(image, rect, interpolation_method=cv.INTER_CUBIC)
-    label = crop_to_rect(label, rect, interpolation_method=cv.INTER_NEAREST)
-    annotation = {
-        k: crop_to_rect(v, rect, interpolation_method=cv.INTER_NEAREST)
-        for k, v in annotation.items()
-    }
+    data_mask = ~np.isin(label, counts.index[counts.sum(1) == 0])
+    if not np.all(data_mask == 0):
+        rect = find_min_bbox(data_mask, rotate=auto_rotate)
+        image = crop_to_rect(image, rect, interpolation_method=cv.INTER_CUBIC)
+        label = crop_to_rect(
+            label, rect, interpolation_method=cv.INTER_NEAREST
+        )
+        annotation = {
+            k: crop_to_rect(v, rect, interpolation_method=cv.INTER_NEAREST)
+            for k, v in annotation.items()
+        }
 
     log(DEBUG, "writing data to %s", path)
     os.makedirs(os.path.normpath(os.path.dirname(path)), exist_ok=True)
     with h5py.File(path, "w") as data_file:
-        data = (
-            counts.astype(pd.SparseDtype("float", 0.0)).sparse.to_coo().tocsr()
-        )
+        data = csr_matrix(counts.values.astype(float))
         data_file.create_dataset(
             "counts/data", data.data.shape, float, data.data.astype(float)
         )

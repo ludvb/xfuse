@@ -34,6 +34,7 @@ __all__ = [
     "sparseonehot",
     "isoftplus",
     "to_device",
+    "temp_attr",
     "with_",
 ]
 
@@ -266,6 +267,41 @@ def to_device(x, device=None):
     if isinstance(x, dict):
         return {k: to_device(v, device) for k, v in x.items()}
     return x
+
+
+def temp_attr(obj: object, attr: str, value: Any) -> ContextManager:
+    r"""
+    Creates a context manager for setting transient object attributes.
+
+    >>> from types import SimpleNamespace
+    >>> obj = SimpleNamespace(x=1)
+    >>> with temp_attr(obj, 'x', 2):
+    ...     print(obj.x)
+    2
+    >>> print(obj.x)
+    1
+    """
+
+    class _TempAttr:
+        def __init__(self):
+            self.__original_value = None
+
+        def __enter__(self):
+            self.__original_value = getattr(obj, attr)
+            setattr(obj, attr, value)
+
+        def __exit__(self, *_):
+            if getattr(obj, attr) == value:
+                setattr(obj, attr, self.__original_value)
+            else:
+                log(
+                    WARNING,
+                    'Attribute "%s" changed while in context.'
+                    " The new value will be kept.",
+                    attr,
+                )
+
+    return _TempAttr()
 
 
 def with_(ctx: ContextManager) -> Callable[[Callable], Callable]:

@@ -31,7 +31,7 @@ from .model.experiment.st.metagene_expansion_strategy import (
 )
 from .run import run as _run
 from .session import Session, get
-from .utility import design_matrix_from, with_
+from .utility import design_matrix_from, temp_attr, with_
 from .utility.file import first_unique_filename
 from .session.io import load_session
 
@@ -84,7 +84,7 @@ cli.add_command(_convert)
     required=True,
 )
 @_init
-def visium(
+def _convert_visium(
     image,
     bc_matrix,
     tissue_positions,
@@ -103,8 +103,8 @@ def visium(
     scale_factors = json.load(scale_factors)
     spot_radius = scale_factors["spot_diameter_fullres"] / 2
 
-    Image.MAX_IMAGE_PIXELS = None
-    image = imread(image)
+    with temp_attr(Image, "MAX_IMAGE_PIXELS", None):
+        image_data = imread(image)
 
     if annotation:
         with h5py.File(annotation, "r") as annotation_file:
@@ -114,7 +114,7 @@ def visium(
 
     with h5py.File(bc_matrix, "r") as data:
         convert.visium.run(
-            image,
+            image_data,
             data,
             tissue_positions,
             spot_radius,
@@ -126,7 +126,7 @@ def visium(
         )
 
 
-_convert.add_command(visium)
+_convert.add_command(_convert_visium, "visium")
 
 
 @click.command()
@@ -144,7 +144,7 @@ _convert.add_command(visium)
     required=True,
 )
 @_init
-def st(
+def _convert_st(
     counts,
     image,
     spots,
@@ -171,7 +171,8 @@ def st(
     else:
         transformation = None
     counts_data = pd.read_csv(counts, sep="\t", index_col=0)
-    image_data = imread(image)
+    with temp_attr(Image, "MAX_IMAGE_PIXELS", None):
+        image_data = imread(image)
     if annotation:
         with h5py.File(annotation, "r") as annotation_file:
             annotation = {
@@ -190,7 +191,43 @@ def st(
     )
 
 
-_convert.add_command(st)
+_convert.add_command(_convert_st, "st")
+
+
+@click.command()
+@click.option("--image", type=click.File("rb"), required=True)
+@click.option("--annotation", type=click.File("rb"))
+@click.option("--scale", type=float)
+@click.option("--mask/--no-mask", default=True)
+@click.option("--rotate/--no-rotate", default=False)
+@click.option(
+    "--output-file",
+    type=click.Path(exists=False, writable=True),
+    required=True,
+)
+@_init
+def _convert_image(
+    image, annotation, scale, mask, rotate, output_file,
+):
+    r"""Converts image without any associated expression data"""
+    with temp_attr(Image, "MAX_IMAGE_PIXELS", None):
+        image_data = imread(image)
+    if annotation:
+        with h5py.File(annotation, "r") as annotation_file:
+            annotation = {
+                k: annotation_file[k][()] for k in annotation_file.keys()
+            }
+    convert.image.run(
+        image_data,
+        output_file,
+        annotation=annotation,
+        scale_factor=scale,
+        mask=mask,
+        rotate=rotate,
+    )
+
+
+_convert.add_command(_convert_image, "image")
 
 
 @click.command()

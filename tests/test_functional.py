@@ -77,6 +77,22 @@ def test_restore_session(
     assert ret.success
 
 
+@pytest.mark.parametrize("extra_args", [["--no-mask"], ["--mask"]])
+def test_convert_image(extra_args, shared_datadir, script_runner, tmp_path):
+    r"""Test convert image data"""
+
+    ret = script_runner.run(
+        "xfuse",
+        "convert",
+        "image",
+        "--image=" + str(shared_datadir / "files" / "st" / "image.jpg"),
+        "--output-file=" + str(tmp_path / "data.h5"),
+        *extra_args,
+    )
+    assert ret.success
+    assert os.path.exists(tmp_path / "data.h5")
+
+
 def test_convert_st(shared_datadir, script_runner, tmp_path):
     r"""Test convert Spatial Transcriptomics Pipeline run"""
 
