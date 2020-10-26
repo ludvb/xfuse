@@ -3,7 +3,6 @@ from typing import Any, Dict
 
 import numpy as np
 import torch
-from scipy.ndimage.morphology import binary_fill_holes
 from torch.utils.data.dataloader import default_collate  # type: ignore
 
 from ...session import get
@@ -62,10 +61,27 @@ def spot_size(dataset: Dataset) -> Dict[str, float]:
 
     def _compute_size(x):
         if x["type"] == "ST":
-            label = x["label"].cpu().numpy()
+            zero_count_idxs = 1 + torch.where(x["data"].sum(1) == 0)[0]
+            partial_idxs = np.unique(
+                torch.cat(
+                    [
+                        x["label"][0],
+                        x["label"][-1],
+                        x["label"][:, 0],
+                        x["label"][:, -1],
+                    ]
+                )
+                .cpu()
+                .numpy()
+            )
+            partial_idxs = np.setdiff1d(
+                partial_idxs, zero_count_idxs.cpu().numpy()
+            )
+            mask = np.invert(
+                np.isin(x["label"].cpu().numpy(), [0, *partial_idxs])
+            )
             _, sizes = np.unique(
-                label[binary_fill_holes(label == 0) & (label != 0)].flatten(),
-                return_counts=True,
+                x["label"].cpu().numpy()[mask].flatten(), return_counts=True,
             )
             return sizes
         raise NotImplementedError()
