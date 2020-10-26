@@ -31,7 +31,7 @@ from .model.experiment.st.metagene_expansion_strategy import (
 )
 from .run import run as _run
 from .session import Session, get
-from .utility import design_matrix_from, with_
+from .utility import design_matrix_from, temp_attr, with_
 from .utility.file import first_unique_filename
 from .session.io import load_session
 
@@ -103,8 +103,8 @@ def _convert_visium(
     scale_factors = json.load(scale_factors)
     spot_radius = scale_factors["spot_diameter_fullres"] / 2
 
-    Image.MAX_IMAGE_PIXELS = None
-    image = imread(image)
+    with temp_attr(Image, "MAX_IMAGE_PIXELS", None):
+        image_data = imread(image)
 
     if annotation:
         with h5py.File(annotation, "r") as annotation_file:
@@ -114,7 +114,7 @@ def _convert_visium(
 
     with h5py.File(bc_matrix, "r") as data:
         convert.visium.run(
-            image,
+            image_data,
             data,
             tissue_positions,
             spot_radius,
@@ -171,7 +171,8 @@ def _convert_st(
     else:
         transformation = None
     counts_data = pd.read_csv(counts, sep="\t", index_col=0)
-    image_data = imread(image)
+    with temp_attr(Image, "MAX_IMAGE_PIXELS", None):
+        image_data = imread(image)
     if annotation:
         with h5py.File(annotation, "r") as annotation_file:
             annotation = {
@@ -209,7 +210,8 @@ def _convert_image(
     image, annotation, scale, mask, rotate, output_file,
 ):
     r"""Converts image without any associated expression data"""
-    image_data = imread(image)
+    with temp_attr(Image, "MAX_IMAGE_PIXELS", None):
+        image_data = imread(image)
     if annotation:
         with h5py.File(annotation, "r") as annotation_file:
             annotation = {
