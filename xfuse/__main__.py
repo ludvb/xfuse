@@ -288,17 +288,6 @@ def run(project_file, session):
             for filename, v in config["slides"].items()
         }
 
-        if config["xfuse"]["version"] != __version__:
-            log(
-                WARNING,
-                "Config was created using %s version %s"
-                " but this is version %s",
-                __package__,
-                config["xfuse"]["version"],
-                __version__,
-            )
-            config["xfuse"]["version"] = __version__
-
         with open(
             first_unique_filename(
                 os.path.join(save_path, "merged_config.toml")

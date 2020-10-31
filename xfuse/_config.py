@@ -61,18 +61,6 @@ _ANNOTATED_CONFIG = OrderedDict(
                                 comment="Exclude all genes with fewer reads than this value.",
                             ),
                         ),
-                        (
-                            "version",
-                            Item(
-                                value=__version__,
-                                comment=" ".join(
-                                    [
-                                        f"This is the version of {__package__} used to create this config file.",
-                                        "It is only used for record keeping.",
-                                    ]
-                                ),
-                            ),
-                        ),
                     ]
                 ),
             ),
