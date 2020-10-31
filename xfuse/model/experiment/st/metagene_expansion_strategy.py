@@ -204,7 +204,7 @@ class DropAndSplit(ExpansionStrategy):
         for tree in self._root_nodes:
             _map_modify(tree, _set_contributing)
 
-        _log_trees("trees before retraction")
+        _log_trees("Trees before retraction")
 
         self._root_nodes = set(
             map(_drop_noncontributing_branches, self._root_nodes)
@@ -220,14 +220,14 @@ class DropAndSplit(ExpansionStrategy):
         for tree in noncontributing[: len(self._root_nodes) - 1]:
             self._root_nodes.discard(tree)
 
-        _log_trees("trees after retraction / before splitting")
+        _log_trees("Trees after retraction / before splitting")
 
         forest: Set[str] = reduce(
             set.union, (x.get_nodes() for x in self._root_nodes), set()
         )
         for x in contrib:
             if x not in forest:
-                log(DEBUG, "adding new root node: %s", x)
+                log(DEBUG, "Adding new root node: %s", x)
                 self._root_nodes.add(_Leaf(x, True))
         for x in noncontrib:
             if x not in forest:
@@ -237,7 +237,7 @@ class DropAndSplit(ExpansionStrategy):
             map(_extend_contributing_branches, self._root_nodes)
         )
 
-        _log_trees("trees after splitting")
+        _log_trees("Trees after splitting")
 
 
 register_session_item(

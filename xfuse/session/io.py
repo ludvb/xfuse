@@ -50,7 +50,7 @@ def save_session(filename_prefix: str) -> None:
         }
     )
 
-    log(INFO, "saving session to %s", path)
+    log(INFO, "Saving session to %s", path)
     t.save((session, get_state_dict()), path)
 
 
@@ -58,7 +58,7 @@ def load_session(file: Union[str, BufferedReader]) -> Session:
     r"""Loads :class:`Session` from a file"""
     log(
         INFO,
-        "loading session from %s",
+        "Loading session from %s",
         file.name if isinstance(file, BufferedReader) else file,
     )
     session, state_dict = t.load(file, map_location="cpu")

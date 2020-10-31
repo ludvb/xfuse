@@ -175,7 +175,7 @@ def write_data(
             for k, v in annotation.items()
         }
 
-    log(DEBUG, "writing data to %s", path)
+    log(DEBUG, "Writing data to %s", path)
     os.makedirs(os.path.normpath(os.path.dirname(path)), exist_ok=True)
     with h5py.File(path, "w") as data_file:
         data = csr_matrix(counts.values.astype(float))

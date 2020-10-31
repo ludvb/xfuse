@@ -20,7 +20,7 @@ def purge_metagenes(xfuse: XFuse, num_samples: int = 1) -> None:
     `metagene_expansion_strategy` of the current :class:`Session`
     """
 
-    log(INFO, "evaluating metagenes")
+    log(INFO, "Evaluating metagenes")
 
     def _xfuse_without(n):
         reduced_xfuse = deepcopy(xfuse)
@@ -62,12 +62,12 @@ def purge_metagenes(xfuse: XFuse, num_samples: int = 1) -> None:
 
     log(
         INFO,
-        "contributing metagenes: %s",
+        "Contributing metagenes: %s",
         ", ".join(contrib) if contrib != [] else "-",
     )
     log(
         INFO,
-        "non-contributing metagenes: %s",
+        "Non-contributing metagenes: %s",
         ", ".join(noncontrib) if noncontrib != [] else "-",
     )
 
@@ -111,7 +111,7 @@ class MetagenePurger(Messenger):
 
     def _handle(self, **_msg) -> NoReturn:
         # pylint: disable=no-self-use
-        raise RuntimeError("unreachable code path")
+        raise RuntimeError("Unreachable code path")
 
     def _select_msg(self, **_msg) -> bool:
         # pylint: disable=no-self-use

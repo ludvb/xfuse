@@ -53,7 +53,7 @@ class XFuse(torch.nn.Module):
 
         if experiment.tag in self.__experiment_store:
             raise RuntimeError(
-                f'model for data type "{experiment.tag}" already registered'
+                f'Model for data type "{experiment.tag}" already registered'
             )
         log(
             INFO,
