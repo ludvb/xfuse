@@ -1,4 +1,5 @@
 import itertools as it
+import warnings
 from functools import wraps
 from typing import (
     Any,
@@ -20,7 +21,7 @@ import torch
 from scipy.ndimage import label
 from torch.utils.checkpoint import checkpoint as _checkpoint
 
-from ..logging import DEBUG, WARNING, log
+from ..logging import DEBUG, log
 from ..session import get
 
 __all__ = [
@@ -149,8 +150,8 @@ def design_matrix_from(
 
     for covariate in design_table:
         if np.any(pd.isna(design_table[covariate])):
-            log(
-                WARNING, 'Design covariate "%s" has missing values.', covariate
+            warnings.warn(
+                f'Design covariate "{covariate}" has missing values.',
             )
 
     def _encode(covariate):
@@ -294,11 +295,9 @@ def temp_attr(obj: object, attr: str, value: Any) -> ContextManager:
             if getattr(obj, attr) == value:
                 setattr(obj, attr, self.__original_value)
             else:
-                log(
-                    WARNING,
-                    'Attribute "%s" changed while in context.'
+                warnings.warn(
+                    f'Attribute "{attr}" changed while in context.'
                     " The new value will be kept.",
-                    attr,
                 )
 
     return _TempAttr()

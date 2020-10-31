@@ -1,3 +1,4 @@
+import warnings
 from copy import deepcopy
 from typing import Any, Callable, NoReturn, Union, cast
 
@@ -88,10 +89,9 @@ class MetagenePurger(Messenger):
             xfuse = get("model")
             _ = xfuse.get_experiment("ST")
         except (AttributeError, KeyError):
-            log(
-                WARNING,
-                "session model does not have an ST experiment."
-                f" {cls.__name__} will be disabled.",
+            warnings.warn(
+                "Session model does not have an ST experiment."
+                f" {cls.__name__} will be disabled."
             )
             return Noop()
         instance = super().__new__(cls)

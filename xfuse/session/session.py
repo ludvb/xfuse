@@ -1,7 +1,7 @@
 from traceback import format_exc
 from typing import Any, Dict, List
 
-from ..logging import DEBUG, ERROR, LOGGER, WARNING, log
+from ..logging import DEBUG, ERROR, LOGGER, log
 from .session_item import SessionItem
 
 __all__ = [
@@ -111,7 +111,7 @@ def require(name: str) -> Any:
             if not isinstance(val, Unset):
                 return val
         except AttributeError:
-            log(WARNING, 'session object lacks attribute "%s"', name)
+            warnings.warn('Session object lacks attribute "{name}"')
 
     raise RuntimeError(f"Session item {name} has not been set!")
 

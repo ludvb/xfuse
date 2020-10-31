@@ -1,3 +1,4 @@
+import warnings
 from abc import abstractmethod
 
 import matplotlib.pyplot as plt
@@ -8,7 +9,6 @@ from ...analyze.metagenes import (
     compute_metagene_profiles,
     visualize_metagene_profile,
 )
-from ...logging import WARNING, log
 from ...model.experiment.st import ST
 from ...session import require
 from ...utility.visualization import reduce_last_dimension, visualize_metagenes
@@ -32,10 +32,9 @@ class Metagene(StatsHandler):
         try:
             st_experiment: ST = require("model").get_experiment("ST")
         except (AttributeError, KeyError):
-            log(
-                WARNING,
-                "session model does not have an ST experiment."
-                f" {cls.__name__} will be disabled.",
+            warnings.warn(
+                "Session model does not have an ST experiment."
+                f" {cls.__name__} will be disabled."
             )
             return Noop()
         instance = super().__new__(cls)

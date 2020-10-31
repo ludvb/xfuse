@@ -1,5 +1,6 @@
 import os
 import pickle
+import warnings
 from typing import Union
 
 import torch as t
@@ -8,7 +9,7 @@ from _io import BufferedReader
 
 from . import Session, get_session, require
 from .session import _SESSION_STORE
-from ..logging import INFO, WARNING, log
+from ..logging import INFO, log
 from ..utility.file import first_unique_filename
 from ..utility.state.state import get_state_dict, load_state_dict
 
@@ -31,11 +32,9 @@ def save_session(filename_prefix: str) -> None:
         try:
             pickle.dumps(x)
         except Exception as err:  # pylint: disable=broad-except
-            log(
-                WARNING,
-                'can\'t store session item "%s". the error returned was: %s',
-                name,
-                str(err),
+            warnings.warn(
+                f'Failed to store session item "{name}".'
+                f"The error returned was: str(err)",
             )
             return False
         return True

@@ -1,5 +1,6 @@
-from typing import Dict, List, NamedTuple, Tuple
 import os
+import warnings
+from typing import Dict, List, NamedTuple, Tuple
 
 import h5py
 import numpy as np
@@ -8,7 +9,7 @@ import pandas as pd
 from PIL import Image
 from scipy.sparse import csr_matrix
 
-from ..logging import DEBUG, WARNING, log
+from ..logging import DEBUG, log
 from ..utility import compute_tissue_mask
 
 
@@ -146,20 +147,18 @@ def write_data(
         )
 
     if np.max(image.shape[:2]) > 5000:
-        log(
-            WARNING,
+        warnings.warn(
             "The image resolution is very large! 😱"
             " XFuse typically works best on medium resolution images"
             " (approximately 1000x1000 px)."
             " If you experience performance issues, please consider reducing"
-            " the resolution.",
+            " the resolution."
         )
 
     if counts.columns.duplicated().any():
-        log(
-            WARNING,
+        warnings.warn(
             "Count matrix contains duplicated columns."
-            " Counts will be summed by column name.",
+            " Counts will be summed by column name."
         )
         counts = counts.sum(axis=1, level=0)
 

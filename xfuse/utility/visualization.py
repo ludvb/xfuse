@@ -12,7 +12,6 @@ from umap import UMAP
 from ..data import Data, Dataset
 from ..data.slide import FullSlide, Slide
 from ..data.utility.misc import make_dataloader
-from ..logging import WARNING, log
 from ..session import Session, get, require
 from ..utility import center_crop, cleanup_mask
 
@@ -196,11 +195,9 @@ def visualize_metagenes(
             data_type, *__this_should_be_empty = x.keys()
             assert __this_should_be_empty == []
             if data_type not in compute_fn:
-                log(
-                    WARNING,
-                    'Metagene visualization for data type "%s" not'
+                warnings.warn(
+                    f'Metagene visualization for data type "{data_type}" not'
                     " implemented",
-                    data_type,
                 )
             with torch.no_grad():
                 activation, scale, mask, name = compute_fn[data_type](x)

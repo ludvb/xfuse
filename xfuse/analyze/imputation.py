@@ -1,4 +1,5 @@
 import os
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -9,7 +10,6 @@ from tqdm import tqdm
 from ..data import Data, Dataset
 from ..data.slide import FullSlide, Slide
 from ..data.utility.misc import make_dataloader
-from ..logging import WARNING, log
 from ..session import Session, require
 from .analyze import Analysis, _register_analysis
 
@@ -102,11 +102,9 @@ def compute_imputation(
             try:
                 annotation = slide.data.annotation(annotation_layer)
             except RuntimeError:
-                log(
-                    WARNING,
-                    'Slide "%s" does not have an annotation layer "%s"',
-                    name,
-                    annotation_layer,
+                warnings.warn(
+                    f'Slide "{name}" does not have an annotation layer'
+                    f'"{annotation_layer}"'
                 )
                 continue
 
