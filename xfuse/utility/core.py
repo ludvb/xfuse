@@ -33,7 +33,7 @@ class ArrayLike(Protocol):
         ...
 
 
-def center_crop(x: ArrayLike, target_shape: Tuple[int, ...]) -> ArrayLike:
+def center_crop(x: ArrayType, target_shape: Tuple[int, ...]) -> ArrayType:
     r"""Crops `x` to the given `target_shape` from the center"""
     return x[
         tuple(
