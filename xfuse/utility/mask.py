@@ -1,5 +1,4 @@
 import itertools as it
-from typing import Optional
 
 import cv2 as cv
 import numpy as np
