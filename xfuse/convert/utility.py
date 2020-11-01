@@ -102,6 +102,25 @@ def crop_to_rect(
     )
 
 
+def relabel(
+    counts: pd.DataFrame, label: np.ndarray
+) -> Tuple[pd.DataFrame, np.ndarray]:
+    """
+    >>> counts = pd.DataFrame(index=[1,4,3])
+    >>> label = np.array([[1, 0], [4, 4]])
+    >>> relabel(counts, label)
+    (Empty DataFrame
+    Columns: []
+    Index: [1, 2], array([[1, 0],
+           [2, 2]]))
+    """
+    idxs = np.unique(label[label != 0])
+    counts = counts.loc[idxs]
+    counts = counts.rename({old: new for new, old in enumerate(idxs, 1)})
+    label = np.searchsorted([0, *idxs], label)
+    return counts, label
+
+
 def mask_tissue(
     image: np.ndarray, counts: pd.DataFrame, label: np.ndarray
 ) -> Tuple[pd.DataFrame, np.ndarray]:
@@ -174,6 +193,8 @@ def write_data(
             k: crop_to_rect(v, rect, interpolation_method=cv.INTER_NEAREST)
             for k, v in annotation.items()
         }
+
+    counts, label = relabel(counts, label)
 
     image = _normalize(image.astype(np.float32), axis=(0, 1)) * 2 - 1
     image = 0.9 * image
