@@ -13,7 +13,8 @@ from ..data import Data, Dataset
 from ..data.slide import FullSlide, Slide
 from ..data.utility.misc import make_dataloader
 from ..session import Session, get, require
-from ..utility.mask import center_crop, cleanup_mask
+from ..utility.core import center_crop
+from ..utility.mask import cleanup_mask
 
 
 __all__ = ["reduce_last_dimension", "visualize_metagenes"]

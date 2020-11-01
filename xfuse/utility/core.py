@@ -1,10 +1,23 @@
-from typing import Any, ContextManager, Protocol, Tuple, TypeVar, Union
+from typing import (
+    Any,
+    ContextManager,
+    Protocol,
+    Tuple,
+    TypeVar,
+    Sequence,
+    Union,
+)
 
 import warnings
+
+import numpy as np
+from PIL import Image
 
 
 __all__ = [
     "center_crop",
+    "rescale",
+    "resize",
     "temp_attr",
 ]
 
@@ -45,6 +58,44 @@ def center_crop(x: ArrayType, target_shape: Tuple[int, ...]) -> ArrayType:
             ]
         )
     ]
+
+
+def rescale(
+    image: np.ndarray, scaling_factor: float, resample: int = Image.NEAREST
+) -> np.ndarray:
+    r"""
+    Rescales image by a given `scaling_factor`
+
+    :param image: Image array
+    :param scaling_factor: Scaling factor
+    :param resample: Resampling filter
+    :returns: The rescaled image
+    """
+    image = Image.fromarray(image)
+    image = image.resize(
+        [round(x * scaling_factor) for x in image.size], resample=resample,
+    )
+    image = np.array(image)
+    return image
+
+
+def resize(
+    image: np.ndarray,
+    target_shape: Sequence[int],
+    resample: int = Image.NEAREST,
+) -> np.ndarray:
+    r"""
+    Resizes image to a given `target_shape`
+
+    :param image: Image array
+    :param target_shape: Target shape
+    :param resample: Resampling filter
+    :returns: The rescaled image
+    """
+    image = Image.fromarray(image)
+    image = image.resize(target_shape[::-1], resample=resample)
+    image = np.array(image)
+    return image
 
 
 def temp_attr(obj: object, attr: str, value: Any) -> ContextManager:
