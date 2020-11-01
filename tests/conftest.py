@@ -17,7 +17,7 @@ from xfuse.model import XFuse
 from xfuse.model.experiment.st import ST, MetageneDefault
 from xfuse.session import Session, get
 from xfuse.train import train
-from xfuse.utility import design_matrix_from
+from xfuse.utility.design import design_matrix_from
 from xfuse.utility.state import reset_state
 
 

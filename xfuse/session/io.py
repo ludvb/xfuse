@@ -31,10 +31,10 @@ def save_session(filename_prefix: str) -> None:
     def _can_pickle(name, x):
         try:
             pickle.dumps(x)
-        except Exception as err:  # pylint: disable=broad-except
+        except Exception as exc:  # pylint: disable=broad-except
             warnings.warn(
                 f'Failed to store session item "{name}".'
-                f"The error returned was: str(err)",
+                f"The error returned was: {str(exc)}",
             )
             return False
         return True

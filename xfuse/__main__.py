@@ -5,9 +5,8 @@ import json
 import logging
 import os
 import sys
-import warnings
-from contextlib import ExitStack
 from datetime import datetime as dt
+from functools import wraps
 
 import click
 import h5py
@@ -23,7 +22,7 @@ from ._config import (  # type: ignore
     construct_default_config_toml,
     merge_config,
 )
-from .logging import DEBUG, INFO, WARNING, log
+from .logging import DEBUG, INFO, log
 from .model.experiment.st.metagene_expansion_strategy import (
     STRATEGIES as expansion_strategies,
 )
@@ -44,6 +43,7 @@ def _init(f):
         show_default=True,
     )
     @click.option("--debug", is_flag=True)
+    @wraps(f)
     def _wrapped(*args, debug, save_path, **kwargs):
         logging.captureWarnings(True)
         os.makedirs(save_path, exist_ok=True)
@@ -231,6 +231,7 @@ def _convert_image(
 
     convert.image.run(
         image_data,
+        output_file,
         annotation=annotation,
         scale_factor=scale,
         mask=mask,

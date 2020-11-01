@@ -10,7 +10,6 @@ from typing import Dict, List, NamedTuple, Optional, OrderedDict, Union
 import tomlkit
 
 from .analyze import analyses
-from .logging import WARNING, log
 from .model.experiment.st.metagene_expansion_strategy import STRATEGIES
 
 

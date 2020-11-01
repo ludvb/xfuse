@@ -36,8 +36,8 @@ def test_restore_session(
     with Session(training_data=TrainingData()):
         script_runner.run(
             "xfuse",
-            "--debug",
             "run",
+            "--debug",
             f"--save-path={tmp_path}",
             str(shared_datadir / config),
         )
@@ -86,7 +86,7 @@ def test_convert_image(extra_args, shared_datadir, script_runner, tmp_path):
         "convert",
         "image",
         "--image=" + str(shared_datadir / "files" / "st" / "image.jpg"),
-        "--output-file=" + str(tmp_path / "data.h5"),
+        "--save-path=" + str(tmp_path),
         *extra_args,
     )
     assert ret.success
@@ -103,7 +103,7 @@ def test_convert_st(shared_datadir, script_runner, tmp_path):
         "--counts=" + str(shared_datadir / "files" / "st" / "counts.tsv"),
         "--image=" + str(shared_datadir / "files" / "st" / "image.jpg"),
         "--spots=" + str(shared_datadir / "files" / "st" / "spots.tsv"),
-        "--output-file=" + str(tmp_path / "data.h5"),
+        "--save-path=" + str(tmp_path),
     )
     assert ret.success
     assert os.path.exists(tmp_path / "data.h5")
@@ -122,7 +122,7 @@ def test_convert_visium(shared_datadir, script_runner, tmp_path):
         + str(shared_datadir / "files" / "visium" / "tissue_positions.csv"),
         "--scale-factors="
         + str(shared_datadir / "files" / "visium" / "scale_factors.json"),
-        "--output-file=" + str(tmp_path / "data.h5"),
+        "--save-path=" + str(tmp_path),
     )
     assert ret.success
     assert os.path.exists(tmp_path / "data.h5")

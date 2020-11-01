@@ -105,7 +105,8 @@ def compute_gene_maps(
                 warnings.warn(
                     "Gene map analysis is not implemented for experiment type"
                     f' "{experiment_type}".'
-                    f' Sample "{slide_name}" will be skipped in this analysis.',
+                    f' Sample "{slide_name}" will be skipped in this'
+                    " analysis.",
                 )
                 continue
 

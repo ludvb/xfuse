@@ -1,8 +1,6 @@
 import logging
-import sys
 
-from . import DEBUG, INFO, WARNING, ERROR, LOGGER
-from ..session import get
+from . import DEBUG, INFO, WARNING, ERROR
 
 
 LEVEL_NAMES = {

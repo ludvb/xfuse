@@ -8,7 +8,7 @@ from logging import (  # pylint: disable=unused-import
     WARNING,
 )
 from types import FrameType
-from typing import List, Optional
+from typing import List, Optional, cast
 
 from tqdm import tqdm
 
@@ -24,16 +24,16 @@ _PROGRESSBARS: List[tqdm] = []
 def log(*args, msg_frame: Optional[FrameType] = None, **kwargs):
     # pylint: disable=missing-function-docstring
     if msg_frame is None:
-        msg_frame = inspect.currentframe().f_back
+        msg_frame = cast(FrameType, inspect.currentframe()).f_back
     for pbar in _PROGRESSBARS:
         pbar._tqdm_instance.clear()  # pylint: disable=protected-access
     with temp_attr(
         LOGGER,
         "findCaller",
-        lambda self, stack_info=None, f=msg_frame: (
-            f.f_code.co_filename,
-            f.f_lineno,
-            f.f_code.co_name,
+        lambda self, stack_info=None: (
+            msg_frame.f_code.co_filename,
+            msg_frame.f_lineno,
+            msg_frame.f_code.co_name,
             None,
         ),
     ):

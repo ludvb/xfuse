@@ -45,8 +45,10 @@ class XFuse(torch.nn.Module):
 
         try:
             return self.__experiment_store[experiment_type]
-        except KeyError:
-            raise RuntimeError(f"unknown experiment type: {experiment_type}")
+        except KeyError as exc:
+            raise RuntimeError(
+                f"Unknown experiment type: {experiment_type}"
+            ) from exc
 
     def register_experiment(self, experiment: Experiment) -> None:
         r"""Registered :class:`Experiment`"""

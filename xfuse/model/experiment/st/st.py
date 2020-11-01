@@ -135,10 +135,10 @@ class ST(Image):
 
         try:
             self.__metagenes.pop(n)
-        except KeyError:
+        except KeyError as exc:
             raise ValueError(
                 f"Attempted to remove metagene {n}, which doesn't exist!"
-            )
+            ) from exc
 
         self.__metagene_queue.append(n)
 

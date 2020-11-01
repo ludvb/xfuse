@@ -1,9 +1,8 @@
 import logging
-import os
+from typing import List, Union
 from _io import TextIOWrapper
-from typing import List, Optional, Union
 
-from ...logging import ERROR, LOGGER, log
+from ...logging import LOGGER
 from ...logging.formatter import Formatter
 from .. import SessionItem, Unset, register_session_item
 
@@ -16,7 +15,7 @@ def _setter(filebuffers: Union[List[TextIOWrapper], Unset]):
     while LOGGER.handlers != []:
         LOGGER.removeHandler(LOGGER.handlers[0])
 
-    if isinstance(filebuffers, List):
+    if isinstance(filebuffers, list):
         for filebuffer in filebuffers:
             fancy_formatting = filebuffer.isatty()
 

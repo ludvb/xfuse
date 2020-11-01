@@ -30,9 +30,9 @@ def get_module(
     """
     try:
         module_ = pyro.module(name, __MODULES[name])
-    except KeyError:
+    except KeyError as exc:
         if module is None:
-            raise RuntimeError(f'Module "{name}" does not exist')
+            raise RuntimeError(f'Module "{name}" does not exist') from exc
         module_ = pyro.module(name, module(), update_module_params=True)
         if name in __STATE_DICT.modules:
             module_.load_state_dict(__STATE_DICT.modules[name])
@@ -69,9 +69,9 @@ def get_param(
         return pyro.param(name)
     try:
         value = __STATE_DICT.params[name].data
-    except KeyError:
+    except KeyError as exc:
         if default_value is None:
-            raise RuntimeError(f'Parameter "{name}" does not exist')
+            raise RuntimeError(f'Parameter "{name}" does not exist') from exc
         if callable(default_value):
             value = default_value()
         else:

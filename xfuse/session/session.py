@@ -1,7 +1,8 @@
+import warnings
 from traceback import format_exc
 from typing import Any, Dict, List
 
-from ..logging import DEBUG, ERROR, LOGGER, log
+from ..logging import DEBUG, ERROR, log
 from .session_item import SessionItem
 
 __all__ = [
@@ -49,7 +50,7 @@ class Session:
                 while tb.tb_next is not None:
                     tb = tb.tb_next
                 frame = tb.tb_frame
-                log(ERROR, "\n%s", format_exc(), msg_frame=frame)
+                log(ERROR, "Traceback:\n%s", format_exc(), msg_frame=frame)
                 panic_handler = get("panic")
                 if not isinstance(panic_handler, Unset):
                     panic_handler(get_session(), err_type, err, tb)
