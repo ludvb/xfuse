@@ -187,9 +187,7 @@ class STSlide(SlideData):
         label = np.searchsorted([0, *labels], label)
 
         return dict(
-            image=(
-                torch.as_tensor(image / 255 * 2 - 1).permute(2, 0, 1).float()
-            ),
+            image=torch.as_tensor(image).float(),
             label=torch.as_tensor(label).long(),
             data=torch.as_tensor(data.todense()).float(),
         )

@@ -116,9 +116,9 @@ class RandomSlide(SlideIterator):
                 (self._slide.W, self._slide.H), (extpatch_w, extpatch_h)
             )
         ]
-        image = to_pil_image(
-            self._slide.image[y : y + extpatch_h, x : x + extpatch_w]
-        )
+        image = self._slide.image[y : y + extpatch_h, x : x + extpatch_w]
+        image = (255 * (image + 1) / 2).astype(np.uint8)
+        image = to_pil_image(image)
         label = to_pil_image(
             self._slide.label[y : y + extpatch_h, x : x + extpatch_w]
         )
@@ -142,7 +142,12 @@ class RandomSlide(SlideIterator):
         )
         label = center_crop(label, (patch_h, patch_w))
         if np.random.rand() < 0.5:
-            image = image[::-1]
-            label = label[::-1]
+            image = np.flip(image, 0).copy()
+            label = np.flip(label, 0).copy()
+
+        # Convert image to the correct data format (float32 in [-1, 1] and in
+        # CHW order)
+        image = 2 * image.astype(np.float32) / 255 - 1
+        image = image.transpose(2, 0, 1)
 
         return self._slide.prepare_data(image, label)
