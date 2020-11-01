@@ -72,6 +72,7 @@ def design_matrix_from(
 def extract_covariates(
     design_matrix: pd.DataFrame,
 ) -> List[Tuple[str, List[str]]]:
+    r"""Extracts the covariates from a `design_matrix`"""
     return [
         (k, [x for _, x in v])
         for k, v in it.groupby(design_matrix.index, key=lambda x: x[0])
