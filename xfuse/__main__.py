@@ -54,12 +54,10 @@ def _init(f):
                 log_file=[sys.stderr, log_file],
                 log_level=DEBUG if debug else INFO,
             ):
-                with temp_attr(sys, "excepthook", lambda *_: None):
-                    log(
-                        INFO, "This is %s version %s", __package__, __version__
-                    )
-                    log(DEBUG, "Invoked by `%s`", " ".join(sys.argv))
-                    return f(*args, **kwargs)
+                sys.excepthook = lambda *_: None
+                log(INFO, "Running %s version %s", __package__, __version__)
+                log(DEBUG, "Invoked by `%s`", " ".join(sys.argv))
+                return f(*args, **kwargs)
 
     return _wrapped
 
