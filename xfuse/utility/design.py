@@ -1,3 +1,4 @@
+import itertools as it
 import warnings
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -66,3 +67,12 @@ def design_matrix_from(
 
     ks, vs = zip(*[(k, _encode(v)) for k, v in design_table.iteritems()])
     return pd.concat(vs, keys=ks)
+
+
+def extract_covariates(
+    design_matrix: pd.DataFrame,
+) -> List[Tuple[str, List[str]]]:
+    return [
+        (k, [x for _, x in v])
+        for k, v in it.groupby(design_matrix.index, key=lambda x: x[0])
+    ]

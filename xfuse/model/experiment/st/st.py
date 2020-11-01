@@ -376,7 +376,7 @@ class ST(Image):
             )
 
         effects = []
-        for covariate, vals in get("covariates"):
+        for covariate, vals in require("covariates"):
             effect = p.sample(
                 f"effect-{covariate}",
                 OneHotCategorical(
@@ -526,7 +526,7 @@ class ST(Image):
     def guide(self, x):
         with p.poutine.scale(scale=len(x["data"]) / self.n):
             self._sample_globals()
-        for covariate, _ in get("covariates"):
+        for covariate, _ in require("covariates"):
             is_observed = x["effects"][covariate].values.any(1)
             effect_distr = RelaxedOneHotCategoricalStraightThrough(
                 temperature=to_device(torch.as_tensor(0.1)),
