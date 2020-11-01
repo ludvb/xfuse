@@ -62,10 +62,10 @@ BioRxiv preprint: https://www.biorxiv.org/content/10.1101/2020.02.28.963413v1
 
    The data from the [[Data]] section was produced by the Spatial Transcriptomics Pipeline, so we can run the following commands to convert it to the right format:
    #+BEGIN_SRC sh
-     xfuse convert st --counts section1.tsv --image section1.jpg --transformation-matrix section1-alignment.txt --scale 0.15 --output-file section1.h5
-     xfuse convert st --counts section2.tsv --image section2.jpg --transformation-matrix section2-alignment.txt --scale 0.15 --output-file section2.h5
-     xfuse convert st --counts section3.tsv --image section3.jpg --transformation-matrix section3-alignment.txt --scale 0.15 --output-file section3.h5
-     xfuse convert st --counts section4.tsv --image section4.jpg --transformation-matrix section4-alignment.txt --scale 0.15 --output-file section4.h5
+     xfuse convert st --counts section1.tsv --image section1.jpg --transformation-matrix section1-alignment.txt --scale 0.15 --save-path section1
+     xfuse convert st --counts section2.tsv --image section2.jpg --transformation-matrix section2-alignment.txt --scale 0.15 --save-path section2
+     xfuse convert st --counts section3.tsv --image section3.jpg --transformation-matrix section3-alignment.txt --scale 0.15 --save-path section3
+     xfuse convert st --counts section4.tsv --image section4.jpg --transformation-matrix section4-alignment.txt --scale 0.15 --save-path section4
    #+END_SRC
    It may be worthwhile to try out different values for the ~--scale~ argument, which downsamples the image data by the given factor.
    Essentially, a higher scale increases the resolution of the model but requires considerably more compute power.
@@ -99,13 +99,13 @@ BioRxiv preprint: https://www.biorxiv.org/content/10.1101/2020.02.28.963413v1
      normalize = false
 
      [slides]
-     [slides."section1.h5"]
+     [slides."section1/data.h5"]
      section = 1
-     [slides."section2.h5"]
+     [slides."section2/data.h5"]
      section = 2
-     [slides."section3.h5"]
+     [slides."section3/data.h5"]
      section = 3
-     [slides."section4.h5"]
+     [slides."section4/data.h5"]
      section = 4
    #+END_SRC
 
