@@ -61,7 +61,7 @@ def _init(f):
                     lambda message, category, filename, lineno, _line: (
                         f"{category.__name__:s}"
                         f" ({filename:s}:{lineno:d}):"
-                        f" {message:s}"
+                        f" {str(message):s}"
                     ),
                 ):
                     log(
