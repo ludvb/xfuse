@@ -5,7 +5,7 @@ import torch
 
 from .state import __MODULES, __STATE_DICT, Param
 from ...session import get
-from ...utility.utility import checkpoint as _checkpoint
+from ...utility.tensor import checkpoint as _checkpoint
 
 
 def get_module(

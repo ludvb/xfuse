@@ -10,7 +10,7 @@ from PIL import Image
 from scipy.sparse import csr_matrix
 
 from ..logging import DEBUG, log
-from ..utility import compute_tissue_mask
+from ..utility.mask import compute_tissue_mask
 
 
 class Spot(NamedTuple):

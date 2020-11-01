@@ -9,7 +9,7 @@ from pyro.poutine.messenger import Messenger
 from ....handlers import Noop
 from ....logging import INFO, WARNING, log
 from ....session.session import Session, get, require
-from ....utility import to_device
+from ....utility.tensor import to_device
 from ... import XFuse
 from ...utility import compare
 from . import ST

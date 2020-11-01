@@ -49,13 +49,7 @@ class Session:
                 while tb.tb_next is not None:
                     tb = tb.tb_next
                 frame = tb.tb_frame
-                LOGGER.findCaller = lambda self, stack_info=None, f=frame: (
-                    f.f_code.co_filename,
-                    f.f_lineno,
-                    f.f_code.co_name,
-                    None,
-                )
-                log(ERROR, "\n%s", format_exc())
+                log(ERROR, "\n%s", format_exc(), msg_frame=frame)
                 panic_handler = get("panic")
                 if not isinstance(panic_handler, Unset):
                     panic_handler(get_session(), err_type, err, tb)

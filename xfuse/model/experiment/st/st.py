@@ -21,13 +21,14 @@ from ....data.utility.misc import make_dataloader
 from ....data.utility.misc import spot_size
 from ....logging import Progressbar, DEBUG, INFO, log
 from ....session import get, require
-from ....utility import center_crop, checkpoint, sparseonehot, isoftplus
+from ....utility.core import center_crop
 from ....utility.state import (
     get_module,
     get_param,
     get_state_dict,
     load_state_dict,
 )
+from ....utility.tensor import checkpoint, sparseonehot, isoftplus
 from ..image import Image
 
 

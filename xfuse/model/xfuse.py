@@ -8,8 +8,8 @@ import torch
 
 from .experiment import Experiment
 from ..logging import INFO, log
-from ..utility import find_device
 from ..utility.state import get_module
+from ..utility.tensor import find_device
 
 
 class ModelWrapper(Messenger):

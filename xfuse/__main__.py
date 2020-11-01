@@ -29,16 +29,13 @@ from .model.experiment.st.metagene_expansion_strategy import (
 )
 from .run import run as _run
 from .session import Session, get, require
-from .utility import design_matrix_from, temp_attr, with_
+from .utility.core import temp_attr
+from .utility.design import design_matrix_from
 from .utility.file import first_unique_filename
 from .session.io import load_session
 
 
-_DEFAULT_SESSION = Session()
-
-
 def _init(f):
-    @with_(_DEFAULT_SESSION)
     @click.option(
         "--save-path",
         type=click.Path(),

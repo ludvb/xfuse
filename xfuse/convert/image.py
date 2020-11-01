@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from PIL import Image
 
-from ..utility import compute_tissue_mask
+from ..utility.mask import compute_tissue_mask
 from .utility import rescale, write_data
 
 

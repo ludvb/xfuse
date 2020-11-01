@@ -1,7 +1,7 @@
 import torch as t
 
 from .. import SessionItem, register_session_item
-from ...utility.utility import to_device
+from ...utility.tensor import to_device
 from ...utility.state.state import StateDict, get_state_dict, load_state_dict
 
 

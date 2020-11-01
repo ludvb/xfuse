@@ -14,7 +14,7 @@ from ..data import Data, Dataset
 from ..data.slide import FullSlide, Slide
 from ..data.utility.misc import make_dataloader
 from ..session import Session, require
-from ..utility import cleanup_mask
+from ..utility.mask import cleanup_mask
 from ..utility.visualization import (
     greyscale2colormap,
     mask_background,
