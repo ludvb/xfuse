@@ -9,7 +9,7 @@ import pandas as pd
 from PIL import Image
 from scipy.sparse import csr_matrix
 
-from ..logging import DEBUG, log
+from ..logging import INFO, log
 from ..utility.mask import compute_tissue_mask
 from ..utility.visualization import _normalize
 
@@ -201,7 +201,7 @@ def write_data(
     # ^ reduce contrast to alleviate tension in the extremes due to the tanh
     #   activation in the image decoder
 
-    log(DEBUG, "Writing data to %s", path)
+    log(INFO, "Writing data to %s", path)
     os.makedirs(os.path.normpath(os.path.dirname(path)), exist_ok=True)
     with h5py.File(path, "w") as data_file:
         data = csr_matrix(counts.values.astype(float))
