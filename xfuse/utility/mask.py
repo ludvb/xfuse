@@ -1,4 +1,5 @@
 import itertools as it
+import warnings
 
 import cv2 as cv
 import numpy as np
@@ -50,9 +51,20 @@ def compute_tissue_mask(
 
     for i in it.count(1):
         old_mask = mask.copy()
-        cv.grabCut(
-            image, mask, None, bgd_model, fgd_model, 1, cv.GC_INIT_WITH_MASK,
-        )
+        try:
+            cv.grabCut(
+                image,
+                mask,
+                None,
+                bgd_model,
+                fgd_model,
+                1,
+                cv.GC_INIT_WITH_MASK,
+            )
+        except cv.error as cv_err:
+            warnings.warn(f"Failed to mask tissue\n{str(cv_err).strip()}")
+            mask = np.full_like(mask, cv.GC_PR_FGD)
+            break
         prop_changed = (mask != old_mask).sum() / np.prod(mask.shape)
         log(INFO, f"  Iteration {i}: {prop_changed=}")
         if prop_changed < convergence_threshold:
