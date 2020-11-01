@@ -9,7 +9,7 @@ __all__ = [
 ]
 
 
-ArrayType = TypeVar("S", bound="ArrayLike")
+ArrayType = TypeVar("ArrayType", bound="ArrayLike")
 
 
 class ArrayLike(Protocol):
