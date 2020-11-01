@@ -59,7 +59,9 @@ def _init(f):
                     warnings,
                     "formatwarning",
                     lambda message, category, filename, lineno, _line: (
-                        f"{category.__name__} ({filename:s}:{lineno:d}): {message}"
+                        f"{category.__name__:s}"
+                        f" ({filename:s}:{lineno:d}):"
+                        f" {message:s}"
                     ),
                 ):
                     log(
