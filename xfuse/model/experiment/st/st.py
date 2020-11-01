@@ -529,7 +529,7 @@ class ST(Image):
         for covariate, _ in get("covariates"):
             is_observed = x["effects"][covariate].values.any(1)
             effect_distr = RelaxedOneHotCategoricalStraightThrough(
-                temperature=to_device(torch.tensor(0.1)),
+                temperature=to_device(torch.as_tensor(0.1)),
                 logits=torch.stack(
                     [
                         get_param(
