@@ -6,11 +6,11 @@ import pandas as pd
 from PIL import Image
 from scipy.sparse import csr_matrix
 
+from ..utility.core import rescale
 from .utility import (
     Spot,
     labels_from_spots,
     mask_tissue,
-    rescale,
     write_data,
 )
 

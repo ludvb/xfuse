@@ -1,11 +1,13 @@
 import itertools as it
-from typing import Optional
+import warnings
 
 import cv2 as cv
 import numpy as np
+from PIL import Image
 from scipy.ndimage import label
+from scipy.ndimage.morphology import binary_fill_holes
 
-from .core import center_crop
+from .core import rescale, resize
 from ..logging import INFO, log
 
 
@@ -22,7 +24,6 @@ def remove_fg_elements(mask: np.ndarray, size_threshold: float):
 
 def compute_tissue_mask(
     image: np.ndarray,
-    initial_mask: Optional[np.ndarray] = None,
     convergence_threshold: float = 0.0001,
     size_threshold: float = 0.01,
 ) -> np.ndarray:
@@ -32,16 +33,16 @@ def compute_tissue_mask(
     """
     # pylint: disable=no-member
     # ^ pylint fails to identify cv.* members
-    if initial_mask is None:
-        initial_mask = np.zeros(image.shape[:2], dtype=np.bool)
-        initial_mask_center = center_crop(
-            initial_mask,
-            tuple(int(round(x * 0.8)) for x in iter(initial_mask.shape)),
-        )
-        initial_mask_center[...] = True
+    original_shape = image.shape[:2]
+    scale_factor = 1000 / max(original_shape)
 
-    mask = cv.GC_PR_BGD * np.ones(image.shape[:2], dtype=np.uint8)
-    mask[initial_mask] = cv.GC_PR_FGD
+    image = rescale(image, scale_factor, resample=Image.NEAREST)
+    initial_mask = binary_fill_holes(
+        cv.blur(cv.Canny(cv.blur(image, (5, 5)), 100, 200), (5, 5))
+    )
+
+    mask = np.where(initial_mask, cv.GC_PR_FGD, cv.GC_PR_BGD)
+    mask = mask.astype(np.uint8)
 
     bgd_model = np.zeros((1, 65), np.float64)
     fgd_model = bgd_model.copy()
@@ -50,9 +51,20 @@ def compute_tissue_mask(
 
     for i in it.count(1):
         old_mask = mask.copy()
-        cv.grabCut(
-            image, mask, None, bgd_model, fgd_model, 1, cv.GC_INIT_WITH_MASK,
-        )
+        try:
+            cv.grabCut(
+                image,
+                mask,
+                None,
+                bgd_model,
+                fgd_model,
+                1,
+                cv.GC_INIT_WITH_MASK,
+            )
+        except cv.error as cv_err:
+            warnings.warn(f"Failed to mask tissue\n{str(cv_err).strip()}")
+            mask = np.full_like(mask, cv.GC_PR_FGD)
+            break
         prop_changed = (mask != old_mask).sum() / np.prod(mask.shape)
         log(INFO, f"  Iteration {i}: {prop_changed=}")
         if prop_changed < convergence_threshold:
@@ -60,6 +72,8 @@ def compute_tissue_mask(
 
     mask = mask == cv.GC_PR_FGD
     mask = cleanup_mask(mask, size_threshold)
+
+    mask = resize(mask, target_shape=original_shape, resample=Image.NEAREST)
 
     return mask
 
