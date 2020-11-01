@@ -4,6 +4,7 @@ import json
 import logging
 import os
 import sys
+import warnings
 from datetime import datetime as dt
 from functools import wraps
 
@@ -54,9 +55,18 @@ def _init(f):
                 log_level=DEBUG if debug else INFO,
             ):
                 sys.excepthook = lambda *_: None
-                log(INFO, "Running %s version %s", __package__, __version__)
-                log(DEBUG, "Invoked by `%s`", " ".join(sys.argv))
-                return f(*args, **kwargs)
+                with temp_attr(
+                    warnings,
+                    "formatwarning",
+                    lambda message, category, filename, lineno, _line: (
+                        f"{category.__name__} ({filename:s}:{lineno:d}): {message}"
+                    ),
+                ):
+                    log(
+                        INFO, "Running %s version %s", __package__, __version__
+                    )
+                    log(DEBUG, "Invoked by `%s`", " ".join(sys.argv))
+                    return f(*args, **kwargs)
 
     return _wrapped
 
