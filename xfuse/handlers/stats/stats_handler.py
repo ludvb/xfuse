@@ -55,12 +55,12 @@ class StatsHandler(ABC, Messenger):
 
     def __enter__(self, *args, **kwargs):
         # pylint: disable=arguments-differ
-        log(DEBUG, "activating stats tracker: %s", type(self).__name__)
+        log(DEBUG, "Activating stats tracker: %s", type(self).__name__)
         super().__enter__(*args, **kwargs)
 
     def __exit__(self, *args, **kwargs):
         # pylint: disable=arguments-differ
-        log(DEBUG, "deactivating stats tracker: %s", type(self).__name__)
+        log(DEBUG, "Deactivating stats tracker: %s", type(self).__name__)
         super().__exit__(*args, **kwargs)
 
     @abstractmethod

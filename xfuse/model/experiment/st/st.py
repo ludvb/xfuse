@@ -21,13 +21,14 @@ from ....data.utility.misc import make_dataloader
 from ....data.utility.misc import spot_size
 from ....logging import Progressbar, DEBUG, INFO, log
 from ....session import get, require
-from ....utility import center_crop, checkpoint, sparseonehot, isoftplus
+from ....utility.core import center_crop
 from ....utility.state import (
     get_module,
     get_param,
     get_state_dict,
     load_state_dict,
 )
+from ....utility.tensor import checkpoint, sparseonehot, isoftplus
 from ..image import Image
 
 
@@ -111,14 +112,14 @@ class ST(Image):
             pname for pname in state_dict.params.keys() if name in pname
         ]:
             new_pname = pname.replace(name, new_name)
-            log(DEBUG, "copying param: %s -> %s", pname, new_pname)
+            log(DEBUG, "Copying param: %s -> %s", pname, new_pname)
             state_dict.params[new_pname] = deepcopy(state_dict.params[pname])
 
         for mname in [
             mname for mname in state_dict.modules.keys() if name in mname
         ]:
             new_mname = mname.replace(name, new_name)
-            log(DEBUG, "copying module: %s -> %s", mname, new_mname)
+            log(DEBUG, "Copying module: %s -> %s", mname, new_mname)
             state_dict.modules[new_mname] = deepcopy(state_dict.modules[mname])
 
         load_state_dict(state_dict)
@@ -130,14 +131,14 @@ class ST(Image):
         if len(self.metagenes) == 1:
             raise RuntimeError("Cannot remove last metagene")
 
-        log(INFO, "removing metagene: %s", n)
+        log(INFO, "Removing metagene: %s", n)
 
         try:
             self.__metagenes.pop(n)
-        except KeyError:
+        except KeyError as exc:
             raise ValueError(
-                f"attempted to remove metagene {n}, which doesn't exist!"
-            )
+                f"Attempted to remove metagene {n}, which doesn't exist!"
+            ) from exc
 
         self.__metagene_queue.append(n)
 

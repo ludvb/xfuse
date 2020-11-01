@@ -8,8 +8,8 @@ import torch
 
 from .experiment import Experiment
 from ..logging import INFO, log
-from ..utility import find_device
 from ..utility.state import get_module
+from ..utility.tensor import find_device
 
 
 class ModelWrapper(Messenger):
@@ -45,15 +45,17 @@ class XFuse(torch.nn.Module):
 
         try:
             return self.__experiment_store[experiment_type]
-        except KeyError:
-            raise RuntimeError(f"unknown experiment type: {experiment_type}")
+        except KeyError as exc:
+            raise RuntimeError(
+                f"Unknown experiment type: {experiment_type}"
+            ) from exc
 
     def register_experiment(self, experiment: Experiment) -> None:
         r"""Registered :class:`Experiment`"""
 
         if experiment.tag in self.__experiment_store:
             raise RuntimeError(
-                f'model for data type "{experiment.tag}" already registered'
+                f'Model for data type "{experiment.tag}" already registered'
             )
         log(
             INFO,

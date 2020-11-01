@@ -1,5 +1,6 @@
 import os
 import re
+import warnings
 from typing import Any, Callable, Dict, Iterator, Tuple
 
 import numpy as np
@@ -12,9 +13,8 @@ from .analyze import Analysis, _register_analysis
 from ..data import Data, Dataset
 from ..data.slide import FullSlide, Slide
 from ..data.utility.misc import make_dataloader
-from ..logging import WARNING, log
 from ..session import Session, require
-from ..utility import cleanup_mask
+from ..utility.mask import cleanup_mask
 from ..utility.visualization import (
     greyscale2colormap,
     mask_background,
@@ -102,13 +102,11 @@ def compute_gene_maps(
             progress.set_description(slide_name)
 
             if experiment_type not in fns.keys():
-                log(
-                    WARNING,
+                warnings.warn(
                     "Gene map analysis is not implemented for experiment type"
-                    ' "%s".'
-                    ' Sample "%s" will be skipped in this analysis.',
-                    experiment_type,
-                    slide_name,
+                    f' "{experiment_type}".'
+                    f' Sample "{slide_name}" will be skipped in this'
+                    " analysis.",
                 )
                 continue
 

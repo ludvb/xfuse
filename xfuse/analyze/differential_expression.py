@@ -1,4 +1,5 @@
 import os
+import warnings
 from copy import copy
 from typing import Dict, List
 
@@ -9,7 +10,6 @@ import pyro
 import torch
 from tqdm import tqdm
 
-from ..logging import WARNING, log
 from ..session import Session, require
 from .analyze import Analysis, _register_analysis
 from .imputation import _impute
@@ -47,12 +47,9 @@ def compute_differential_expression(
                             slide.data.annotation(annotation_name) != 0
                         )
                     except RuntimeError:
-                        log(
-                            WARNING,
-                            'Slide "%s" does not have an annotation layer'
-                            ' "%s"',
-                            slide_name,
-                            annotation_name,
+                        warnings.warn(
+                            f'Slide "{slide_name}" does not have an annotation'
+                            f'layer "{annotation_name}"',
                         )
                         continue
 

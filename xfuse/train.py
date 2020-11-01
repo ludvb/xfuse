@@ -13,7 +13,7 @@ from .handlers import Checkpointer, stats
 from .logging import DEBUG, INFO, Progressbar, log
 from .model.experiment.st.metagene_eval import MetagenePurger
 from .session import get, require
-from .utility import to_device
+from .utility.tensor import to_device
 
 
 def test_convergence():

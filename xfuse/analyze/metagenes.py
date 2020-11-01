@@ -1,4 +1,5 @@
 import os
+import warnings
 from typing import cast
 
 import matplotlib.pyplot as plt
@@ -7,7 +8,6 @@ import pyro
 import torch
 from imageio import imwrite
 
-from ..logging import WARNING, log
 from ..model.experiment.st.st import ST, _encode_metagene_name
 from ..session import Session, require
 from ..utility.visualization import visualize_metagenes
@@ -73,11 +73,9 @@ def compute_metagene_profiles():
             )
             yield experiment, dataframe
         except KeyError:
-            log(
-                WARNING,
-                'Metagene profiles for experiment of type "%s" '
-                " not implemented",
-                experiment,
+            warnings.warn(
+                f'Metagene profiles for experiment of type "{experiment}"'
+                " not implemented"
             )
             continue
 

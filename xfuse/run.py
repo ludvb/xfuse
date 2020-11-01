@@ -1,6 +1,7 @@
+import os
+import warnings
 from functools import partial, reduce
 from operator import add
-import os
 from typing import Any, Dict, Optional
 
 import numpy as np
@@ -11,7 +12,7 @@ from .analyze import analyses as _analyses
 from .data import Data, Dataset
 from .data.slide import RandomSlide, Slide, STSlide
 from .data.utility.misc import make_dataloader
-from .logging import INFO, WARNING, log
+from .logging import INFO, log
 from .model import XFuse
 from .model.experiment.st import ST as STExperiment
 from .model.experiment.st.metagene_expansion_strategy import (
@@ -52,8 +53,7 @@ def run(
         analyses = {}
 
     if (available_cores := len(os.sched_getaffinity(0))) < num_data_workers:
-        log(
-            WARNING,
+        warnings.warn(
             " ".join(
                 [
                     f"Available cores ({available_cores}) is less than the"
@@ -160,4 +160,4 @@ def run(
                 log(INFO, 'Running analysis "%s"', name)
                 _analyses[name].function(**options)
             else:
-                log(WARNING, 'Unknown analysis "%s"', name)
+                warnings.warn(f'Unknown analysis "{name}"')

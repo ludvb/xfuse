@@ -1,3 +1,4 @@
+import warnings
 from copy import deepcopy
 from typing import Any, Callable, NoReturn, Union, cast
 
@@ -8,7 +9,7 @@ from pyro.poutine.messenger import Messenger
 from ....handlers import Noop
 from ....logging import INFO, WARNING, log
 from ....session.session import Session, get, require
-from ....utility import to_device
+from ....utility.tensor import to_device
 from ... import XFuse
 from ...utility import compare
 from . import ST
@@ -20,7 +21,7 @@ def purge_metagenes(xfuse: XFuse, num_samples: int = 1) -> None:
     `metagene_expansion_strategy` of the current :class:`Session`
     """
 
-    log(INFO, "evaluating metagenes")
+    log(INFO, "Evaluating metagenes")
 
     def _xfuse_without(n):
         reduced_xfuse = deepcopy(xfuse)
@@ -62,12 +63,12 @@ def purge_metagenes(xfuse: XFuse, num_samples: int = 1) -> None:
 
     log(
         INFO,
-        "contributing metagenes: %s",
+        "Contributing metagenes: %s",
         ", ".join(contrib) if contrib != [] else "-",
     )
     log(
         INFO,
-        "non-contributing metagenes: %s",
+        "Non-contributing metagenes: %s",
         ", ".join(noncontrib) if noncontrib != [] else "-",
     )
 
@@ -88,10 +89,9 @@ class MetagenePurger(Messenger):
             xfuse = get("model")
             _ = xfuse.get_experiment("ST")
         except (AttributeError, KeyError):
-            log(
-                WARNING,
-                "session model does not have an ST experiment."
-                f" {cls.__name__} will be disabled.",
+            warnings.warn(
+                "Session model does not have an ST experiment."
+                f" {cls.__name__} will be disabled."
             )
             return Noop()
         instance = super().__new__(cls)
@@ -111,7 +111,7 @@ class MetagenePurger(Messenger):
 
     def _handle(self, **_msg) -> NoReturn:
         # pylint: disable=no-self-use
-        raise RuntimeError("unreachable code path")
+        raise RuntimeError("Unreachable code path")
 
     def _select_msg(self, **_msg) -> bool:
         # pylint: disable=no-self-use

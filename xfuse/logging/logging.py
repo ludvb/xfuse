@@ -1,3 +1,4 @@
+import inspect
 import logging
 from functools import wraps
 from logging import (  # pylint: disable=unused-import
@@ -10,6 +11,8 @@ from typing import List
 
 from tqdm import tqdm
 
+from ..utility import temp_attr
+
 
 LOGGER = logging.getLogger(__name__)
 
@@ -21,7 +24,18 @@ def log(*args, **kwargs):
     # pylint: disable=missing-function-docstring
     for pbar in _PROGRESSBARS:
         pbar._tqdm_instance.clear()  # pylint: disable=protected-access
-    LOGGER.log(*args, **kwargs)
+    msg_frame = inspect.currentframe().f_back
+    with temp_attr(
+        LOGGER,
+        "findCaller",
+        lambda self, stack_info=None: (
+            msg_frame.f_code.co_filename,
+            msg_frame.f_lineno,
+            msg_frame.f_code.co_name,
+            None,
+        ),
+    ):
+        LOGGER.log(*args, **kwargs)
     for pbar in _PROGRESSBARS:
         pbar._tqdm_instance.refresh()  # pylint: disable=protected-access
 

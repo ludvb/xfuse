@@ -5,7 +5,7 @@ import pyro
 import torch
 
 from ...session import get
-from ...utility.utility import to_device
+from ...utility.tensor import to_device
 
 
 class Param(NamedTuple):

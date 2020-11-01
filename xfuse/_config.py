@@ -2,15 +2,14 @@
 # pylint: disable=isinstance-second-argument-not-valid-type
 # ^ due to https://github.com/PyCQA/pylint/issues/3507
 
+import warnings
 from copy import deepcopy
 from inspect import signature
 from typing import Dict, List, NamedTuple, Optional, OrderedDict, Union
 
 import tomlkit
 
-from . import __version__
 from .analyze import analyses
-from .logging import WARNING, log
 from .model.experiment.st.metagene_expansion_strategy import STRATEGIES
 
 
@@ -59,18 +58,6 @@ _ANNOTATED_CONFIG = OrderedDict(
                             Item(
                                 value=1,
                                 comment="Exclude all genes with fewer reads than this value.",
-                            ),
-                        ),
-                        (
-                            "version",
-                            Item(
-                                value=__version__,
-                                comment=" ".join(
-                                    [
-                                        f"This is the version of {__package__} used to create this config file.",
-                                        "It is only used for record keeping.",
-                                    ]
-                                ),
                             ),
                         ),
                     ]
@@ -334,7 +321,7 @@ def merge_config(config: Config) -> Config:
     def _merge(a: Config, b: AnnotatedConfig) -> None:
         for k in a:
             if k not in b:
-                log(WARNING, f'Unrecognized configuration option "{k}"')
+                warnings.warn(f'Unrecognized configuration option "{k}"')
             else:
                 if isinstance(b[k].value, OrderedDict) and not b[k].example:
                     if not isinstance(a[k], Dict):

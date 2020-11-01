@@ -1,6 +1,8 @@
+import warnings
+from traceback import format_exc
 from typing import Any, Dict, List
 
-from ..logging import DEBUG, ERROR, LOGGER, WARNING, log
+from ..logging import DEBUG, ERROR, log
 from .session_item import SessionItem
 
 __all__ = [
@@ -45,16 +47,13 @@ class Session:
     def __exit__(self, err_type, err, tb):
         if err_type is not None:
             if self._level == 0:
-                while tb.tb_next is not None:
-                    tb = tb.tb_next
-                frame = tb.tb_frame
-                LOGGER.findCaller = lambda self, stack_info=None, f=frame: (
-                    f.f_code.co_filename,
-                    f.f_lineno,
-                    f.f_code.co_name,
-                    None,
+                log(
+                    ERROR,
+                    "%s: %s\n%s",
+                    err_type.__name__,
+                    str(err),
+                    format_exc(),
                 )
-                log(ERROR, "session panic! %s", str(err))
                 panic_handler = get("panic")
                 if not isinstance(panic_handler, Unset):
                     panic_handler(get_session(), err_type, err, tb)
@@ -110,7 +109,7 @@ def require(name: str) -> Any:
             if not isinstance(val, Unset):
                 return val
         except AttributeError:
-            log(WARNING, 'session object lacks attribute "%s"', name)
+            warnings.warn('Session object lacks attribute "{name}"')
 
     raise RuntimeError(f"Session item {name} has not been set!")
 

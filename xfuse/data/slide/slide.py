@@ -175,7 +175,7 @@ class STSlide(SlideData):
     def annotation(self, name):
         with h5py.File(self._datafile, "r") as data:
             if name not in data["annotation"]:
-                raise RuntimeError(f'annotation layer "{name}" is missing')
+                raise RuntimeError(f'Annotation layer "{name}" is missing')
             return data["annotation"][name][()]
 
     def prepare_data(self, image, label):

@@ -1,7 +1,7 @@
 import pyro
 from xfuse.model.experiment.st.st import _encode_metagene_name
 from xfuse.session import Session, get
-from xfuse.utility import to_device
+from xfuse.utility.tensor import to_device
 
 
 def test_split_metagene(pretrained_toy_model, toydata):
