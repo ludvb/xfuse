@@ -46,7 +46,7 @@ class Formatter(logging.Formatter):
         except KeyError:
             levelname = str(record.levelno)
 
-        if record.levelno != INFO:
+        if record.levelno == DEBUG:
             where = f"({record.filename}:{record.lineno})"
         else:
             where = None

@@ -47,10 +47,13 @@ class Session:
     def __exit__(self, err_type, err, tb):
         if err_type is not None:
             if self._level == 0:
-                while tb.tb_next is not None:
-                    tb = tb.tb_next
-                frame = tb.tb_frame
-                log(ERROR, "Traceback:\n%s", format_exc(), msg_frame=frame)
+                log(
+                    ERROR,
+                    "%s: %s\n%s",
+                    err_type.__name__,
+                    str(err),
+                    format_exc(),
+                )
                 panic_handler = get("panic")
                 if not isinstance(panic_handler, Unset):
                     panic_handler(get_session(), err_type, err, tb)
