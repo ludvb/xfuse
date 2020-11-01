@@ -1,3 +1,4 @@
+import itertools as it
 import warnings
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -14,15 +15,21 @@ def design_matrix_from(
     """
     design_table = pd.concat(
         [
-            pd.DataFrame({k: [v] for k, v in v.items()}, index=[k])
-            for k, v in design.items()
+            pd.DataFrame(
+                {
+                    condition: [str(value)]
+                    for condition, value in conditions.items()
+                },
+                index=[obs_unit],
+            )
+            for obs_unit, conditions in design.items()
         ],
         sort=True,
     )
 
     if covariates is None:
         covariates = [
-            (k, list(map(str, xs.unique().tolist())))
+            (k, [x for x in xs.unique() if not pd.isna(x)])
             for k, xs in design_table.iteritems()
         ]
 
@@ -39,9 +46,14 @@ def design_matrix_from(
     design_table = design_table[[x for x, _ in covariates]]
 
     for covariate in design_table:
-        if np.any(pd.isna(design_table[covariate])):
+        has_missing_values = design_table.index[
+            pd.isna(design_table[covariate])
+        ]
+        if len(has_missing_values) > 0:
             warnings.warn(
-                f'Design covariate "{covariate}" has missing values.',
+                'Covariate "{:s}" is missing for sample(s): {:s}'.format(
+                    covariate, ", ".join(f'"{x}"' for x in has_missing_values),
+                ),
             )
 
     def _encode(covariate):
@@ -55,3 +67,13 @@ def design_matrix_from(
 
     ks, vs = zip(*[(k, _encode(v)) for k, v in design_table.iteritems()])
     return pd.concat(vs, keys=ks)
+
+
+def extract_covariates(
+    design_matrix: pd.DataFrame,
+) -> List[Tuple[str, List[str]]]:
+    r"""Extracts the covariates from a `design_matrix`"""
+    return [
+        (k, [x for _, x in v])
+        for k, v in it.groupby(design_matrix.index, key=lambda x: x[0])
+    ]

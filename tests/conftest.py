@@ -17,7 +17,7 @@ from xfuse.model import XFuse
 from xfuse.model.experiment.st import ST, MetageneDefault
 from xfuse.session import Session, get
 from xfuse.train import train
-from xfuse.utility.design import design_matrix_from
+from xfuse.utility.design import design_matrix_from, extract_covariates
 from xfuse.utility.state import reset_state
 
 
@@ -157,6 +157,7 @@ def pretrained_toy_model(toydata):
         model=xfuse,
         optimizer=pyro.optim.Adam({"lr": 0.001}),
         dataloader=toydata,
+        covariates=extract_covariates(toydata.dataset.data.design),
     ):
         train(100 + get("training_data").epoch)
     return xfuse

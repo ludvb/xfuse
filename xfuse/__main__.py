@@ -1,6 +1,5 @@
 # pylint: disable=missing-docstring, invalid-name, too-many-instance-attributes
 
-import itertools as it
 import json
 import logging
 import os
@@ -29,7 +28,7 @@ from .model.experiment.st.metagene_expansion_strategy import (
 from .run import run as _run
 from .session import Session, get, require
 from .utility.core import temp_attr
-from .utility.design import design_matrix_from
+from .utility.design import design_matrix_from, extract_covariates
 from .utility.file import first_unique_filename
 from .session.io import load_session
 
@@ -303,10 +302,7 @@ def run(project_file, session):
             },
             covariates=get("covariates"),
         )
-        covariates = [
-            (k, [x for _, x in v])
-            for k, v in it.groupby(design.index, key=lambda x: x[0])
-        ]
+        covariates = extract_covariates(design)
         log(INFO, "Using the following design covariates:")
         for name, values in covariates:
             log(INFO, "  - %s: %s", name, ", ".join(map(str, values)))
