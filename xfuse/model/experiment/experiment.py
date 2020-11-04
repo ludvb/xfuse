@@ -36,5 +36,7 @@ class Experiment(t.nn.Module):
     def guide(self, x):
         r"""Experiment guide for :class:`pyro.infer.SVI`"""
 
-    def forward(self, x, zs):  # pylint: disable=arguments-differ
+    def forward(self, x, zs):
+        r"""Alias for :func:`model`"""
+        # pylint: disable=arguments-differ
         return self.model(x, zs)

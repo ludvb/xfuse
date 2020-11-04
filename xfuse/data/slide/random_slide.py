@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 import numpy as np
 from PIL import Image
@@ -44,7 +44,7 @@ class RandomSlide(SlideIterator):
 
     @staticmethod
     def _compute_extended_patch_size(
-        w: float, h: float, rotation: float, scale: float, shear: float
+        w: float, h: float, rotation: float, scale: float, shear: List[float]
     ) -> Tuple[float, float]:
         transform = np.concatenate(
             [
@@ -84,7 +84,7 @@ class RandomSlide(SlideIterator):
             np.random.uniform(-self._max_scale_jitter, self._max_scale_jitter)
         )
         shear = np.random.uniform(
-            -self._max_shear_jitter, self._max_shear_jitter
+            -self._max_shear_jitter, self._max_shear_jitter, size=2
         )
 
         # Compute the "extended" patch size. This is the size of the patch that

@@ -67,6 +67,7 @@ class XFuse(torch.nn.Module):
         self.__experiment_store[experiment.tag] = experiment
 
     def forward(self, *input):
+        r"""Alias for :func:`model`"""
         # pylint: disable=redefined-builtin
         return self.model(*input)
 

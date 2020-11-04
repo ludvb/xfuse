@@ -110,7 +110,7 @@ class STSlide(SlideData):
 
     @genes.setter
     def genes(self, genes: List[str]) -> STSlide:
-        self.__gene_list = np.array(genes)
+        self.__gene_list = np.array(genes).astype(str)
         with h5py.File(self._datafile, "r") as data:
             idxs = {
                 gene: i for i, gene in enumerate(data["counts"]["columns"][()])

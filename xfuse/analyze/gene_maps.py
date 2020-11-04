@@ -53,7 +53,7 @@ def compute_gene_maps(
         shuffle=False,
     )
 
-    all_genes = np.array(genes)
+    all_genes = np.array(genes).astype(str)
     selected_genes = np.array(
         [
             x

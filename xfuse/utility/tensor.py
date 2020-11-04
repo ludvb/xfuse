@@ -69,8 +69,8 @@ def isoftplus(x, /):
     r"""
     Inverse softplus.
 
-    >>> ((isoftplus(torch.nn.functional.softplus(torch.linspace(-5, 5)))
-    ...     - torch.linspace(-5, 5)) < 1e-5).all()
+    >>> ((isoftplus(torch.nn.functional.softplus(torch.linspace(-5, 5, 10)))
+    ...     - torch.linspace(-5, 5, 10)) < 1e-5).all()
     tensor(True)
     """
     return np.log(np.exp(x) - 1)
