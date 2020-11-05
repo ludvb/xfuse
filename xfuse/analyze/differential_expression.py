@@ -49,7 +49,7 @@ def compute_differential_expression(
                     except RuntimeError:
                         warnings.warn(
                             f'Slide "{slide_name}" does not have an annotation'
-                            f'layer "{annotation_name}"',
+                            f' layer "{annotation_name}"',
                         )
                         continue
 
