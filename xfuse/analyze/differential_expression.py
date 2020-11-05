@@ -19,7 +19,6 @@ def compute_differential_expression(
     annotation_layer1: str = "",
     annotation_layer2: str = "",
     num_samples: int = 10,
-    normalize_sample_differences: bool = True,
 ):
     r"""Imputation analysis function"""
     # pylint: disable=too-many-locals
@@ -54,8 +53,6 @@ def compute_differential_expression(
                         continue
 
                     design = dataloader.dataset.data.design[slide_name]
-                    if normalize_sample_differences:
-                        design = design.replace(design, 0)
 
                     # Get model trace, retaining globals from the first sample
                     # NOTE: This assumes a conditioning structure
