@@ -53,6 +53,7 @@ def _init(f):
                 save_path=save_path,
                 log_file=[sys.stderr, log_file],
                 log_level=DEBUG if debug else INFO,
+                mpl_backend="Agg",
             ):
                 sys.excepthook = lambda *_: None
                 with temp_attr(

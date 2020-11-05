@@ -8,6 +8,7 @@ from .learning_rate import *
 from .log_file import *
 from .log_level import *
 from .model import *
+from .mpl_backend import *
 from .optimizer import *
 from .pyro_stack import *
 from .save_path import *
