@@ -6,11 +6,11 @@ from PIL import Image
 
 from ..utility.core import rescale
 from ..utility.mask import compute_tissue_mask
-from .utility import write_data
+from .utility import trim_margin, write_data
 
 
 def run(
-    tissue_image: np.ndarray,
+    image: np.ndarray,
     output_file: str,
     annotation: Optional[Dict[str, np.ndarray]] = None,
     scale_factor: Optional[float] = None,
@@ -24,25 +24,32 @@ def run(
         annotation = {}
 
     if scale_factor is not None:
-        tissue_image = rescale(tissue_image, scale_factor, Image.BICUBIC)
+        image = rescale(image, scale_factor, Image.BICUBIC)
         annotation = {
             k: rescale(v, scale_factor, Image.NEAREST)
             for k, v in annotation.items()
         }
 
     if mask:
-        mask = compute_tissue_mask(tissue_image)
+        mask = compute_tissue_mask(image)
         label = np.array(mask == 0, dtype=np.int16)
     else:
-        label = np.zeros(tissue_image.shape[:2], dtype=np.int16)
+        label = np.zeros(image.shape[:2], dtype=np.int16)
 
     counts = pd.DataFrame(
         index=pd.Series(np.unique(label[label != 0]), name="n")
     )
 
+    image, label = trim_margin(image, label)
+    if scale_factor is not None:
+        # The outermost pixels may belong in part to the margin if we
+        # downscaled the image. Therefore, remove one extra row/column.
+        image = image[1:-1, 1:-1]
+        label = label[1:-1, 1:-1]
+
     write_data(
         counts,
-        tissue_image,
+        image,
         label,
         type_label="ST",
         annotation=annotation,

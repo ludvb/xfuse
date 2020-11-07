@@ -8,6 +8,7 @@ import cv2 as cv
 import pandas as pd
 from PIL import Image
 from scipy.sparse import csr_matrix
+from scipy.ndimage.morphology import binary_fill_holes
 
 from ..logging import INFO, log
 from ..utility.mask import compute_tissue_mask
@@ -98,7 +99,10 @@ def crop_to_rect(
         transform,
         (width, height),
         flags=interpolation_method,
-        borderMode=cv.BORDER_REPLICATE,
+        borderMode=cv.BORDER_CONSTANT,
+        borderValue=np.median(
+            np.concatenate([img[0], img[-1], img[:, 0], img[:, -1]]), 0
+        ),
     )
 
 
@@ -148,6 +152,41 @@ def mask_tissue(
     )
 
     return counts, label
+
+
+def trim_margin(
+    image: np.ndarray, label: np.ndarray, margin_color=None, tol: float = 0.2
+) -> Tuple[np.ndarray, np.ndarray]:
+    r"""
+    Trims margins from `image` and removes the corresponding regions in
+    `label`.
+
+    >>> image = np.array([[1, 1], [1, 0]])
+    >>> label = np.array([[1, 2], [3, 4]])
+    >>> trim_margin(image, label)
+    (array([[0]]), array([[4]]))
+    """
+    if margin_color is None:
+        margin_color = image.max((0, 1))
+
+    img_dims = tuple(np.arange(len(image.shape) - len(margin_color.shape)))
+    color_dims = tuple(
+        np.arange(len(image.shape) - len(margin_color.shape), len(image.shape))
+    )
+
+    color_scale = np.max(image, img_dims) - np.min(image, img_dims)
+
+    is_margin = np.ones(image.shape[:2], dtype=bool)
+    is_margin &= (image > (margin_color - tol * color_scale)).all(color_dims)
+    is_margin &= (image < (margin_color + tol * color_scale)).all(color_dims)
+
+    col_mask = binary_fill_holes(np.invert(is_margin.all(0)))
+    row_mask = binary_fill_holes(np.invert(is_margin.all(1)))
+
+    image = image[row_mask][:, col_mask]
+    label = label[row_mask][:, col_mask]
+
+    return image, label
 
 
 def write_data(

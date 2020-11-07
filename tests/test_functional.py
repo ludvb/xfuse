@@ -77,7 +77,7 @@ def test_restore_session(
     assert ret.success
 
 
-@pytest.mark.parametrize("extra_args", [["--no-mask"], ["--mask"]])
+@pytest.mark.parametrize("extra_args", [[], ["--no-mask", "--scale=0.5"]])
 def test_convert_image(extra_args, shared_datadir, script_runner, tmp_path):
     r"""Test convert image data"""
 
@@ -93,7 +93,8 @@ def test_convert_image(extra_args, shared_datadir, script_runner, tmp_path):
     assert os.path.exists(tmp_path / "data.h5")
 
 
-def test_convert_st(shared_datadir, script_runner, tmp_path):
+@pytest.mark.parametrize("extra_args", [[], ["--no-mask", "--scale=0.5"]])
+def test_convert_st(extra_args, shared_datadir, script_runner, tmp_path):
     r"""Test convert Spatial Transcriptomics Pipeline run"""
 
     ret = script_runner.run(
@@ -104,12 +105,14 @@ def test_convert_st(shared_datadir, script_runner, tmp_path):
         "--image=" + str(shared_datadir / "files" / "st" / "image.jpg"),
         "--spots=" + str(shared_datadir / "files" / "st" / "spots.tsv"),
         "--save-path=" + str(tmp_path),
+        *extra_args,
     )
     assert ret.success
     assert os.path.exists(tmp_path / "data.h5")
 
 
-def test_convert_visium(shared_datadir, script_runner, tmp_path):
+@pytest.mark.parametrize("extra_args", [[], ["--no-mask", "--scale=0.5"]])
+def test_convert_visium(extra_args, shared_datadir, script_runner, tmp_path):
     r"""Test convert Space Ranger run"""
 
     ret = script_runner.run(
@@ -123,6 +126,7 @@ def test_convert_visium(shared_datadir, script_runner, tmp_path):
         "--scale-factors="
         + str(shared_datadir / "files" / "visium" / "scale_factors.json"),
         "--save-path=" + str(tmp_path),
+        *extra_args,
     )
     assert ret.success
     assert os.path.exists(tmp_path / "data.h5")
