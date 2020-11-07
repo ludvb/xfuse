@@ -11,6 +11,7 @@ from .utility import (
     Spot,
     labels_from_spots,
     mask_tissue,
+    trim_margin,
     write_data,
 )
 
@@ -67,6 +68,8 @@ def run(
 
     label = np.zeros(image.shape[:2]).astype(np.int16)
     labels_from_spots(label, spots)
+
+    image, label = trim_margin(image, label)
 
     if mask:
         counts, label = mask_tissue(image, counts, label)
