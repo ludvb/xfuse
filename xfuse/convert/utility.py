@@ -219,6 +219,12 @@ def write_data(
             "Count matrix contains duplicated columns."
             " Counts will be summed by column name."
         )
+        try:
+            counts = counts.sparse.to_dense()
+        except AttributeError:
+            pass
+        # ^ HACK: line below fails with KeyError on pandas 1.1.4 when `counts`
+        #         is sparse
         counts = counts.sum(axis=1, level=0)
 
     data_mask = ~np.isin(label, counts.index[counts.sum(1) == 0])
