@@ -186,9 +186,6 @@ def trim_margin(
     image = image[row_mask][:, col_mask]
     label = label[row_mask][:, col_mask]
 
-    image = image[1:-1, 1:-1]
-    label = label[1:-1, 1:-1]
-
     return image, label
 
 
