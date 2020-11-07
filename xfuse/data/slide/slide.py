@@ -61,7 +61,7 @@ class STSlide(SlideData):
         self._datafile = datafile
         with h5py.File(datafile, "r") as data:
             self.H, self.W, _ = data["image"].shape
-            self.genes = list(data["counts"]["columns"][()])
+            self.genes = list(data["counts"]["columns"][()].astype(str))
         self.__always_filter = always_filter or []
         self.__always_keep = always_keep or []
         self.cache_data = cache_data
@@ -110,10 +110,13 @@ class STSlide(SlideData):
 
     @genes.setter
     def genes(self, genes: List[str]) -> STSlide:
-        self.__gene_list = np.array(genes).astype(str)
+        self.__gene_list = np.array(genes)
         with h5py.File(self._datafile, "r") as data:
             idxs = {
-                gene: i for i, gene in enumerate(data["counts"]["columns"][()])
+                gene: i
+                for i, gene in enumerate(
+                    data["counts"]["columns"][()].astype(str)
+                )
             }
         self.__gene_idxs = np.array(
             [idxs[gene] if gene in idxs else -1 for gene in genes]
