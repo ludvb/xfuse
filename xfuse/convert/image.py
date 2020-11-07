@@ -6,7 +6,7 @@ from PIL import Image
 
 from ..utility.core import rescale
 from ..utility.mask import compute_tissue_mask
-from .utility import write_data
+from .utility import trim_margin, write_data
 
 
 def run(
@@ -39,6 +39,13 @@ def run(
     counts = pd.DataFrame(
         index=pd.Series(np.unique(label[label != 0]), name="n")
     )
+
+    image, label = trim_margin(image, label)
+    if scale_factor is not None:
+        # The outermost pixels may belong in part to the margin if we
+        # downscaled the image. Therefore, remove one extra row/column.
+        image = image[1:-1, 1:-1]
+        label = label[1:-1, 1:-1]
 
     write_data(
         counts,

@@ -70,10 +70,9 @@ def run(
     labels_from_spots(label, spots)
 
     image, label = trim_margin(image, label)
-
-    # The outermost pixels may belong in part to the margin if we downscaled
-    # the image. Therefore, remove one extra row/column.
     if scale_factor is not None:
+        # The outermost pixels may belong in part to the margin if we
+        # downscaled the image. Therefore, remove one extra row/column.
         image = image[1:-1, 1:-1]
         label = label[1:-1, 1:-1]
 
