@@ -137,7 +137,7 @@ def compute_imputation(
                 keys=pd.Index(np.arange(len(samples)) + 1, name="sample"),
             ).to_csv(
                 os.path.join(
-                    output_dir, os.path.basename(name), "imputed_counts.csv"
+                    output_dir, os.path.basename(name), "imputed_counts.csv.gz"
                 )
             )
 

@@ -21,7 +21,10 @@ def test_compute_imputation(pretrained_toy_model, toydata, tmp_path):
     for name, slide in toydata.dataset.data.slides.items():
         name = os.path.basename(name)
         output_file = (
-            tmp_path / "imputation-annotation1" / name / "imputed_counts.csv"
+            tmp_path
+            / "imputation-annotation1"
+            / name
+            / "imputed_counts.csv.gz"
         )
         assert os.path.exists(output_file)
 
