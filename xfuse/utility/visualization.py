@@ -7,7 +7,6 @@ import torch
 from PIL import Image
 from scipy.ndimage.morphology import distance_transform_edt
 from sklearn.decomposition import PCA
-from umap import UMAP
 
 from ..data import Data, Dataset
 from ..data.slide import FullSlide, Slide
@@ -118,7 +117,7 @@ def visualize_metagenes(
     model = require("model")
     dataloader = require("dataloader")
 
-    if method not in ["pca", "umap"]:
+    if method not in ["pca"]:
         raise ValueError(f'Method "{method}" not supported')
 
     def _compute_st_activation(x):
@@ -227,8 +226,6 @@ def visualize_metagenes(
 
     if method == "pca":
         reduction = PCA(n_components=min(3, activations_training.shape[-1]))
-    elif method == "umap":
-        reduction = UMAP(n_components=min(3, activations_training.shape[-1]))
     else:
         raise RuntimeError("This path should not be reachable")
 

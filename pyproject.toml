@@ -30,7 +30,6 @@ tomlkit = "^0.7.0"
 torch = "^1.7.0"
 torchvision = "^0.8.1"
 tqdm = "^4.51.0"
-umap-learn = "^0.4.6"
 
 [tool.poetry.dev-dependencies]
 mypy = "^0.790"
