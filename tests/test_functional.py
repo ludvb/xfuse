@@ -1,6 +1,7 @@
 r"""Functional tests"""
 
 import os
+from glob import glob
 
 import pytest
 
@@ -9,6 +10,7 @@ from xfuse.session.items.training_data import TrainingData
 from xfuse.utility.state import get_state_dict, reset_state
 
 
+@pytest.mark.script_launch_mode("subprocess")
 @pytest.mark.parametrize("test_case", ["test_train_exit_status.1.toml"])
 def test_train_exit_status(shared_datadir, script_runner, tmp_path, test_case):
     r"""Test CLI invocation"""
@@ -22,7 +24,54 @@ def test_train_exit_status(shared_datadir, script_runner, tmp_path, test_case):
     assert ret.success
     assert "final.session" in os.listdir(save_path)
     assert "log" in os.listdir(save_path)
-    assert "stats" in os.listdir(save_path)
+
+
+@pytest.mark.script_launch_mode("subprocess")
+def test_train_stats_file(shared_datadir, script_runner, tmp_path):
+    r"""Test CLI invocation"""
+    save_path = tmp_path / "output_dir"
+    arguments = [
+        "run",
+        str(shared_datadir / "test_train_exit_status.1.toml"),
+        f"--save-path={save_path}",
+        "--no-tensorboard",
+        "--stats",
+    ]
+    script_runner.run("xfuse", *arguments)
+    assert os.path.exists(
+        os.path.join(save_path, "stats", "accuracy", "rmse.csv.gz")
+    )
+    assert os.path.exists(
+        os.path.join(save_path, "stats", "loss", "elbo.csv.gz")
+    )
+    assert os.path.exists(
+        os.path.join(
+            save_path, "stats", "loss", "loglikelihood", "ST", "xsg.csv.gz",
+        )
+    )
+    assert os.path.exists(
+        os.path.join(
+            save_path, "stats", "loss", "loglikelihood", "ST", "image.csv.gz",
+        )
+    )
+
+
+@pytest.mark.script_launch_mode("subprocess")
+def test_train_stats_tensorboard(shared_datadir, script_runner, tmp_path):
+    r"""Test CLI invocation"""
+    save_path = tmp_path / "output_dir"
+    arguments = [
+        "run",
+        str(shared_datadir / "test_train_exit_status.1.toml"),
+        f"--save-path={save_path}",
+        "--tensorboard",
+        "--no-stats",
+    ]
+    script_runner.run("xfuse", *arguments)
+    log_file_pattern = os.path.join(
+        save_path, "stats", "tb", "events.out.tfevents.*"
+    )
+    assert len(glob(log_file_pattern)) > 0
 
 
 @pytest.mark.parametrize(

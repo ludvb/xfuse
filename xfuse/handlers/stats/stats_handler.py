@@ -1,25 +1,21 @@
-from abc import ABC, abstractmethod
-
+import re
+from abc import ABCMeta, abstractmethod
 from functools import wraps
-import inspect
 
 from typing import Callable, Optional
 
 from pyro.poutine.messenger import Messenger
 
-from torch.utils.tensorboard.writer import SummaryWriter
-
 from ...logging import DEBUG, log
 from ...session import get
+from .writer import StatsWriter
 
 
-class StatsHandler(ABC, Messenger):
+class StatsHandler(Messenger, metaclass=ABCMeta):
     r"""Abstract class for stats trackers"""
 
     def __init__(
-        self,
-        writer: SummaryWriter,
-        predicate: Optional[Callable[..., bool]] = None,
+        self, predicate: Optional[Callable[..., bool]] = None,
     ):
         super().__init__()
 
@@ -27,28 +23,20 @@ class StatsHandler(ABC, Messenger):
             predicate = lambda **_: True
         self.predicate = predicate
 
-        self.__writer = writer
-
         def _add_writer_method(name, method):
-            setattr(
-                self,
-                name,
-                wraps(method)(
-                    lambda *args, **kwargs: method(
-                        *args, global_step=get("training_data").step, **kwargs
-                    )
-                    if "global_step" in inspect.signature(method).parameters
-                    else method
-                ),
-            )
+            @wraps(method, assigned=("__doc__", "__annotations__"), updated=())
+            def _wrapped(*args, **kwargs):
+                stats_writers = get("stats_writers")
+                for stats_writer in stats_writers:
+                    getattr(stats_writer, name)(*args, **kwargs)
+
+            setattr(self, name, _wrapped)
 
         for name, method in (
             (name, attr)
-            for name, attr in (
-                (name, getattr(self.__writer, name))
-                for name in dir(self.__writer)
-            )
-            if name[0] != "_"
+            for name in dir(StatsWriter)
+            if re.match(r"^add_.*$", name)
+            for attr in [getattr(StatsWriter, name)]
             if callable(attr)
         ):
             _add_writer_method(name, method)

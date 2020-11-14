@@ -1,7 +1,6 @@
 r"""Integration tests"""
 
 import pyro.optim
-from torch.utils.tensorboard import SummaryWriter
 
 import pytest
 from xfuse.handlers.stats import RMSE
@@ -19,7 +18,7 @@ from xfuse.utility.design import extract_covariates
 
 @pytest.mark.fix_rng
 @pytest.mark.slow
-def test_toydata(tmp_path, mocker, toydata):
+def test_toydata(mocker, toydata):
     r"""Integration test on toy dataset"""
     st_experiment = ST(
         depth=2,
@@ -27,8 +26,7 @@ def test_toydata(tmp_path, mocker, toydata):
         metagenes=[MetageneDefault(0.0, None) for _ in range(3)],
     )
     xfuse = XFuse(experiments=[st_experiment])
-    summary_writer = SummaryWriter(tmp_path)
-    rmse = RMSE(summary_writer)
+    rmse = RMSE()
     rmse.add_scalar = mocker.MagicMock()
     with Session(
         model=xfuse,

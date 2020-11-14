@@ -1,5 +1,4 @@
 import itertools as it
-import os
 from contextlib import ExitStack
 from typing import List
 
@@ -7,7 +6,6 @@ import numpy as np
 import pyro
 from pyro.poutine.messenger import Messenger
 from pyro.poutine.runtime import effectful
-from torch.utils.tensorboard.writer import SummaryWriter
 
 from .handlers import Checkpointer, stats
 from .logging import DEBUG, INFO, Progressbar, log
@@ -55,20 +53,18 @@ def train(epochs: int = -1):
 
             return _predicate
 
-        writer = SummaryWriter(os.path.join(get("save_path"), "stats"))
-
         messengers.extend(
             [
-                stats.ELBO(writer, _every(1)),
-                stats.MetageneHistogram(writer, _every(100)),
-                stats.MetageneMean(writer, _every(100)),
-                stats.MetageneSummary(writer, _every(1000)),
-                stats.MetageneFullSummary(writer, _every(5000)),
-                stats.Image(writer, _every(1000)),
-                stats.Latent(writer, _every(1000)),
-                stats.LogLikelihood(writer, _every(1)),
-                stats.RMSE(writer, _every(1)),
-                stats.Scale(writer, _every(1000)),
+                stats.ELBO(_every(1)),
+                stats.MetageneHistogram(_every(100)),
+                stats.MetageneMean(_every(100)),
+                stats.MetageneSummary(_every(1000)),
+                stats.MetageneFullSummary(_every(5000)),
+                stats.Image(_every(1000)),
+                stats.Latent(_every(1000)),
+                stats.LogLikelihood(_every(1)),
+                stats.RMSE(_every(1)),
+                stats.Scale(_every(1000)),
             ]
         )
 

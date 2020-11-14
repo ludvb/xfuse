@@ -12,4 +12,5 @@ from .mpl_backend import *
 from .optimizer import *
 from .pyro_stack import *
 from .save_path import *
+from .stats_writers import *
 from .training_data import *

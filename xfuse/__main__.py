@@ -32,6 +32,7 @@ from .utility.core import temp_attr
 from .utility.design import design_matrix_from, extract_covariates
 from .utility.file import first_unique_filename
 from .session.io import load_session
+from .handlers.stats.writer import FileWriter, TensorboardWriter
 
 
 def _init(f):
@@ -272,8 +273,10 @@ cli.add_command(init)
 @click.command()
 @click.argument("project-file", type=click.File("rb"))
 @click.option("--session", type=click.File("rb"))
+@click.option("--tensorboard/--no-tensorboard", default=True)
+@click.option("--stats/--no-stats", default=False)
 @_init
-def run(project_file, session):
+def run(project_file, session, tensorboard, stats):
     r"""
     Runs xfuse based on a project configuration file.
     The configuration file can be created manually or using the `init`
@@ -334,7 +337,15 @@ def run(project_file, session):
         if genes is None and config["xfuse"]["genes"] != []:
             genes = config["xfuse"]["genes"]
 
-        with Session(covariates=covariates, genes=genes):
+        stats_writers = []
+        if stats:
+            stats_writers.append(FileWriter())
+        if tensorboard:
+            stats_writers.append(TensorboardWriter())
+
+        with Session(
+            covariates=covariates, genes=genes, stats_writers=stats_writers
+        ):
             _run(
                 design,
                 analyses=config["analyses"],
