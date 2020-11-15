@@ -19,7 +19,7 @@ from .model.experiment.st.metagene_expansion_strategy import (
     STRATEGIES,
     ExpansionStrategy,
 )
-from .model.experiment.st.metagene_eval import purge_metagenes
+from .model.experiment.st.metagene_eval import MetagenePurger, purge_metagenes
 from .model.experiment.st.metagene_expansion_strategy import Extra
 from .optim import Adam  # type: ignore  # pylint: disable=no-name-in-module
 from .session import Session, get, require
@@ -34,6 +34,9 @@ def run(
     expansion_strategy: ExpansionStrategy = STRATEGIES[
         CONFIG["expansion_strategy"].value["type"].value
     ](),
+    purge_interval: int = CONFIG["expansion_strategy"]
+    .value["purge_interval"]
+    .value,
     network_depth: int = CONFIG["xfuse"].value["network_depth"].value,
     network_width: int = CONFIG["xfuse"].value["network_width"].value,
     min_counts: int = CONFIG["xfuse"].value["min_counts"].value,
@@ -130,6 +133,17 @@ def run(
         model=xfuse,
         genes=genes,
         learning_rate=learning_rate,
+        messengers=[
+            MetagenePurger(
+                period=lambda e: (
+                    purge_interval > 0
+                    and e % purge_interval == 0
+                    and (epochs < 0 or e <= epochs - purge_interval)
+                ),
+                num_samples=3,
+            ),
+            *get("messengers"),
+        ],
         metagene_expansion_strategy=expansion_strategy,
         optimizer=optimizer,
         dataloader=dataloader,
@@ -142,8 +156,14 @@ def run(
         )
         if not has_converged:
             train(epochs)
-            with Session(metagene_expansion_strategy=Extra(0)):
-                purge_metagenes(xfuse, num_samples=10)
+            with Session(model=xfuse, metagene_expansion_strategy=Extra(0)):
+                try:
+                    purge_metagenes(num_samples=10)
+                except RuntimeError as exc:
+                    if "Cannot remove last metagene" in str(exc):
+                        warnings.warn("Failed to find metagenes")
+                    else:
+                        raise
             save_session("final")
 
     with Session(

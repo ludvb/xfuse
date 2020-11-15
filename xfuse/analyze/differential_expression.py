@@ -29,7 +29,7 @@ def compute_differential_expression(
     output_dir = os.path.join(save_path, "differential_expression")
 
     with Session(
-        default_device=torch.device("cpu"), pyro_stack=[]
+        default_device=torch.device("cpu"), messengers=[]
     ), torch.no_grad():
         samples: Dict[str, List[torch.Tensor]] = {
             annotation_layer1: [],

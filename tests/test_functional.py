@@ -17,17 +17,21 @@ def test_train_exit_status(shared_datadir, script_runner, tmp_path, test_case):
     save_path = tmp_path / "output_dir"
     arguments = [
         "run",
-        f"--save-path={save_path}",
         str(shared_datadir / test_case),
+        f"--save-path={save_path}",
+        "--checkpoint-interval=1",
+        "--purge-interval=1",
     ]
     ret = script_runner.run("xfuse", *arguments)
     assert ret.success
     assert "final.session" in os.listdir(save_path)
     assert "log" in os.listdir(save_path)
+    checkpoint_pattern = os.path.join(save_path, "checkpoints", "*.session")
+    assert len(glob(checkpoint_pattern)) > 0
 
 
 @pytest.mark.script_launch_mode("subprocess")
-def test_train_stats_file(shared_datadir, script_runner, tmp_path):
+def test_train_stats_filewriter(shared_datadir, script_runner, tmp_path):
     r"""Test CLI invocation"""
     save_path = tmp_path / "output_dir"
     arguments = [
@@ -36,6 +40,16 @@ def test_train_stats_file(shared_datadir, script_runner, tmp_path):
         f"--save-path={save_path}",
         "--no-tensorboard",
         "--stats",
+        "--stats-elbo-interval=1",
+        "--stats-image-interval=1",
+        "--stats-latent-interval=1",
+        "--stats-loglikelihood-interval=1",
+        "--stats-metagenefullsummary-interval=1",
+        "--stats-metagenehistogram-interval=1",
+        "--stats-metagenemean-interval=1",
+        "--stats-metagenesummary-interval=1",
+        "--stats-rmse-interval=1",
+        "--stats-scale-interval=1",
     ]
     script_runner.run("xfuse", *arguments)
     assert os.path.exists(
@@ -46,18 +60,65 @@ def test_train_stats_file(shared_datadir, script_runner, tmp_path):
     )
     assert os.path.exists(
         os.path.join(
-            save_path, "stats", "loss", "loglikelihood", "ST", "xsg.csv.gz",
+            save_path, "stats", "loss", "loglikelihood", "ST", "xsg.csv.gz"
         )
     )
     assert os.path.exists(
         os.path.join(
-            save_path, "stats", "loss", "loglikelihood", "ST", "image.csv.gz",
+            save_path, "stats", "loss", "loglikelihood", "ST", "image.csv.gz"
         )
+    )
+    assert os.path.exists(
+        os.path.join(save_path, "stats", "metagene-mean", "metagene-1.csv.gz")
+    )
+    assert os.path.exists(
+        os.path.join(
+            save_path,
+            "stats",
+            "image",
+            "metagene-1",
+            "profile",
+            "ST",
+            "meansort-1-1.png",
+        )
+    )
+    assert os.path.exists(
+        os.path.join(
+            save_path,
+            "stats",
+            "image",
+            "metagene-1",
+            "profile",
+            "ST",
+            "invcvsort-1-1.png",
+        )
+    )
+    assert os.path.exists(
+        os.path.join(save_path, "stats", "image", "image", "sample-1-1.png")
+    )
+    assert os.path.exists(
+        os.path.join(save_path, "stats", "image", "image", "mean-1-1.png")
+    )
+    assert os.path.exists(
+        os.path.join(
+            save_path, "stats", "image", "image", "ground_truth-1-1.png"
+        )
+    )
+    assert os.path.exists(
+        os.path.join(save_path, "stats", "image", "scale-1-1.png")
+    )
+    assert os.path.exists(
+        os.path.join(save_path, "stats", "image", "z", "ST-1-1-1.png")
+    )
+    assert os.path.exists(
+        os.path.join(save_path, "stats", "image", "z", "ST-0-1-1.png")
     )
 
 
 @pytest.mark.script_launch_mode("subprocess")
-def test_train_stats_tensorboard(shared_datadir, script_runner, tmp_path):
+def test_train_stats_tensorboardwriter(
+    shared_datadir, script_runner, tmp_path
+):
     r"""Test CLI invocation"""
     save_path = tmp_path / "output_dir"
     arguments = [
@@ -66,6 +127,16 @@ def test_train_stats_tensorboard(shared_datadir, script_runner, tmp_path):
         f"--save-path={save_path}",
         "--tensorboard",
         "--no-stats",
+        "--stats-elbo-interval=1",
+        "--stats-image-interval=1",
+        "--stats-latent-interval=1",
+        "--stats-loglikelihood-interval=1",
+        "--stats-metagenefullsummary-interval=1",
+        "--stats-metagenehistogram-interval=1",
+        "--stats-metagenemean-interval=1",
+        "--stats-metagenesummary-interval=1",
+        "--stats-rmse-interval=1",
+        "--stats-scale-interval=1",
     ]
     script_runner.run("xfuse", *arguments)
     log_file_pattern = os.path.join(

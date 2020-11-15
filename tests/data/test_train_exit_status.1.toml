@@ -3,6 +3,8 @@ network_depth = 2
 
 [optimization]
 epochs = 10
+batch_size = 2
+patch_size = 32
 
 [slides]
 [slides."./files/toydata.h5"]

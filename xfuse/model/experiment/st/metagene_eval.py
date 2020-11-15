@@ -1,4 +1,3 @@
-import warnings
 from copy import deepcopy
 from typing import Any, Callable, NoReturn, Union, cast
 
@@ -6,22 +5,27 @@ import numpy as np
 import pyro as p
 from pyro.poutine.messenger import Messenger
 
-from ....handlers import Noop
 from ....logging import INFO, WARNING, log
-from ....session.session import Session, get, require
+from ....session.session import Session, require
 from ....utility.tensor import to_device
 from ... import XFuse
 from ...utility import compare
 from . import ST
+from .metagene_expansion_strategy import ExpansionStrategy
 
 
-def purge_metagenes(xfuse: XFuse, num_samples: int = 1) -> None:
+def purge_metagenes(num_samples: int = 1) -> None:
     r"""
     Purges superfluous metagenes and adds new ones based on the
     `metagene_expansion_strategy` of the current :class:`Session`
     """
 
     log(INFO, "Evaluating metagenes")
+
+    xfuse: XFuse = require("model")
+    metagene_expansion_strategy: ExpansionStrategy = require(
+        "metagene_expansion_strategy"
+    )
 
     def _xfuse_without(n):
         reduced_xfuse = deepcopy(xfuse)
@@ -72,8 +76,7 @@ def purge_metagenes(xfuse: XFuse, num_samples: int = 1) -> None:
         ", ".join(noncontrib) if noncontrib != [] else "-",
     )
 
-    expand_metagenes = get("metagene_expansion_strategy")
-    expand_metagenes(xfuse.get_experiment("ST"), contrib, noncontrib)
+    metagene_expansion_strategy(st_experiment, contrib, noncontrib)
 
 
 class MetagenePurger(Messenger):
@@ -81,22 +84,6 @@ class MetagenePurger(Messenger):
     Runs :func:`purge_metagenes` at a fixed interval to purge superfluous
     metagenes or add new ones
     """
-
-    _model: XFuse
-
-    def __new__(cls, *_args, **_kwargs):
-        try:
-            xfuse = get("model")
-            _ = xfuse.get_experiment("ST")
-        except (AttributeError, KeyError):
-            warnings.warn(
-                "Session model does not have an ST experiment."
-                f" {cls.__name__} will be disabled."
-            )
-            return Noop()
-        instance = super().__new__(cls)
-        instance._model = xfuse
-        return instance
 
     def __init__(
         self, period: Union[int, Callable[[int], bool]] = 1, **kwargs: Any
@@ -119,5 +106,5 @@ class MetagenePurger(Messenger):
 
     def _pyro_post_epoch(self, msg) -> None:
         if self._predicate(msg["kwargs"]["epoch"]):
-            with Session(pyro_stack=[]):
-                purge_metagenes(self._model, **self._kwargs)
+            with Session(messengers=[]):
+                purge_metagenes(**self._kwargs)

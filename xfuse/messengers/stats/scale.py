@@ -1,4 +1,4 @@
-from .stats_handler import StatsHandler
+from .stats_handler import StatsHandler, log_images
 
 
 class Scale(StatsHandler):
@@ -14,4 +14,4 @@ class Scale(StatsHandler):
         # pylint: disable=no-member
         scale = fn.mean.permute(0, 2, 3, 1)
         scale = scale / scale.max()
-        self.add_images("scale", scale, dataformats="NHWC")
+        log_images("scale", scale)

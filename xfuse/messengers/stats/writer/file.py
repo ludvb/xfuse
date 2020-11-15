@@ -5,12 +5,14 @@ from multiprocessing import Pool
 from typing import Dict, Optional
 from warnings import warn
 
+import numpy as np
 import torch
 from imageio import imwrite
 
 from . import StatsWriter
 from ....session import get, require
 from ....utility.file import first_unique_filename
+from ....utility.visualization import _normalize
 
 
 __all__ = ["FileWriter"]
@@ -23,7 +25,7 @@ class FileWriter(StatsWriter):
         self._worker_pool = Pool(num_workers)
         self._file_cons: Dict[str, gzip.GzipFile] = {}
 
-    def add_histogram(
+    def write_histogram(
         self, tag: str, values: torch.Tensor, bins: Optional[int] = None
     ) -> None:
         r"""Logs a histogram"""
@@ -33,9 +35,10 @@ class FileWriter(StatsWriter):
             )
         )
 
-    def add_image(self, tag: str, img_tensor: torch.Tensor) -> None:
+    def write_image(self, tag: str, img_tensor: torch.Tensor) -> None:
         r"""Logs an image"""
         save_path = require("save_path")
+        training_data = get("training_data")
         *prefix, name = tag.split("/")
         filename = first_unique_filename(
             os.path.join(
@@ -43,23 +46,31 @@ class FileWriter(StatsWriter):
                 "stats",
                 "image",
                 *prefix,
-                f"{name}-{int(time.time())}.jpg",
+                f"{name}-{training_data.epoch}-{training_data.step}.png",
             )
         )
         os.makedirs(os.path.dirname(filename), exist_ok=True)
-        self._worker_pool.apply_async(
-            imwrite, (filename, img_tensor.cpu().numpy()),
-        )
+        img = img_tensor.detach().cpu().numpy()
+        img = _normalize(img)
+        img = (255 * img).astype(np.uint8)
+        self._worker_pool.apply_async(imwrite, (filename, img))
 
-    def add_images(self, tag: str, img_tensor: torch.Tensor) -> None:
+    def write_images(self, tag: str, img_tensor: torch.Tensor) -> None:
         r"""Logs an image grid"""
-        warn(
-            RuntimeWarning(
-                "Image grid logging is not yet supported for this writer"
-            )
+        N, H, W, C = img_tensor.shape  # pylint: disable=invalid-name
+        cols = int(np.ceil(N ** 0.5))
+        rows = int(np.ceil(N / cols))
+        img_tensor = torch.cat(
+            [img_tensor, torch.zeros(rows * cols - N, H, W, C).to(img_tensor)],
         )
+        img_tensor = (
+            img_tensor.reshape(rows, cols, H, W, C)
+            .permute(0, 2, 1, 3, 4)
+            .reshape(rows * H, cols * W, C)
+        )
+        self.write_image(tag, img_tensor)
 
-    def add_scalar(self, tag: str, scalar_value: float) -> None:
+    def write_scalar(self, tag: str, scalar_value: float) -> None:
         r"""Logs a scalar"""
         save_path = require("save_path")
         training_data = get("training_data")

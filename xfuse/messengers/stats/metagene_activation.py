@@ -1,4 +1,3 @@
-import warnings
 from abc import abstractmethod
 
 import matplotlib.pyplot as plt
@@ -10,10 +9,16 @@ from ...analyze.metagenes import (
     visualize_metagene_profile,
 )
 from ...model.experiment.st import ST
-from ...session import require
+from ...session import get
 from ...utility.visualization import reduce_last_dimension, visualize_metagenes
-from .. import Noop
-from .stats_handler import StatsHandler
+from .stats_handler import (
+    StatsHandler,
+    log_figure,
+    log_histogram,
+    log_image,
+    log_images,
+    log_scalar,
+)
 
 __all__ = [
     "MetageneHistogram",
@@ -26,21 +31,6 @@ __all__ = [
 class Metagene(StatsHandler):
     r"""Abstract class for metagene trackers"""
 
-    _experiment: ST
-
-    def __new__(cls, *_args, **_kwargs):
-        try:
-            st_experiment: ST = require("model").get_experiment("ST")
-        except (AttributeError, KeyError):
-            warnings.warn(
-                "Session model does not have an ST experiment."
-                f" {cls.__name__} will be disabled."
-            )
-            return Noop()
-        instance = super().__new__(cls)
-        instance._experiment = st_experiment
-        return instance
-
     def _select_msg(self, type, name, **_):
         # pylint: disable=arguments-differ
         # pylint: disable=redefined-builtin
@@ -52,10 +42,12 @@ class Metagene(StatsHandler):
 
     def _handle(self, fn, **_):
         # pylint: disable=arguments-differ
-        for name, metagene in zip(
-            self._experiment.metagenes, fn.mean.permute(1, 0, 2, 3)
-        ):
-            self._handle_metagene(name, metagene)
+        if (model := get("model")) is not None:
+            experiment: ST = model.get_experiment("ST")
+            for name, metagene in zip(
+                experiment.metagenes, fn.mean.permute(1, 0, 2, 3)
+            ):
+                self._handle_metagene(name, metagene)
 
 
 class MetageneHistogram(Metagene):
@@ -63,7 +55,7 @@ class MetageneHistogram(Metagene):
 
     def _handle_metagene(self, name, metagene):
         # pylint: disable=no-member
-        self.add_histogram(
+        log_histogram(
             f"metagene-histogram/metagene-{name}", metagene.flatten()
         )
 
@@ -73,7 +65,7 @@ class MetageneMean(Metagene):
 
     def _handle_metagene(self, name, metagene):
         # pylint: disable=no-member
-        self.add_scalar(f"metagene-mean/metagene-{name}", metagene.mean())
+        log_scalar(f"metagene-mean/metagene-{name}", metagene.mean())
 
 
 class MetageneSummary(StatsHandler):
@@ -93,10 +85,11 @@ class MetageneSummary(StatsHandler):
         # pylint: disable=arguments-differ
         # pylint: disable=no-member
         try:
-            self.add_images(
+            log_images(
                 "metagene-batch-summary",
-                reduce_last_dimension(fn.mean.permute(0, 2, 3, 1)),
-                dataformats="NHWC",
+                torch.as_tensor(
+                    reduce_last_dimension(fn.mean.permute(0, 2, 3, 1))
+                ),
             )
         except ValueError:
             pass
@@ -117,16 +110,14 @@ class MetageneFullSummary(StatsHandler):
                     visualize_metagenes(), 1,
                 ):
                     # pylint: disable=no-member
-                    self.add_image(
+                    log_image(
                         f"metagene-summary/sample-{i}",
                         torch.as_tensor(summarization),
-                        dataformats="HWC",
                     )
                     for name, metagene in metagenes:
-                        self.add_image(
+                        log_image(
                             f"metagene-{name}/sample-{i}",
                             torch.as_tensor(metagene),
-                            dataformats="HWC",
                         )
         except ValueError:
             pass
@@ -144,8 +135,7 @@ class MetageneFullSummary(StatsHandler):
                     sort_by="invcv",
                 )
                 plt.tight_layout(pad=0.0)
-                # pylint: disable=no-member
-                self.add_figure(
+                log_figure(
                     f"metagene-{name}/profile/{experiment}/invcvsort", fig,
                 )
 
@@ -154,7 +144,6 @@ class MetageneFullSummary(StatsHandler):
                     profile.loc[name], num_high=20, num_low=10, sort_by="mean",
                 )
                 plt.tight_layout(pad=0.0)
-                # pylint: disable=no-member
-                self.add_figure(
+                log_figure(
                     f"metagene-{name}/profile/{experiment}/meansort", fig,
                 )

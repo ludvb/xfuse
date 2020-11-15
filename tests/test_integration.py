@@ -3,7 +3,8 @@ r"""Integration tests"""
 import pyro.optim
 
 import pytest
-from xfuse.handlers.stats import RMSE
+
+from xfuse.messengers.stats import RMSE
 from xfuse.model import XFuse
 from xfuse.model.experiment.st import ST, MetageneDefault
 from xfuse.model.experiment.st.metagene_eval import purge_metagenes
@@ -27,15 +28,16 @@ def test_toydata(mocker, toydata):
     )
     xfuse = XFuse(experiments=[st_experiment])
     rmse = RMSE()
-    rmse.add_scalar = mocker.MagicMock()
+    mock_log_scalar = mocker.patch("xfuse.messengers.stats.rmse.log_scalar")
     with Session(
         model=xfuse,
         optimizer=pyro.optim.Adam({"lr": 0.0001}),
         dataloader=toydata,
         covariates=extract_covariates(toydata.dataset.data.design),
-    ), rmse:
+        messengers=[rmse],
+    ):
         train(100 + get("training_data").epoch)
-    rmses = [x[1][1] for x in rmse.add_scalar.mock_calls]
+    rmses = [x[1][1] for x in mock_log_scalar.mock_calls]
     assert rmses[-1] < 6.0
 
 
@@ -62,9 +64,10 @@ def test_metagene_expansion(
         expansion_strategies, compute_expected_metagenes(num_start_metagenes)
     ):
         with Session(
-            metagene_expansion_strategy=expansion_strategy,
-            dataloader=toydata,
             covariates=extract_covariates(toydata.dataset.data.design),
+            dataloader=toydata,
+            metagene_expansion_strategy=expansion_strategy,
+            model=pretrained_toy_model,
         ):
-            purge_metagenes(pretrained_toy_model, num_samples=10)
+            purge_metagenes(num_samples=10)
         assert len(st_experiment.metagenes) == expected_metagenes

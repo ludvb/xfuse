@@ -30,7 +30,7 @@ class TensorboardWriter(StatsWriter):
             self.__summary_writer = SummaryWriter(log_dir=log_dir)
         return self.__summary_writer
 
-    def add_histogram(
+    def write_histogram(
         self, tag: str, values: torch.Tensor, bins: Optional[int] = None
     ) -> None:
         r"""Logs a histogram"""
@@ -38,7 +38,7 @@ class TensorboardWriter(StatsWriter):
             tag, values, global_step=get("training_data").step
         )
 
-    def add_image(self, tag: str, img_tensor: torch.Tensor) -> None:
+    def write_image(self, tag: str, img_tensor: torch.Tensor) -> None:
         r"""Logs an image"""
         self._summary_writer.add_image(
             tag,
@@ -47,7 +47,7 @@ class TensorboardWriter(StatsWriter):
             dataformats="HWC",
         )
 
-    def add_images(self, tag: str, img_tensor: torch.Tensor) -> None:
+    def write_images(self, tag: str, img_tensor: torch.Tensor) -> None:
         r"""Logs an image grid"""
         self._summary_writer.add_images(
             tag,
@@ -56,7 +56,7 @@ class TensorboardWriter(StatsWriter):
             dataformats="NHWC",
         )
 
-    def add_scalar(self, tag: str, scalar_value: float) -> None:
+    def write_scalar(self, tag: str, scalar_value: float) -> None:
         r"""Logs a scalar"""
         self._summary_writer.add_scalar(
             tag, scalar_value, global_step=get("training_data").step

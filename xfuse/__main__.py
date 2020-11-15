@@ -23,16 +23,17 @@ from ._config import (  # type: ignore
     merge_config,
 )
 from .logging import DEBUG, INFO, log
+from .messengers import Checkpointer, stats as stats_trackers
+from .messengers.stats.writer import FileWriter, TensorboardWriter
 from .model.experiment.st.metagene_expansion_strategy import (
     STRATEGIES as expansion_strategies,
 )
 from .run import run as _run
-from .session import Session, get, require
 from .utility.core import temp_attr
 from .utility.design import design_matrix_from, extract_covariates
 from .utility.file import first_unique_filename
+from .session import Session, get, require
 from .session.io import load_session
-from .handlers.stats.writer import FileWriter, TensorboardWriter
 
 
 def _init(f):
@@ -54,7 +55,6 @@ def _init(f):
                 save_path=save_path,
                 log_file=[sys.stderr, log_file],
                 log_level=DEBUG if debug else INFO,
-                mpl_backend="Agg",
             ):
                 sys.excepthook = lambda *_: None
                 with temp_attr(
@@ -275,13 +275,47 @@ cli.add_command(init)
 @click.option("--session", type=click.File("rb"))
 @click.option("--tensorboard/--no-tensorboard", default=True)
 @click.option("--stats/--no-stats", default=False)
+@click.option("--stats-elbo-interval", default=1)
+@click.option("--stats-image-interval", default=1000)
+@click.option("--stats-latent-interval", default=1000)
+@click.option("--stats-loglikelihood-interval", default=1)
+@click.option("--stats-metagenefullsummary-interval", default=5000)
+@click.option("--stats-metagenehistogram-interval", default=100)
+@click.option("--stats-metagenemean-interval", default=100)
+@click.option("--stats-metagenesummary-interval", default=1000)
+@click.option("--stats-rmse-interval", default=1)
+@click.option("--stats-scale-interval", default=1000)
+@click.option("--checkpoint-interval", default=1000)
+@click.option("--purge-interval", default=1000)
 @_init
-def run(project_file, session, tensorboard, stats):
+def run(
+    project_file,
+    session,
+    tensorboard,
+    stats,
+    stats_elbo_interval,
+    stats_image_interval,
+    stats_latent_interval,
+    stats_loglikelihood_interval,
+    stats_metagenefullsummary_interval,
+    stats_metagenehistogram_interval,
+    stats_metagenemean_interval,
+    stats_metagenesummary_interval,
+    stats_rmse_interval,
+    stats_scale_interval,
+    checkpoint_interval,
+    purge_interval,
+):
     r"""
     Runs xfuse based on a project configuration file.
     The configuration file can be created manually or using the `init`
     subcommand.
     """
+    # pylint: disable=too-many-arguments
+    # pylint: disable=too-many-locals
+    # pylint: disable=too-many-branches
+    # pylint: disable=too-many-statements
+
     save_path = require("save_path")
     base_session = load_session(session) if session is not None else Session()
     with base_session:
@@ -343,13 +377,73 @@ def run(project_file, session, tensorboard, stats):
         if tensorboard:
             stats_writers.append(TensorboardWriter())
 
+        def _every(n):
+            def _predicate(**_msg):
+                return not get("eval") and get("training_data").step % n == 0
+
+            return _predicate
+
+        messengers = []
+        if stats_elbo_interval > 0:
+            messengers.append(stats_trackers.ELBO(_every(stats_elbo_interval)))
+        if stats_image_interval > 0:
+            messengers.append(
+                stats_trackers.Image(_every(stats_image_interval))
+            )
+        if stats_latent_interval > 0:
+            messengers.append(
+                stats_trackers.Latent(_every(stats_latent_interval))
+            )
+        if stats_loglikelihood_interval > 0:
+            messengers.append(
+                stats_trackers.LogLikelihood(
+                    _every(stats_loglikelihood_interval)
+                )
+            )
+        if stats_metagenefullsummary_interval > 0:
+            messengers.append(
+                stats_trackers.MetageneFullSummary(
+                    _every(stats_metagenefullsummary_interval)
+                )
+            )
+        if stats_metagenehistogram_interval > 0:
+            messengers.append(
+                stats_trackers.MetageneHistogram(
+                    _every(stats_metagenehistogram_interval)
+                )
+            )
+        if stats_metagenemean_interval > 0:
+            messengers.append(
+                stats_trackers.MetageneMean(
+                    _every(stats_metagenemean_interval)
+                )
+            )
+        if stats_metagenesummary_interval > 0:
+            messengers.append(
+                stats_trackers.MetageneSummary(
+                    _every(stats_metagenesummary_interval)
+                )
+            )
+        if stats_rmse_interval > 0:
+            messengers.append(stats_trackers.RMSE(_every(stats_rmse_interval)))
+        if stats_scale_interval > 0:
+            messengers.append(
+                stats_trackers.Scale(_every(stats_scale_interval))
+            )
+        if checkpoint_interval > 0:
+            messengers.append(Checkpointer(period=checkpoint_interval))
+
         with Session(
-            covariates=covariates, genes=genes, stats_writers=stats_writers
+            covariates=covariates,
+            genes=genes,
+            messengers=messengers,
+            stats_writers=stats_writers,
         ):
             _run(
                 design,
                 analyses=config["analyses"],
                 expansion_strategy=expansion_strategy,
+                purge_interval=purge_interval,
                 network_depth=config["xfuse"]["network_depth"],
                 network_width=config["xfuse"]["network_width"],
                 min_counts=config["xfuse"]["min_counts"],

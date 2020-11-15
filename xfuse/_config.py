@@ -110,6 +110,13 @@ _ANNOTATED_CONFIG = OrderedDict(
                                 value="DropAndSplit",
                             ),
                         ),
+                        (
+                            "purge_interval",
+                            Item(
+                                comment="Metagene purging interval (epochs)",
+                                value=1000,
+                            ),
+                        ),
                         *[
                             (
                                 name,

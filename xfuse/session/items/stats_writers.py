@@ -1,6 +1,6 @@
 from typing import List
 
-from ...handlers.stats.writer import StatsWriter
+from ...messengers.stats.writer import StatsWriter
 from .. import SessionItem, register_session_item
 
 

@@ -1,4 +1,4 @@
-from .stats_handler import StatsHandler
+from .stats_handler import StatsHandler, log_images
 
 
 class Image(StatsHandler):
@@ -12,6 +12,6 @@ class Image(StatsHandler):
     def _handle(self, fn, value, **_):
         # pylint: disable=arguments-differ
         # pylint: disable=no-member
-        self.add_images("image/ground_truth", (1 + value) / 2)
-        self.add_images("image/mean", (1 + fn.mean) / 2)
-        self.add_images("image/sample", (1 + fn.sample()) / 2)
+        log_images("image/ground_truth", (1 + value.permute(0, 2, 3, 1)) / 2)
+        log_images("image/mean", (1 + fn.mean.permute(0, 2, 3, 1)) / 2)
+        log_images("image/sample", (1 + fn.sample().permute(0, 2, 3, 1)) / 2)
