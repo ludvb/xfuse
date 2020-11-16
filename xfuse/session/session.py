@@ -109,7 +109,7 @@ def require(name: str) -> Any:
             if not isinstance(val, Unset):
                 return val
         except AttributeError:
-            warnings.warn('Session object lacks attribute "{name}"')
+            warnings.warn(f'Session object lacks attribute "{name}"')
 
     raise RuntimeError(f"Session item {name} has not been set!")
 
