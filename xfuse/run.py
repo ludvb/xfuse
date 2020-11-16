@@ -58,7 +58,7 @@ def run(
                 [
                     f"Available cores ({available_cores}) is less than the"
                     f" requested number of workers ({num_data_workers}).",
-                    f"Setting the number of workers to {available_cores}.",
+                    f" Setting the number of workers to {available_cores}.",
                 ]
             ),
         )
