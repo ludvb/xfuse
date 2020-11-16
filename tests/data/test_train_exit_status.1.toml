@@ -7,4 +7,5 @@ batch_size = 2
 patch_size = 32
 
 [slides]
-[slides."./files/toydata.h5"]
+[slides.toydata]
+data = "./files/toydata.h5"

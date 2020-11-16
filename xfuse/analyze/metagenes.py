@@ -112,11 +112,10 @@ def compute_metagene_summary(method: str = "pca") -> None:
     with Session(
         default_device=torch.device("cpu"), messengers=[]
     ), torch.no_grad():
-        for slide_path, (summarization, metagenes) in zip(
+        for slide_name, (summarization, metagenes) in zip(
             dataloader.dataset.data.design.columns,
             visualize_metagenes(method),
         ):
-            slide_name = os.path.basename(slide_path)
             os.makedirs(os.path.join(output_dir, slide_name), exist_ok=True)
             imwrite(
                 os.path.join(output_dir, slide_name, "summary.png"),

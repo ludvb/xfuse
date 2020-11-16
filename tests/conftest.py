@@ -134,9 +134,9 @@ def toydata(tmp_path):
         path=str(filepath),
     )
 
-    design_matrix = design_matrix_from({str(filepath): {"ID": 1}})
+    design_matrix = design_matrix_from({"toydata": {"ID": 1}})
     slide = Slide(data=STSlide(str(filepath)), iterator=FullSlide)
-    data = Data(slides={str(filepath): slide}, design=design_matrix)
+    data = Data(slides={"toydata": slide}, design=design_matrix)
     dataset = Dataset(data)
     dataloader = make_dataloader(dataset)
 
