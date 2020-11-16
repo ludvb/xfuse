@@ -93,7 +93,7 @@ def compute_gene_maps(
     ] = {"ST": _compute_gene_map_st}
 
     with Session(
-        default_device=torch.device("cpu"), pyro_stack=[]
+        default_device=torch.device("cpu"), messengers=[]
     ), torch.no_grad():
         progress = tqdm(dataloader, position=1)
         for x in progress:

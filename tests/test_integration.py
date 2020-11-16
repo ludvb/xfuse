@@ -1,10 +1,10 @@
 r"""Integration tests"""
 
 import pyro.optim
-from torch.utils.tensorboard import SummaryWriter
 
 import pytest
-from xfuse.handlers.stats import RMSE
+
+from xfuse.messengers.stats import RMSE
 from xfuse.model import XFuse
 from xfuse.model.experiment.st import ST, MetageneDefault
 from xfuse.model.experiment.st.metagene_eval import purge_metagenes
@@ -19,7 +19,7 @@ from xfuse.utility.design import extract_covariates
 
 @pytest.mark.fix_rng
 @pytest.mark.slow
-def test_toydata(tmp_path, mocker, toydata):
+def test_toydata(mocker, toydata):
     r"""Integration test on toy dataset"""
     st_experiment = ST(
         depth=2,
@@ -27,17 +27,17 @@ def test_toydata(tmp_path, mocker, toydata):
         metagenes=[MetageneDefault(0.0, None) for _ in range(3)],
     )
     xfuse = XFuse(experiments=[st_experiment])
-    summary_writer = SummaryWriter(tmp_path)
-    rmse = RMSE(summary_writer)
-    rmse.add_scalar = mocker.MagicMock()
+    rmse = RMSE()
+    mock_log_scalar = mocker.patch("xfuse.messengers.stats.rmse.log_scalar")
     with Session(
         model=xfuse,
         optimizer=pyro.optim.Adam({"lr": 0.0001}),
         dataloader=toydata,
         covariates=extract_covariates(toydata.dataset.data.design),
-    ), rmse:
+        messengers=[rmse],
+    ):
         train(100 + get("training_data").epoch)
-    rmses = [x[1][1] for x in rmse.add_scalar.mock_calls]
+    rmses = [x[1][1] for x in mock_log_scalar.mock_calls]
     assert rmses[-1] < 6.0
 
 
@@ -64,9 +64,10 @@ def test_metagene_expansion(
         expansion_strategies, compute_expected_metagenes(num_start_metagenes)
     ):
         with Session(
-            metagene_expansion_strategy=expansion_strategy,
-            dataloader=toydata,
             covariates=extract_covariates(toydata.dataset.data.design),
+            dataloader=toydata,
+            metagene_expansion_strategy=expansion_strategy,
+            model=pretrained_toy_model,
         ):
-            purge_metagenes(pretrained_toy_model, num_samples=10)
+            purge_metagenes(num_samples=10)
         assert len(st_experiment.metagenes) == expected_metagenes

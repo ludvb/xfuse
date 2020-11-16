@@ -1,4 +1,4 @@
-from .stats_handler import StatsHandler
+from .stats_handler import StatsHandler, log_scalar
 from ...session import get
 
 
@@ -21,4 +21,4 @@ class RMSE(StatsHandler):
             )
         except TypeError:
             training_data.rmse = rmse
-        self.add_scalar("accuracy/rmse", rmse)
+        log_scalar("accuracy/rmse", rmse)

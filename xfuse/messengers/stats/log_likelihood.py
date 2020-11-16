@@ -1,4 +1,4 @@
-from .stats_handler import StatsHandler
+from .stats_handler import StatsHandler, log_scalar
 
 
 class LogLikelihood(StatsHandler):
@@ -12,6 +12,6 @@ class LogLikelihood(StatsHandler):
     def _handle(self, fn, value, name, scale, **_):
         # pylint: disable=arguments-differ
         # pylint: disable=no-member
-        self.add_scalar(
+        log_scalar(
             f"loss/loglikelihood/{name}", scale * fn.log_prob(value).sum()
         )

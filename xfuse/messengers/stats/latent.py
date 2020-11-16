@@ -1,4 +1,6 @@
-from .stats_handler import StatsHandler
+import torch
+
+from .stats_handler import StatsHandler, log_images
 from ...utility.visualization import reduce_last_dimension
 
 
@@ -14,10 +16,11 @@ class Latent(StatsHandler):
         # pylint: disable=arguments-differ
         # pylint: disable=no-member
         try:
-            self.add_images(
+            log_images(
                 f"z/{name[2:]}",
-                reduce_last_dimension(value.permute(0, 2, 3, 1)),
-                dataformats="NHWC",
+                torch.as_tensor(
+                    reduce_last_dimension(value.permute(0, 2, 3, 1))
+                ),
             )
         except ValueError:
             pass

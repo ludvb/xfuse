@@ -96,7 +96,7 @@ def compute_imputation(
     output_dir = os.path.join(save_path, f"imputation-{annotation_layer}")
 
     with Session(
-        default_device=torch.device("cpu"), pyro_stack=[]
+        default_device=torch.device("cpu"), messengers=[]
     ), torch.no_grad():
         for name, slide in dataloader.dataset.data.slides.items():
             try:
