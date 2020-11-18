@@ -6,160 +6,160 @@ BioRxiv preprint: https://www.biorxiv.org/content/10.1101/2020.02.28.963413v1
 
 * Hardware requirements
 
-  XFuse can run on CPU-only hardware, but training new models will take exceedingly long.
-  We recommend running XFuse on a GPU with at least 8 GB of VRAM.
+XFuse can run on CPU-only hardware, but training new models will take exceedingly long.
+We recommend running XFuse on a GPU with at least 8 GB of VRAM.
 
 * Software requirements
 
-  XFuse has been tested on GNU/Linux but should run on all major operating systems.
-  XFuse requires Python 3.8.
-  All other dependencies are pulled in by ~pip~ during the installation.
+XFuse has been tested on GNU/Linux but should run on all major operating systems.
+XFuse requires Python 3.8.
+All other dependencies are pulled in by ~pip~ during the installation.
 
 * Installing
 
-  To install XFuse to your home directory, run
-  #+BEGIN_SRC sh
-    pip install --user git+https://github.com/ludvb/xfuse@master
-  #+END_SRC
-  This step should only take a few minutes.
+To install XFuse to your home directory, run
+#+BEGIN_SRC sh
+pip install --user git+https://github.com/ludvb/xfuse@master
+#+END_SRC
+This step should only take a few minutes.
 
 * Getting started
 
-  This section will guide you through how to start an analysis with XFuse using data on human breast cancer from [fn:1].
+This section will guide you through how to start an analysis with XFuse using data on human breast cancer from [fn:1].
 
 [fn:1]: https://doi.org/10.1126/science.aaf2403
 
 ** Data
 
-   The data is available [[https://www.spatialresearch.org/resources-published-datasets/doi-10-1126science-aaf2403/][here]].
-   To download all of the required files for the analysis, run
-   #+BEGIN_SRC sh
-     # Image data
-     curl -Lo section1.jpg https://www.spatialresearch.org/wp-content/uploads/2016/07/HE_layer1_BC.jpg
-     curl -Lo section2.jpg https://www.spatialresearch.org/wp-content/uploads/2016/07/HE_layer2_BC.jpg
-     curl -Lo section3.jpg https://www.spatialresearch.org/wp-content/uploads/2016/07/HE_layer3_BC.jpg
-     curl -Lo section4.jpg https://www.spatialresearch.org/wp-content/uploads/2016/07/HE_layer4_BC.jpg
+The data is available [[https://www.spatialresearch.org/resources-published-datasets/doi-10-1126science-aaf2403/][here]].
+To download all of the required files for the analysis, run
+#+BEGIN_SRC sh
+# Image data
+curl -Lo section1.jpg https://www.spatialresearch.org/wp-content/uploads/2016/07/HE_layer1_BC.jpg
+curl -Lo section2.jpg https://www.spatialresearch.org/wp-content/uploads/2016/07/HE_layer2_BC.jpg
+curl -Lo section3.jpg https://www.spatialresearch.org/wp-content/uploads/2016/07/HE_layer3_BC.jpg
+curl -Lo section4.jpg https://www.spatialresearch.org/wp-content/uploads/2016/07/HE_layer4_BC.jpg
 
-     # Gene expression count data
-     curl -Lo section1.tsv https://www.spatialresearch.org/wp-content/uploads/2016/07/Layer1_BC_count_matrix-1.tsv
-     curl -Lo section2.tsv https://www.spatialresearch.org/wp-content/uploads/2016/07/Layer2_BC_count_matrix-1.tsv
-     curl -Lo section3.tsv https://www.spatialresearch.org/wp-content/uploads/2016/07/Layer3_BC_count_matrix-1.tsv
-     curl -Lo section4.tsv https://www.spatialresearch.org/wp-content/uploads/2016/07/Layer4_BC_count_matrix-1.tsv
+# Gene expression count data
+curl -Lo section1.tsv https://www.spatialresearch.org/wp-content/uploads/2016/07/Layer1_BC_count_matrix-1.tsv
+curl -Lo section2.tsv https://www.spatialresearch.org/wp-content/uploads/2016/07/Layer2_BC_count_matrix-1.tsv
+curl -Lo section3.tsv https://www.spatialresearch.org/wp-content/uploads/2016/07/Layer3_BC_count_matrix-1.tsv
+curl -Lo section4.tsv https://www.spatialresearch.org/wp-content/uploads/2016/07/Layer4_BC_count_matrix-1.tsv
 
-     # Alignment data
-     curl -Lo section1-alignment.txt https://www.spatialresearch.org/wp-content/uploads/2016/07/Layer1_BC_transformation.txt
-     curl -Lo section2-alignment.txt https://www.spatialresearch.org/wp-content/uploads/2016/07/Layer2_BC_transformation.txt
-     curl -Lo section3-alignment.txt https://www.spatialresearch.org/wp-content/uploads/2016/07/Layer3_BC_transformation.txt
-     curl -Lo section4-alignment.txt https://www.spatialresearch.org/wp-content/uploads/2016/07/Layer4_BC_transformation.txt
-     #+END_SRC
+# Alignment data
+curl -Lo section1-alignment.txt https://www.spatialresearch.org/wp-content/uploads/2016/07/Layer1_BC_transformation.txt
+curl -Lo section2-alignment.txt https://www.spatialresearch.org/wp-content/uploads/2016/07/Layer2_BC_transformation.txt
+curl -Lo section3-alignment.txt https://www.spatialresearch.org/wp-content/uploads/2016/07/Layer3_BC_transformation.txt
+curl -Lo section4-alignment.txt https://www.spatialresearch.org/wp-content/uploads/2016/07/Layer4_BC_transformation.txt
+#+END_SRC
 
 ** Preprocessing
 
-   XFuse uses a specialized data format to optimize loading speeds and allow for lazy data loading.
-   XFuse has inbuilt support for converting data from [[https://support.10xgenomics.com/spatial-gene-expression/software/pipelines/latest/installation][10X Space Ranger]] (~xfuse convert visium~) and the [[https://github.com/SpatialTranscriptomicsResearch/st_pipeline][Spatial Transcriptomics Pipeline]] (~xfuse convert st~) to its own data format.
-   If your data has been produced by another pipeline, it may need to be wrangled into a supported format before continuing.
-   Feel free to open an issue on our [[https://github.com/ludvb/xfuse/issues][issue tracker]] if you run into any problems or to request support for a new platform.
+XFuse uses a specialized data format to optimize loading speeds and allow for lazy data loading.
+XFuse has inbuilt support for converting data from [[https://support.10xgenomics.com/spatial-gene-expression/software/pipelines/latest/installation][10X Space Ranger]] (~xfuse convert visium~) and the [[https://github.com/SpatialTranscriptomicsResearch/st_pipeline][Spatial Transcriptomics Pipeline]] (~xfuse convert st~) to its own data format.
+If your data has been produced by another pipeline, it may need to be wrangled into a supported format before continuing.
+Feel free to open an issue on our [[https://github.com/ludvb/xfuse/issues][issue tracker]] if you run into any problems or to request support for a new platform.
 
-   The data from the [[Data]] section was produced by the Spatial Transcriptomics Pipeline, so we can run the following commands to convert it to the right format:
-   #+BEGIN_SRC sh
-     xfuse convert st --counts section1.tsv --image section1.jpg --transformation-matrix section1-alignment.txt --scale 0.15 --save-path section1
-     xfuse convert st --counts section2.tsv --image section2.jpg --transformation-matrix section2-alignment.txt --scale 0.15 --save-path section2
-     xfuse convert st --counts section3.tsv --image section3.jpg --transformation-matrix section3-alignment.txt --scale 0.15 --save-path section3
-     xfuse convert st --counts section4.tsv --image section4.jpg --transformation-matrix section4-alignment.txt --scale 0.15 --save-path section4
-   #+END_SRC
-   It may be worthwhile to try out different values for the ~--scale~ argument, which downsamples the image data by the given factor.
-   Essentially, a higher scale increases the resolution of the model but requires considerably more compute power.
+The data from the [[Data]] section was produced by the Spatial Transcriptomics Pipeline, so we can run the following commands to convert it to the right format:
+#+BEGIN_SRC sh
+xfuse convert st --counts section1.tsv --image section1.jpg --transformation-matrix section1-alignment.txt --scale 0.15 --save-path section1
+xfuse convert st --counts section2.tsv --image section2.jpg --transformation-matrix section2-alignment.txt --scale 0.15 --save-path section2
+xfuse convert st --counts section3.tsv --image section3.jpg --transformation-matrix section3-alignment.txt --scale 0.15 --save-path section3
+xfuse convert st --counts section4.tsv --image section4.jpg --transformation-matrix section4-alignment.txt --scale 0.15 --save-path section4
+#+END_SRC
+It may be worthwhile to try out different values for the ~--scale~ argument, which downsamples the image data by the given factor.
+Essentially, a higher scale increases the resolution of the model but requires considerably more compute power.
 
 ** Configuring and starting the run
 
-   Settings for the run are specified in a configuration file.
-   Paste the following into a file named ~my-config.toml~:
-   #+BEGIN_SRC toml
-     [xfuse]
-     network_depth = 6
-     network_width = 16
-     min_counts = 50
+Settings for the run are specified in a configuration file.
+Paste the following into a file named ~my-config.toml~:
+#+BEGIN_SRC toml
+[xfuse]
+network_depth = 6
+network_width = 16
+min_counts = 50
 
-     [expansion_strategy]
-     type = "DropAndSplit"
-     [expansion_strategy.DropAndSplit]
-     max_metagenes = 50
+[expansion_strategy]
+type = "DropAndSplit"
+[expansion_strategy.DropAndSplit]
+max_metagenes = 50
 
-     [optimization]
-     batch_size = 3
-     epochs = 100000
-     learning_rate = 0.0003
-     patch_size = 768
+[optimization]
+batch_size = 3
+epochs = 100000
+learning_rate = 0.0003
+patch_size = 768
 
-     [analyses]
-     [analyses.metagenes]
-     method = "pca"
+[analyses]
+[analyses.metagenes]
+method = "pca"
 
-     [analyses.gene_maps]
-     gene_name_regex = ".*"
-     normalize = false
+[analyses.gene_maps]
+gene_name_regex = ".*"
+normalize = false
 
-     [slides]
-     [slides.section1]
-     data = "section1/data.h5"
-     [slides.section1.covariates]
-     section = 1
+[slides]
+[slides.section1]
+data = "section1/data.h5"
+[slides.section1.covariates]
+section = 1
 
-     [slides.section2]
-     data = "section2/data.h5"
-     [slides.section2.covariates]
-     section = 2
+[slides.section2]
+data = "section2/data.h5"
+[slides.section2.covariates]
+section = 2
 
-     [slides.section3]
-     data = "section3/data.h5"
-     [slides.section3.covariates]
-     section = 3
+[slides.section3]
+data = "section3/data.h5"
+[slides.section3.covariates]
+section = 3
 
-     [slides.section4]
-     data = "section4/data.h5"
-     [slides.section4.covariates]
-     section = 4
-   #+END_SRC
+[slides.section4]
+data = "section4/data.h5"
+[slides.section4.covariates]
+section = 4
+#+END_SRC
 
-   Here is a non-exhaustive summary of the available configuration options:
-   - ~xfuse.network_depth~: The number of up- and downsampling steps in the fusion network. If you are running on large images (using a large value for the ~--scale~ argument in ~xfuse convert~), you may need to increase this number.
-   - ~xfuse.network_width~: The number of channels in the image and expression decoders. You may need to increase this value if you are studying tissues with many different cell types.
-   - ~xfuse.min_counts~: The minimum number of reads for a gene to be included in the analysis.
-   - ~expansion_strategy.DropAndSplit.max_metagenes~: The maximum number of metagenes to create during inference. You may need to increase this value if you are studying tissues with many different cell types.
-   - ~optimization.batch_size~: The mini-batch size. This number should be kept as high as possible to keep gradients stable but can be reduced if you are running XFuse on a GPU with limited memory capacity.
-   - ~optimization.epochs~: The number of epochs to run. When set to a value below zero, XFuse will use a heuristic stopping criterion.
-   - ~optimization.patch_size~: The size of training patches. This number should preferably be a multiple of ~2^xfuse.network_depth~ to avoid misalignments during up- and downsampling steps.
-   - ~slides~: This section defines which slides to include in the experiment. Each slide is associated with a unique subsection. In each subsection, a data path and optional covariates to control for are specified. For example, in the configuration file above, we have given each slide a ~section~ condition with a distinct value to control for sample-wise batch effects. If our dataset contained samples from different patients, we could, for example, also include a ~patient~ condition to control for patient-wise effects.
+Here is a non-exhaustive summary of the available configuration options:
+- ~xfuse.network_depth~: The number of up- and downsampling steps in the fusion network. If you are running on large images (using a large value for the ~--scale~ argument in ~xfuse convert~), you may need to increase this number.
+- ~xfuse.network_width~: The number of channels in the image and expression decoders. You may need to increase this value if you are studying tissues with many different cell types.
+- ~xfuse.min_counts~: The minimum number of reads for a gene to be included in the analysis.
+- ~expansion_strategy.DropAndSplit.max_metagenes~: The maximum number of metagenes to create during inference. You may need to increase this value if you are studying tissues with many different cell types.
+- ~optimization.batch_size~: The mini-batch size. This number should be kept as high as possible to keep gradients stable but can be reduced if you are running XFuse on a GPU with limited memory capacity.
+- ~optimization.epochs~: The number of epochs to run. When set to a value below zero, XFuse will use a heuristic stopping criterion.
+- ~optimization.patch_size~: The size of training patches. This number should preferably be a multiple of ~2^xfuse.network_depth~ to avoid misalignments during up- and downsampling steps.
+- ~slides~: This section defines which slides to include in the experiment. Each slide is associated with a unique subsection. In each subsection, a data path and optional covariates to control for are specified. For example, in the configuration file above, we have given each slide a ~section~ condition with a distinct value to control for sample-wise batch effects. If our dataset contained samples from different patients, we could, for example, also include a ~patient~ condition to control for patient-wise effects.
 
-   We are now ready to start the analysis!
-   #+BEGIN_SRC sh
-     xfuse run my-config.toml --save-path my-run
-   #+END_SRC
+We are now ready to start the analysis!
+#+BEGIN_SRC sh
+xfuse run my-config.toml --save-path my-run
+#+END_SRC
 
-   /Tip/: XFuse can generate a template for the configuration file by running
-   #+BEGIN_SRC sh
-     xfuse init my-config.toml section1.h5 section2.h5 section3.h5 section4.h5
-   #+END_SRC
+/Tip/: XFuse can generate a template for the configuration file by running
+#+BEGIN_SRC sh
+xfuse init my-config.toml section1.h5 section2.h5 section3.h5 section4.h5
+#+END_SRC
 
 ** Tracking the training progress
 
-   XFuse continually writes training data to a [[https://github.com/tensorflow/tensorboard][Tensorboard]] log file.
-   To check how the optimization is progressing, start a Tensorboard web server and direct it to the ~--save-path~ of the run:
-   #+BEGIN_SRC sh
-     tensorboard --logdir my-run
-   #+END_SRC
+XFuse continually writes training data to a [[https://github.com/tensorflow/tensorboard][Tensorboard]] log file.
+To check how the optimization is progressing, start a Tensorboard web server and direct it to the ~--save-path~ of the run:
+#+BEGIN_SRC sh
+tensorboard --logdir my-run
+#+END_SRC
 
 ** Stopping and resuming a run
 
-   To stop the run before it has completed, press ~Ctrl+C~.
-   A snapshot of the model state will be saved to the ~--save-path~.
-   The snapshot can be restored by running
-   #+BEGIN_SRC sh
-     xfuse run my-config.toml --save-path my-run --session my-run/exception.session
-   #+END_SRC
+To stop the run before it has completed, press ~Ctrl+C~.
+A snapshot of the model state will be saved to the ~--save-path~.
+The snapshot can be restored by running
+#+BEGIN_SRC sh
+xfuse run my-config.toml --save-path my-run --session my-run/exception.session
+#+END_SRC
 
 ** Finishing the run
 
-   Training the model from scratch will take roughly three days on a normal desktop computer with an Nvidia GeForce 20 series graphics card.
-   After training, XFuse runs the analyses specified in the configuration file.
-   Results will be saved to a directory named ~analyses~ in the ~--save-path~.
+Training the model from scratch will take roughly three days on a normal desktop computer with an Nvidia GeForce 20 series graphics card.
+After training, XFuse runs the analyses specified in the configuration file.
+Results will be saved to a directory named ~analyses~ in the ~--save-path~.
