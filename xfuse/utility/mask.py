@@ -37,9 +37,11 @@ def compute_tissue_mask(
     scale_factor = 1000 / max(original_shape)
 
     image = rescale(image, scale_factor, resample=Image.NEAREST)
-    initial_mask = binary_fill_holes(
-        cv.blur(cv.Canny(cv.blur(image, (5, 5)), 100, 200), (5, 5))
+    initial_mask = (
+        cv.blur(cv.Canny(cv.blur(image, (5, 5)), 100, 200), (20, 20)) > 0
     )
+    initial_mask = binary_fill_holes(initial_mask)
+    initial_mask = remove_fg_elements(initial_mask, 0.1)
 
     mask = np.where(initial_mask, cv.GC_PR_FGD, cv.GC_PR_BGD)
     mask = mask.astype(np.uint8)
