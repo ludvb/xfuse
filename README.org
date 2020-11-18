@@ -86,10 +86,10 @@ BioRxiv preprint: https://www.biorxiv.org/content/10.1101/2020.02.28.963413v1
      max_metagenes = 50
 
      [optimization]
-     batch_size = 4
+     batch_size = 3
      epochs = 100000
      learning_rate = 0.0003
-     patch_size = 512
+     patch_size = 768
 
      [analyses]
      [analyses.metagenes]

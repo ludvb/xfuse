@@ -163,7 +163,7 @@ _ANNOTATED_CONFIG = OrderedDict(
                                         "Set to '-1' to use as large patches as possible.",
                                     ]
                                 ),
-                                value=512,
+                                value=768,
                             ),
                         ),
                     ]
