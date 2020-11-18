@@ -68,7 +68,7 @@ def compute_tissue_mask(
             mask = np.full_like(mask, cv.GC_PR_FGD)
             break
         prop_changed = (mask != old_mask).sum() / np.prod(mask.shape)
-        log(INFO, f"  Iteration {i}: {prop_changed=}")
+        log(INFO, "  Iteration %2d Δ = %.2f%%", i, 100 * prop_changed)
         if prop_changed < convergence_threshold:
             break
 
