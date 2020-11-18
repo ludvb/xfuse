@@ -11,7 +11,7 @@ from scipy.sparse import csr_matrix
 from scipy.ndimage.morphology import binary_fill_holes
 
 from ..logging import INFO, log
-from ..utility.mask import compute_tissue_mask
+from ..utility.mask import compute_tissue_mask, remove_fg_elements
 from ..utility.visualization import _normalize
 
 
@@ -228,6 +228,7 @@ def write_data(
         counts = counts.sum(axis=1, level=0)
 
     data_mask = ~np.isin(label, counts.index[counts.sum(1) == 0])
+    data_mask = remove_fg_elements(data_mask, 0.1)
     if not np.all(data_mask == 0):
         rect = find_min_bbox(data_mask, rotate=auto_rotate)
         image = crop_to_rect(image, rect, interpolation_method=cv.INTER_CUBIC)
