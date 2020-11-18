@@ -98,7 +98,7 @@ def compute_gene_maps(
         progress = tqdm(dataloader, position=1)
         for x in progress:
             experiment_type = next(iter(x.keys()))
-            slide_name = x[experiment_type]["slide_name"][0]
+            slide_name = x[experiment_type]["effects"].iloc[0].name
             progress.set_description(slide_name)
 
             if experiment_type not in fns.keys():
@@ -125,9 +125,7 @@ def compute_gene_maps(
                 gene_map = greyscale2colormap(gene_map)
                 gene_map = mask_background(gene_map, mask)
                 filename = os.path.join(
-                    output_dir,
-                    os.path.basename(slide_name),
-                    f"{gene_name}.png",
+                    output_dir, slide_name, f"{gene_name}.png",
                 )
                 os.makedirs(os.path.dirname(filename), exist_ok=True)
                 imwrite(filename, gene_map)

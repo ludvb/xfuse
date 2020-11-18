@@ -88,7 +88,6 @@ class Dataset(torch.utils.data.Dataset):
         slide = self.observations["sample"].iloc[idx]
         return dict(
             type=self._data.slides[slide].data.type,
-            slide_name=slide,
             **self._data_iterators[slide].__getitem__(
                 self.observations["idx"].iloc[idx]
             ),

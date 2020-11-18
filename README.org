@@ -94,18 +94,30 @@ BioRxiv preprint: https://www.biorxiv.org/content/10.1101/2020.02.28.963413v1
      [analyses]
      [analyses.metagenes]
      method = "pca"
+
      [analyses.gene_maps]
      gene_name_regex = ".*"
      normalize = false
 
      [slides]
-     [slides."section1/data.h5"]
+     [slides.section1]
+     data = "section1/data.h5"
+     [slides.section1.covariates]
      section = 1
-     [slides."section2/data.h5"]
+
+     [slides.section2]
+     data = "section2/data.h5"
+     [slides.section2.covariates]
      section = 2
-     [slides."section3/data.h5"]
+
+     [slides.section3]
+     data = "section3/data.h5"
+     [slides.section3.covariates]
      section = 3
-     [slides."section4/data.h5"]
+
+     [slides.section4]
+     data = "section4/data.h5"
+     [slides.section4.covariates]
      section = 4
    #+END_SRC
 
@@ -117,7 +129,7 @@ BioRxiv preprint: https://www.biorxiv.org/content/10.1101/2020.02.28.963413v1
    - ~optimization.batch_size~: The mini-batch size. This number should be kept as high as possible to keep gradients stable but can be reduced if you are running XFuse on a GPU with limited memory capacity.
    - ~optimization.epochs~: The number of epochs to run. When set to a value below zero, XFuse will use a heuristic stopping criterion.
    - ~optimization.patch_size~: The size of training patches. This number should preferably be a multiple of ~2^xfuse.network_depth~ to avoid misalignments during up- and downsampling steps.
-   - ~slides~: This section defines which slides to include in the experiment. Keys (sub-headers) in this section specify paths to the data files. Under each sub-header, it is possible to specify any number of conditions to control for in the model. For example, in the configuration file above, we have given each slide a ~section~ condition with a distinct value to control for sample-wise batch effects. If our dataset contained samples from different patients, we could, for example, also include a ~patient~ condition to control for patient-wise effects.
+   - ~slides~: This section defines which slides to include in the experiment. Each slide is associated with a unique subsection. In each subsection, a data path and optional covariates to control for are specified. For example, in the configuration file above, we have given each slide a ~section~ condition with a distinct value to control for sample-wise batch effects. If our dataset contained samples from different patients, we could, for example, also include a ~patient~ condition to control for patient-wise effects.
 
    We are now ready to start the analysis!
    #+BEGIN_SRC sh

@@ -5,4 +5,5 @@ network_depth = 2
 epochs = 1
 
 [slides]
-[slides."./files/toydata.h5"]
+[slides.toydata]
+data = "./files/toydata.h5"

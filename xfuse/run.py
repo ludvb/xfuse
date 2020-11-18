@@ -30,6 +30,7 @@ from .session.io import save_session
 
 def run(
     design: pd.DataFrame,
+    slide_paths: Dict[str, str],
     analyses: Dict[str, Dict[str, Any]] = None,
     expansion_strategy: ExpansionStrategy = STRATEGIES[
         CONFIG["expansion_strategy"].value["type"].value
@@ -70,7 +71,7 @@ def run(
     slides = {
         slide: Slide(
             data=STSlide(
-                os.path.expanduser(slide),
+                slide_paths[slide],
                 cache_data=cache_data,
                 **(slide_options[slide] if slide_options is not None else {}),
             ),

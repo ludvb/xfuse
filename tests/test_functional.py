@@ -5,6 +5,7 @@ from glob import glob
 
 import pytest
 
+from xfuse.__main__ import construct_default_config_toml
 from xfuse.session import Session, Unset, get
 from xfuse.session.items.training_data import TrainingData
 from xfuse.utility.state import get_state_dict, reset_state
@@ -13,7 +14,7 @@ from xfuse.utility.state import get_state_dict, reset_state
 @pytest.mark.script_launch_mode("subprocess")
 @pytest.mark.parametrize("test_case", ["test_train_exit_status.1.toml"])
 def test_train_exit_status(shared_datadir, script_runner, tmp_path, test_case):
-    r"""Test CLI invocation"""
+    r"""Test CLI run invocation"""
     save_path = tmp_path / "output_dir"
     arguments = [
         "run",
@@ -143,6 +144,37 @@ def test_train_stats_tensorboardwriter(
         save_path, "stats", "tb", "events.out.tfevents.*"
     )
     assert len(glob(log_file_pattern)) > 0
+
+
+def test_init(shared_datadir, script_runner, tmp_path, mocker):
+    r"""Test CLI init invocation"""
+
+    def _construct_default_config_toml():
+        default_config = construct_default_config_toml()
+        default_config["optimization"]["epochs"] = 1
+        default_config["analyses"] = {}
+        return default_config
+
+    mocker.patch(
+        "xfuse.__main__.construct_default_config_toml",
+        _construct_default_config_toml,
+    )
+
+    ret = script_runner.run(
+        "xfuse",
+        "init",
+        str(tmp_path / "config.toml"),
+        str(shared_datadir / "files" / "toydata.h5"),
+    )
+    assert ret.success
+
+    ret = script_runner.run(
+        "xfuse",
+        "run",
+        str(tmp_path / "config.toml"),
+        "--save-path={}".format(str(tmp_path / "output_dir")),
+    )
+    assert ret.success
 
 
 @pytest.mark.parametrize(

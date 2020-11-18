@@ -16,7 +16,7 @@ def test_gene_maps(pretrained_toy_model, toydata, tmp_path):
     ):
         compute_gene_maps()
 
-    for section in map(os.path.basename, toydata.dataset.data.design):
+    for section in toydata.dataset.data.design:
         for gene in toydata.dataset.genes:
             assert os.path.exists(
                 tmp_path / "gene_maps" / section / f"{gene}.png"

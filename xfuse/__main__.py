@@ -261,8 +261,22 @@ _convert.add_command(_convert_image, "image")
 def init(target, slides):
     r"""Creates a template for the project configuration file."""
     config = construct_default_config_toml()
-    if len(slides) > 0:
-        config["slides"] = {slide: {} for slide in slides}
+
+    config["slides"].update(
+        {
+            f"section{i:d}": {
+                "data": str(slide),
+                "covariates": {"section": str(i)},
+                "options": {
+                    "min_counts": 100,
+                    "always_filter": [],
+                    "always_keep": [1],
+                },
+            }
+            for i, slide in enumerate(slides)
+        }
+    )
+
     with open(target, "w") as fp:
         fp.write(config.as_string())
 
@@ -328,10 +342,14 @@ def run(
                 return path
             return os.path.join(os.path.dirname(project_file.name), path)
 
-        config["slides"] = {
-            _expand_path(filename): v
-            for filename, v in config["slides"].items()
-        }
+        for name, slide in config["slides"].items():
+            try:
+                data_path = slide["data"]
+            except KeyError as exc:
+                raise RuntimeError(
+                    f"Slide {name} does not have a `data` attribute"
+                ) from exc
+            config["slides"][name]["data"] = _expand_path(data_path)
 
         with open(
             first_unique_filename(
@@ -341,16 +359,19 @@ def run(
         ) as f:
             f.write(tomlkit.dumps(config))
 
+        slide_paths = {
+            name: slide["data"] for name, slide in config["slides"].items()
+        }
         slide_options = {
-            filename: slide["options"] if "options" in slide else {}
-            for filename, slide in config["slides"].items()
+            name: slide["options"] if "options" in slide else {}
+            for name, slide in config["slides"].items()
+        }
+        slide_covariates = {
+            name: slide["covariates"] if "covariates" in slide else {}
+            for name, slide in config["slides"].items()
         }
         design = design_matrix_from(
-            {
-                filename: {k: v for k, v in slide.items() if k != "options"}
-                for filename, slide in config["slides"].items()
-            },
-            covariates=get("covariates"),
+            slide_covariates, covariates=get("covariates")
         )
         covariates = extract_covariates(design)
         log(INFO, "Using the following design covariates:")
@@ -441,6 +462,7 @@ def run(
         ):
             _run(
                 design,
+                slide_paths,
                 analyses=config["analyses"],
                 expansion_strategy=expansion_strategy,
                 purge_interval=purge_interval,

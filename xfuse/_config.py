@@ -208,58 +208,11 @@ _ANNOTATED_CONFIG = OrderedDict(
                 comment=" ".join(
                     [
                         "This section defines the slides to use in the experiment.",
-                        "Section headers should be paths to the slides.",
-                        "Section keys are covariates that will be modeled.",
+                        'Covariates are specified in the "covariates" table.',
                         'Slide-specific options can be specified in the "options" table.',
                     ]
                 ),
-                value=OrderedDict(
-                    [
-                        (
-                            "/path/to/slide1.h5",
-                            Item(
-                                value=OrderedDict(
-                                    [
-                                        ("Id", Item(value=1)),
-                                        ("Group", Item(value="Control")),
-                                        (
-                                            "options",
-                                            Item(
-                                                value=OrderedDict(
-                                                    [
-                                                        (
-                                                            "min_counts",
-                                                            Item(value=100),
-                                                        ),
-                                                        (
-                                                            "always_filter",
-                                                            Item(value=[]),
-                                                        ),
-                                                        (
-                                                            "always_keep",
-                                                            Item(value=[1]),
-                                                        ),
-                                                    ]
-                                                )
-                                            ),
-                                        ),
-                                    ]
-                                )
-                            ),
-                        ),
-                        (
-                            "/path/to/slide2.h5",
-                            Item(
-                                value=OrderedDict(
-                                    [
-                                        ("Id", Item(value=2)),
-                                        ("Group", Item(value="Treatment")),
-                                    ]
-                                )
-                            ),
-                        ),
-                    ]
-                ),
+                value=OrderedDict([]),
                 example=True,
             ),
         ),
