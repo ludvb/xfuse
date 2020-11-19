@@ -134,11 +134,21 @@ class RandomSlide(SlideIterator):
         )
         image = self.image_augmentation(image)
         image = np.array(
-            image.transform(output_size, Image.AFFINE, transformation)
+            image.transform(
+                output_size,
+                Image.AFFINE,
+                transformation,
+                resample=Image.BILINEAR,
+            )
         )
         image = center_crop(image, (patch_h, patch_w))
         label = np.array(
-            label.transform(output_size, Image.AFFINE, transformation)
+            label.transform(
+                output_size,
+                Image.AFFINE,
+                transformation,
+                resample=Image.NEAREST,
+            )
         )
         label = center_crop(label, (patch_h, patch_w))
         if np.random.rand() < 0.5:

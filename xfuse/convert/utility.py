@@ -79,7 +79,7 @@ def find_min_bbox(
 def crop_to_rect(
     img: np.ndarray,
     rect: Tuple[Tuple[float, float], Tuple[float, float], float],
-    interpolation_method: int = cv.INTER_LINEAR,
+    interpolation_method: int = cv.INTER_NEAREST,
     margin: float = 0.12,
 ) -> np.ndarray:
     r""""Crops image to rectangle"""
@@ -231,7 +231,7 @@ def write_data(
     data_mask = remove_fg_elements(data_mask, 0.1)
     if not np.all(data_mask == 0):
         rect = find_min_bbox(data_mask, rotate=auto_rotate)
-        image = crop_to_rect(image, rect, interpolation_method=cv.INTER_CUBIC)
+        image = crop_to_rect(image, rect, interpolation_method=cv.INTER_LINEAR)
         label = crop_to_rect(
             label, rect, interpolation_method=cv.INTER_NEAREST
         )
