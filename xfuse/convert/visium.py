@@ -54,7 +54,7 @@ def run(
     if scale_factor is not None:
         tissue_positions[["x", "y"]] *= scale_factor
         spot_radius *= scale_factor
-        image = rescale(image, scale_factor, Image.BICUBIC)
+        image = rescale(image, scale_factor, Image.BOX)
         annotation = {
             k: rescale(v, scale_factor, Image.NEAREST)
             for k, v in annotation.items()

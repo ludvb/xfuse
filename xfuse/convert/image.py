@@ -24,7 +24,7 @@ def run(
         annotation = {}
 
     if scale_factor is not None:
-        image = rescale(image, scale_factor, Image.BICUBIC)
+        image = rescale(image, scale_factor, Image.BOX)
         annotation = {
             k: rescale(v, scale_factor, Image.NEAREST)
             for k, v in annotation.items()
