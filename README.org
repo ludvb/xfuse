@@ -96,7 +96,7 @@ patch_size = 768
 method = "pca"
 
 [analyses.gene_maps]
-gene_name_regex = ".*"
+gene_regex = ".*"
 normalize = false
 
 [slides]

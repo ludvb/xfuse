@@ -23,7 +23,7 @@ from ..utility.visualization import (
 
 
 def compute_gene_maps(
-    gene_name_regex: str = r".*", normalize: bool = False
+    gene_regex: str = r".*", normalize: bool = False
 ) -> None:
     r"""Gene maps analysis function"""
     # pylint: disable=too-many-locals
@@ -55,11 +55,7 @@ def compute_gene_maps(
 
     all_genes = np.array(genes).astype(str)
     selected_genes = np.array(
-        [
-            x
-            for x in all_genes
-            if re.match(gene_name_regex, x, flags=re.IGNORECASE)
-        ]
+        [x for x in all_genes if re.match(gene_regex, x, flags=re.IGNORECASE)]
     )
 
     def _compute_gene_map_st(
