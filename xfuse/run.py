@@ -118,7 +118,7 @@ def run(
                 len(filtered_genes),
                 ", ".join(sorted(filtered_genes)),
             )
-        genes = list(set(dataset.genes) - filtered_genes)
+        genes = sorted(set(dataset.genes) - filtered_genes)
     log(
         INFO,
         "Using the following set of %d genes: %s",
