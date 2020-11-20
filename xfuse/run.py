@@ -108,7 +108,7 @@ def run(
             g for g, x in zip(dataset.genes, summed_counts) if x < min_counts
         )
         filtered_genes = filtered_genes | set(
-            g for g in dataset.genes if re.match(gene_regex, g)
+            g for g in dataset.genes if not re.match(gene_regex, g)
         )
 
         if len(filtered_genes) > 0:
