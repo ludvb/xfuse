@@ -47,7 +47,7 @@ _ANNOTATED_CONFIG = OrderedDict(
                                 value="^(?!RPS|RPL|MT-).*",
                                 comment=" ".join(
                                     [
-                                        "Regex matching genes that will be included in the model.",
+                                        "Regex matching genes to include in the model.",
                                         "By default, exclude mitochondrial and ribosomal genes.",
                                     ]
                                 ),
