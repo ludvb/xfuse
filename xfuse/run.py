@@ -123,7 +123,7 @@ def run(
         INFO,
         "Using the following set of %d genes: %s",
         len(genes),
-        ", ".join(sorted(filtered_genes)),
+        ", ".join(genes),
     )
 
     xfuse = get("model")
