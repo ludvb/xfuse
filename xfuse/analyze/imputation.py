@@ -91,19 +91,16 @@ def compute_imputation(
 ):
     r"""Imputation analysis function"""
     dataloader = require("dataloader")
-    save_path = require("save_path")
-
-    output_dir = os.path.join(save_path, f"imputation-{annotation_layer}")
 
     with Session(
         default_device=torch.device("cpu"), messengers=[]
     ), torch.no_grad():
-        for name, slide in dataloader.dataset.data.slides.items():
+        for slide_name, slide in dataloader.dataset.data.slides.items():
             try:
                 annotation = slide.data.annotation(annotation_layer)
             except RuntimeError:
                 warnings.warn(
-                    f'Slide "{name}" does not have an annotation layer'
+                    f'Slide "{slide_name}" does not have an annotation layer'
                     f'"{annotation_layer}"'
                 )
                 continue
@@ -112,7 +109,7 @@ def compute_imputation(
                 [
                     _impute(
                         slide,
-                        dataloader.dataset.data.design[name],
+                        dataloader.dataset.data.design[slide_name],
                         torch.as_tensor(annotation.astype(np.int32)),
                         normalize_size=normalize_size,
                     )
@@ -120,9 +117,7 @@ def compute_imputation(
                 ]
             )
 
-            os.makedirs(
-                os.path.join(output_dir, os.path.basename(name)), exist_ok=True
-            )
+            os.makedirs(slide_name, exist_ok=True)
             annotation_labels = np.unique(annotation)
             annotation_labels = annotation_labels[annotation_labels.nonzero()]
             pd.concat(
@@ -135,11 +130,7 @@ def compute_imputation(
                     for sample in samples
                 ],
                 keys=pd.Index(np.arange(len(samples)) + 1, name="sample"),
-            ).to_csv(
-                os.path.join(
-                    output_dir, os.path.basename(name), "imputed_counts.csv.gz"
-                )
-            )
+            ).to_csv(os.path.join(slide_name, "imputed_counts.csv.gz"))
 
 
 _register_analysis(

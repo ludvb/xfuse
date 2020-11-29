@@ -1,8 +1,7 @@
-import os
-
 from pyro.poutine.messenger import Messenger
 
 from ..session.io import save_session
+from ..utility.file import chdir
 
 
 class Checkpointer(Messenger):
@@ -15,4 +14,5 @@ class Checkpointer(Messenger):
     def _pyro_post_epoch(self, msg):
         epoch = msg["kwargs"]["epoch"]
         if epoch % self._period == 0:
-            save_session(os.path.join("checkpoints", f"epoch-{epoch:08d}"))
+            with chdir("/checkpoints"):
+                save_session(f"epoch-{epoch:08d}")

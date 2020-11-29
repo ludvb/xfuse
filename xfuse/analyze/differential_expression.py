@@ -1,4 +1,3 @@
-import os
 import warnings
 from copy import copy
 from typing import Dict, List
@@ -23,10 +22,7 @@ def compute_differential_expression(
     r"""Imputation analysis function"""
     # pylint: disable=too-many-locals
     dataloader = require("dataloader")
-    save_path = require("save_path")
     model = require("model")
-
-    output_dir = os.path.join(save_path, "differential_expression")
 
     with Session(
         default_device=torch.device("cpu"), messengers=[]
@@ -114,8 +110,7 @@ def compute_differential_expression(
         columns=dataloader.dataset.genes,
     )
 
-    os.makedirs(output_dir, exist_ok=True)
-    data.to_csv(os.path.join(output_dir, "data.csv.gz"), index=False)
+    data.to_csv("data.csv.gz", index=False)
 
     sorted_values = data.mean(0).sort_values()
     log2_fold_top = data[
@@ -124,7 +119,7 @@ def compute_differential_expression(
     log2_fold_top.boxplot(vert=False)
     plt.title(f"{annotation_layer1} vs. {annotation_layer2}")
     plt.xlabel("log2 fold")
-    plt.savefig(os.path.join(output_dir, "top_differential.pdf"))
+    plt.savefig("top_differential.pdf")
 
 
 _register_analysis(

@@ -9,6 +9,7 @@ from pyro.poutine.messenger import Messenger
 
 from ...logging import DEBUG, log
 from ...session import Session, get
+from ...utility.file import chdir
 from .writer import StatsWriter
 
 
@@ -75,7 +76,7 @@ def log_figure(tag: str, figure: matplotlib.figure.Figure, **kwargs,) -> None:
 def log_histogram(*args, **kwargs) -> None:
     r"""Pushes histogram data to the session `stats_writers`"""
     stats_writers: List[StatsWriter] = get("stats_writers")
-    with torch.no_grad():
+    with chdir("/stats"), torch.no_grad():
         for stats_writer in stats_writers:
             stats_writer.write_histogram(*args, **kwargs)
 
@@ -83,7 +84,7 @@ def log_histogram(*args, **kwargs) -> None:
 def log_image(*args, **kwargs) -> None:
     r"""Pushes image data to the session `stats_writers`"""
     stats_writers: List[StatsWriter] = get("stats_writers")
-    with torch.no_grad():
+    with chdir("/stats"), torch.no_grad():
         for stats_writer in stats_writers:
             stats_writer.write_image(*args, **kwargs)
 
@@ -91,7 +92,7 @@ def log_image(*args, **kwargs) -> None:
 def log_images(*args, **kwargs) -> None:
     r"""Pushes image grid to the session `stats_writers`"""
     stats_writers: List[StatsWriter] = get("stats_writers")
-    with torch.no_grad():
+    with chdir("/stats"), torch.no_grad():
         for stats_writer in stats_writers:
             stats_writer.write_images(*args, **kwargs)
 
@@ -99,6 +100,6 @@ def log_images(*args, **kwargs) -> None:
 def log_scalar(*args, **kwargs) -> None:
     r"""Pushes scalar to the session `stats_writers`"""
     stats_writers: List[StatsWriter] = get("stats_writers")
-    with torch.no_grad():
+    with chdir("/stats"), torch.no_grad():
         for stats_writer in stats_writers:
             stats_writer.write_scalar(*args, **kwargs)

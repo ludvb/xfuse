@@ -10,7 +10,7 @@ import torch
 from imageio import imwrite
 
 from . import StatsWriter
-from ....session import get, require
+from ....session import get
 from ....utility.file import first_unique_filename
 from ....utility.visualization import _normalize
 
@@ -37,23 +37,22 @@ class FileWriter(StatsWriter):
 
     def write_image(self, tag: str, img_tensor: torch.Tensor) -> None:
         r"""Logs an image"""
-        save_path = require("save_path")
         training_data = get("training_data")
         *prefix, name = tag.split("/")
         filename = first_unique_filename(
             os.path.join(
-                save_path,
-                "stats",
-                "image",
                 *prefix,
                 f"{name}-{training_data.epoch}-{training_data.step}.png",
             )
         )
-        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        if (dirname := os.path.dirname(filename)) != "":
+            os.makedirs(dirname, exist_ok=True)
         img = img_tensor.detach().cpu().numpy()
         img = _normalize(img)
         img = (255 * img).astype(np.uint8)
-        self._worker_pool.apply_async(imwrite, (filename, img))
+        self._worker_pool.apply_async(
+            imwrite, (os.path.abspath(filename), img)
+        )
 
     def write_images(self, tag: str, img_tensor: torch.Tensor) -> None:
         r"""Logs an image grid"""
@@ -72,10 +71,9 @@ class FileWriter(StatsWriter):
 
     def write_scalar(self, tag: str, scalar_value: float) -> None:
         r"""Logs a scalar"""
-        save_path = require("save_path")
         training_data = get("training_data")
         *prefix, name = tag.split("/")
-        filename = os.path.join(save_path, "stats", *prefix, f"{name}.csv.gz")
+        filename = os.path.join(*prefix, f"{name}.csv.gz")
         if filename not in self._file_cons:
             os.makedirs(os.path.dirname(filename), exist_ok=True)
             if not os.path.exists(filename):
