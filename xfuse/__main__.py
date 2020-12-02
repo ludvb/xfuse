@@ -276,7 +276,10 @@ cli.add_command(init)
 
 
 @click.command()
-@click.argument("project-file", type=click.File("rb"))
+@click.argument(
+    "project-file",
+    type=click.Path(dir_okay=False, readable=True, resolve_path=True),
+)
 @click.option("--session", type=click.File("rb"))
 @click.option("--tensorboard/--no-tensorboard", default=True)
 @click.option("--stats/--no-stats", default=False)
@@ -323,14 +326,15 @@ def run(
 
     base_session = load_session(session) if session is not None else Session()
     with base_session:
-        config = dict(tomlkit.loads(project_file.read().decode()))
+        with open(project_file) as fp:
+            config = dict(tomlkit.loads(fp.read()))
         config = merge_config(config)
 
         def _expand_path(path):
             path = os.path.expanduser(path)
             if os.path.isabs(path):
                 return path
-            return os.path.join(os.path.dirname(project_file.name), path)
+            return os.path.join(os.path.dirname(project_file), path)
 
         for name, slide in config["slides"].items():
             try:
