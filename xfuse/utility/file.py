@@ -12,7 +12,7 @@ def chdir(dirname: str) -> Session:
     """
     cwd = get("work_dir")
     if os.path.isabs(dirname):
-        _root, *subdirs = os.path.split(dirname)
+        _root, *subdirs = os.path.normpath(dirname).split(os.sep)
         subpath = os.path.join(*subdirs)
     else:
         subpath = os.path.join(cwd.subpath, dirname)
