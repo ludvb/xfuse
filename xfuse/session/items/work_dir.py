@@ -17,6 +17,11 @@ class WorkDir:
         self.root = root
         self.subpath = subpath
 
+    def __eq__(self, other: object) -> bool:
+        if not isinstance(other, WorkDir):
+            raise NotImplementedError()
+        return other.full_path == self.full_path
+
     @property
     def root(self) -> str:
         """The root file path"""
@@ -51,11 +56,19 @@ class WorkDir:
         return os.path.join(self.root, self.subpath)
 
 
+__DEFAULT_WORKDIR = WorkDir()
+__CUR_WORKDIR = __DEFAULT_WORKDIR
+
+
 def _work_dir_setter(work_dir: WorkDir) -> None:
-    log(DEBUG, "Changing working directory to: %s", work_dir.full_path)
-    if not os.path.exists(work_dir.full_path):
-        os.makedirs(work_dir.full_path, exist_ok=True)
-    os.chdir(work_dir.full_path)
+    # pylint: disable=global-statement
+    global __CUR_WORKDIR
+    if work_dir != __CUR_WORKDIR:
+        log(DEBUG, "Changing working directory to: %s", work_dir.full_path)
+        if not os.path.exists(work_dir.full_path):
+            os.makedirs(work_dir.full_path, exist_ok=True)
+        os.chdir(work_dir.full_path)
+        __CUR_WORKDIR = work_dir
 
 
 register_session_item(
