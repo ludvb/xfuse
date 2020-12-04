@@ -388,10 +388,6 @@ def run(
                 ]
             )
 
-        genes = get("genes")
-        if genes is None and config["xfuse"]["genes"] != []:
-            genes = config["xfuse"]["genes"]
-
         stats_writers = []
         if stats:
             stats_writers.append(FileWriter())
@@ -456,7 +452,6 @@ def run(
 
         with Session(
             covariates=covariates,
-            genes=genes,
             messengers=messengers,
             stats_writers=stats_writers,
         ):
@@ -469,6 +464,7 @@ def run(
                 network_depth=config["xfuse"]["network_depth"],
                 network_width=config["xfuse"]["network_width"],
                 min_counts=config["xfuse"]["min_counts"],
+                gene_regex=config["xfuse"]["gene_regex"],
                 patch_size=config["optimization"]["patch_size"],
                 batch_size=config["optimization"]["batch_size"],
                 epochs=config["optimization"]["epochs"],

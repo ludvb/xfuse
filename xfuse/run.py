@@ -1,4 +1,5 @@
 import os
+import re
 import warnings
 from functools import partial, reduce
 from operator import add
@@ -41,6 +42,7 @@ def run(
     network_depth: int = CONFIG["xfuse"].value["network_depth"].value,
     network_width: int = CONFIG["xfuse"].value["network_width"].value,
     min_counts: int = CONFIG["xfuse"].value["min_counts"].value,
+    gene_regex: str = CONFIG["xfuse"].value["min_counts"].value,
     patch_size: int = CONFIG["optimization"].value["patch_size"].value,
     batch_size: int = CONFIG["optimization"].value["batch_size"].value,
     epochs: int = CONFIG["optimization"].value["epochs"].value,
@@ -105,16 +107,24 @@ def run(
         filtered_genes = set(
             g for g, x in zip(dataset.genes, summed_counts) if x < min_counts
         )
+        filtered_genes = filtered_genes | set(
+            g for g in dataset.genes if not re.match(gene_regex, g)
+        )
+
         if len(filtered_genes) > 0:
             log(
                 INFO,
-                "The following %d genes have less than %d counts and will"
-                " therefore be excluded: %s",
+                "The following %d genes have been filtered out: %s",
                 len(filtered_genes),
-                min_counts,
                 ", ".join(sorted(filtered_genes)),
             )
-        genes = [g for g in dataset.genes if g not in filtered_genes]
+        genes = sorted(set(dataset.genes) - filtered_genes)
+    log(
+        INFO,
+        "Using the following set of %d genes: %s",
+        len(genes),
+        ", ".join(genes),
+    )
 
     xfuse = get("model")
     if xfuse is None:

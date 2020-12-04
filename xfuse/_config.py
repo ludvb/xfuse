@@ -42,13 +42,13 @@ _ANNOTATED_CONFIG = OrderedDict(
                         ("network_depth", Item(value=6)),
                         ("network_width", Item(value=16)),
                         (
-                            "genes",
+                            "gene_regex",
                             Item(
-                                value=[],
+                                value="^(?!RPS|RPL|MT-).*",
                                 comment=" ".join(
                                     [
-                                        "List of genes to include in the analysis.",
-                                        "An empty list will include all genes.",
+                                        "Regex matching genes to include in the model.",
+                                        "By default, exclude mitochondrial and ribosomal genes.",
                                     ]
                                 ),
                             ),
