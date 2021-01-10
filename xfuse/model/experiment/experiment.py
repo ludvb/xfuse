@@ -1,10 +1,15 @@
 from abc import abstractmethod, abstractproperty
+from typing import Optional
 
 import torch
 
 
 class Experiment(torch.nn.Module):
     r"""Abstract class defining the experiment type"""
+
+    def __init__(self, size: Optional[int] = None, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._size = size
 
     @property
     def num_z(self):

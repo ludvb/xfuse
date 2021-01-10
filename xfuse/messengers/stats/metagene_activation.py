@@ -4,13 +4,13 @@ import matplotlib.pyplot as plt
 import pyro.poutine
 import torch
 
-from ...analyze.metagenes import (
-    compute_metagene_profiles,
-    visualize_metagene_profile,
-)
 from ...model.experiment.st import ST
 from ...session import get
-from ...utility.visualization import reduce_last_dimension, visualize_metagenes
+from ...utility.visualization import (
+    reduce_last_dimension,
+    visualize_metagene_profile,
+    visualize_metagenes,
+)
 from .stats_handler import (
     StatsHandler,
     log_figure,
@@ -123,29 +123,3 @@ class MetageneFullSummary(StatsHandler):
                         )
         except ValueError:
             pass
-
-        for experiment, metagene_profiles in compute_metagene_profiles():
-            metagene_profiles["invcv"] = (
-                metagene_profiles["mean"] / metagene_profiles["stddev"]
-            )
-            for name, profile in metagene_profiles.groupby(level=0):
-                fig = plt.figure(figsize=(3.5, 3.7))
-                visualize_metagene_profile(
-                    profile.loc[name],
-                    num_high=20,
-                    num_low=10,
-                    sort_by="invcv",
-                )
-                plt.tight_layout(pad=0.0)
-                log_figure(
-                    f"metagene-{name}/profile/{experiment}/invcvsort", fig,
-                )
-
-                fig = plt.figure(figsize=(3.5, 3.7))
-                visualize_metagene_profile(
-                    profile.loc[name], num_high=20, num_low=10, sort_by="mean",
-                )
-                plt.tight_layout(pad=0.0)
-                log_figure(
-                    f"metagene-{name}/profile/{experiment}/meansort", fig,
-                )

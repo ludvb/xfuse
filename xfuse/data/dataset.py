@@ -6,6 +6,7 @@ import pandas as pd
 import torch
 
 from .slide import Slide
+from .slide.data import SyntheticSlide
 from ..session import get
 
 __all__ = ["Data", "Dataset"]
@@ -58,7 +59,7 @@ class Dataset(torch.utils.data.Dataset):
                 ),
                 idx=np.concatenate(
                     [range(len(x)) for x in self._data_iterators.values()]
-                ),
+                ).astype(np.uint32),
             )
         )
 
@@ -85,6 +86,11 @@ class Dataset(torch.utils.data.Dataset):
                 observations = observations[
                     observations["condition"] == condition
                 ]
+        if any(
+            isinstance(self.data.slides[x].data, SyntheticSlide)
+            for x in observations.slide
+        ):
+            return np.iinfo(np.int32).max
         return len(observations)
 
     @property

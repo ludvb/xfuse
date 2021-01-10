@@ -10,8 +10,8 @@ from PIL import Image
 from scipy.sparse import csr_matrix
 from scipy.ndimage.morphology import binary_fill_holes
 
-from ..logging import INFO, log
-from ..utility.mask import compute_tissue_mask, remove_fg_elements
+from ..logging import INFO, WARNING, log
+from ..utility.mask import compute_tissue_mask, margin, remove_fg_elements
 from ..utility.visualization import _normalize
 
 
@@ -166,26 +166,9 @@ def trim_margin(
     >>> trim_margin(image, label)
     (array([[0]]), array([[4]]))
     """
-    if margin_color is None:
-        margin_color = image.max((0, 1))
-
-    img_dims = tuple(np.arange(len(image.shape) - len(margin_color.shape)))
-    color_dims = tuple(
-        np.arange(len(image.shape) - len(margin_color.shape), len(image.shape))
-    )
-
-    color_scale = np.max(image, img_dims) - np.min(image, img_dims)
-
-    is_margin = np.ones(image.shape[:2], dtype=bool)
-    is_margin &= (image > (margin_color - tol * color_scale)).all(color_dims)
-    is_margin &= (image < (margin_color + tol * color_scale)).all(color_dims)
-
-    col_mask = binary_fill_holes(np.invert(is_margin.all(0)))
-    row_mask = binary_fill_holes(np.invert(is_margin.all(1)))
-
-    image = image[row_mask][:, col_mask]
-    label = label[row_mask][:, col_mask]
-
+    row_mask, col_mask = margin(image, margin_color=margin_color, tol=tol)
+    image = image[~row_mask][:, ~col_mask]
+    label = label[~row_mask][:, ~col_mask]
     return image, label
 
 
@@ -195,10 +178,21 @@ def write_data(
     label: np.ndarray,
     annotation: Dict[str, Tuple[np.ndarray, Dict[int, str]]],
     type_label: str,
+    extra: Dict[str, Tuple[np.ndarray, bool]],
     auto_rotate: bool = False,
+    crop: bool = True,
+    normalize_image: bool = True,
     path: str = "data.h5",
 ) -> None:
     r"""Writes data to the format used by XFuse."""
+    if auto_rotate and not crop:
+        log(
+            WARNING,
+            "Inconsistent values of `auto_rotate` and `crop`."
+            " The value of `auto_rotate` will take precedence.",
+        )
+        crop = True
+
     if image.shape[:2] != label.shape[:2]:
         raise RuntimeError(
             f"Image shape ({image.shape[:2]}) is not equal to"
@@ -229,7 +223,7 @@ def write_data(
 
     data_mask = ~np.isin(label, counts.index[counts.sum(1) == 0])
     data_mask = remove_fg_elements(data_mask, 0.1)
-    if not np.all(data_mask == 0):
+    if crop and not np.all(data_mask == 0):
         rect = find_min_bbox(data_mask, rotate=auto_rotate)
         image = crop_to_rect(image, rect, interpolation_method=cv.INTER_LINEAR)
         label = crop_to_rect(
@@ -246,13 +240,22 @@ def write_data(
             )
             for k, (annotation_label, label_names) in annotation.items()
         }
+        extra = {
+            k: crop_to_rect(v, rect, interpolation_method=cv.INTER_NEAREST)
+            if crop
+            else v
+            for k, (v, crop) in extra.items()
+        }
+    else:
+        extra = {k: v for k, (v, _) in extra.items()}
 
     counts, label = relabel(counts, label)
 
-    image = _normalize(image.astype(np.float32), axis=(0, 1)) * 2 - 1
-    image = 0.9 * image
-    # ^ reduce contrast to alleviate tension in the extremes due to the tanh
-    #   activation in the image decoder
+    if normalize_image:
+        image = _normalize(image.astype(np.float32), axis=(0, 1)) * 2 - 1
+        image = 0.9 * image
+        # ^ reduce contrast to alleviate tension in the extremes due to the tanh
+        #   activation in the image decoder
 
     log(INFO, "Writing data to %s", path)
     os.makedirs(os.path.normpath(os.path.dirname(path)), exist_ok=True)
@@ -301,6 +304,8 @@ def write_data(
                 h5py.string_dtype(),
                 list(label_names.values()),
             )
+        for k, v in extra.items():
+            data_file.create_dataset(f"extra/{k}", v.shape, v.dtype, v)
         data_file.create_dataset(
             "type", data=type_label, dtype=h5py.string_dtype()
         )

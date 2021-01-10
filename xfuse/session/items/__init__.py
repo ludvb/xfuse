@@ -11,6 +11,7 @@ from .messengers import *
 from .model import *
 from .mpl_backend import *
 from .optimizer import *
+from .rng_state import *
 from .stats_writers import *
 from .training_data import *
 from .work_dir import *

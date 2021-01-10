@@ -11,7 +11,13 @@ import pandas as pd
 from ._config import _ANNOTATED_CONFIG as CONFIG  # type: ignore
 from .analyze import analyses as _analyses
 from .data import Data, Dataset
-from .data.slide import RandomIterator, Slide, STSlide
+from .data.slide import (
+    FullSlideIterator,
+    RandomIterator,
+    Slide,
+    SyntheticSlide,
+    STSlide,
+)
 from .data.utility.misc import make_dataloader
 from .logging import INFO, log
 from .model import XFuse
@@ -75,10 +81,29 @@ def run(
 
     slides = {
         slide: Slide(
+            data=SyntheticSlide(
+                **{
+                    k: v
+                    for k, v in slide_options[slide].items()
+                    if k != "synthetic"
+                    if k != "repeat"
+                },
+            ),
+            iterator=partial(
+                FullSlideIterator,
+                repeat=slide_options[slide].get("repeat") or 1,
+            ),
+        )
+        if slide_options[slide].get("synthetic")
+        else Slide(
             data=STSlide(
                 slide_paths[slide],
                 cache_data=cache_data,
-                **(slide_options[slide] if slide_options is not None else {}),
+                **{
+                    k: v
+                    for k, v in slide_options[slide].items()
+                    if k != "synthetic"
+                },
             ),
             iterator=partial(
                 RandomIterator,
@@ -131,8 +156,15 @@ def run(
 
     xfuse = get("model")
     if xfuse is None:
+        infinite_data = any(
+            options["synthetic"]
+            for options in slide_options.values()
+            if "synthetic" in options
+        )
         st_experiment = STExperiment(
-            depth=network_depth, num_channels=network_width,
+            size=np.iinfo(np.int32).max if infinite_data else None,
+            depth=network_depth,
+            num_channels=network_width,
         )
         xfuse = XFuse(experiments=[st_experiment]).to(get("default_device"))
 

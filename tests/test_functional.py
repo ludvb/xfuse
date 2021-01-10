@@ -296,3 +296,23 @@ def test_convert_visium(extra_args, shared_datadir, script_runner, tmp_path):
     )
     assert ret.success
     assert os.path.exists(tmp_path / "data.h5")
+
+
+@pytest.mark.parametrize("extra_args", [[]])
+def test_convert_synthetic(
+    extra_args, shared_datadir, script_runner, tmp_path
+):
+    r"""Test convert Spatial Transcriptomics Pipeline run"""
+
+    ret = script_runner.run(
+        "xfuse",
+        "convert",
+        "synthetic",
+        "--save-path=" + str(tmp_path),
+        "--tile-size=16",
+        "--num-tiles=4",
+        "--num-molecules=64",
+        *extra_args,
+    )
+    assert ret.success
+    assert os.path.exists(tmp_path / "data.h5")

@@ -26,6 +26,8 @@ class RandomIterator(SlideIterator):
         max_scale_jitter: float = 0.05,
         max_shear_jitter: float = 10.0,
     ):
+        if not isinstance(slide, STSlide):
+            raise NotImplementedError()
         self._slide = slide
         self.image_augmentation = transforms.Compose(
             [

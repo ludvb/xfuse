@@ -1,5 +1,6 @@
 import itertools as it
 import warnings
+from typing import Tuple
 
 import cv2 as cv
 import numpy as np
@@ -20,6 +21,37 @@ def remove_fg_elements(mask: np.ndarray, size_threshold: float):
     ]
     mask[np.isin(labels, small_labels)] = False
     return mask
+
+
+def margin(
+    image: np.ndarray, margin_color=None, tol: float = 0.2,
+) -> Tuple[np.ndarray, np.ndarray]:
+    r"""
+    Computes margin mask
+
+    >>> image = np.array([[1, 1], [1, 0]])
+    >>> margin(image)
+    array([[True, True],
+           [True, False]])
+    """
+    if margin_color is None:
+        margin_color = image.max((0, 1))
+
+    img_dims = tuple(np.arange(len(image.shape) - len(margin_color.shape)))
+    color_dims = tuple(
+        np.arange(len(image.shape) - len(margin_color.shape), len(image.shape))
+    )
+
+    color_scale = np.max(image, img_dims) - np.min(image, img_dims)
+
+    is_margin = np.ones(image.shape[:2], dtype=bool)
+    is_margin &= (image >= (margin_color - tol * color_scale)).all(color_dims)
+    is_margin &= (image <= (margin_color + tol * color_scale)).all(color_dims)
+
+    row_mask = ~binary_fill_holes(~is_margin.all(1))
+    col_mask = ~binary_fill_holes(~is_margin.all(0))
+
+    return row_mask, col_mask
 
 
 def compute_tissue_mask(

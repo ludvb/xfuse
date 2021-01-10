@@ -166,3 +166,47 @@ xfuse run my-config.toml --save-path my-run --session my-run/exception.session
 Training the model from scratch will take roughly three days on a normal desktop computer with an Nvidia GeForce 20 series graphics card.
 After training, XFuse runs the analyses specified in the configuration file.
 Results will be saved to a directory named ~analyses~ in the ~--save-path~.
+
+
+* Synthetic data
+
+The following config file can be used to run the proof-of-principle synthetic data experiment:
+#+BEGIN_SRC toml
+[xfuse]
+network_depth = 4
+network_width = 16
+genes = []
+min_counts = 1
+gene_regex = ".*"
+
+[expansion_strategy]
+type = "DropAndSplit"
+purge_interval = 1000
+
+[expansion_strategy.DropAndSplit]
+max_metagenes = 40
+
+[optimization]
+batch_size = 1
+epochs = 2000000
+learning_rate = 0.0001
+patch_size = 384
+
+[analyses]
+[analyses.synthetic]
+type = "synthetic"
+[analyses.synthetic.options]
+num_samples = 1000
+test_grid_size = 16
+
+[slides]
+[slides.synthetic-slide]
+data = ""
+[slides.synthetic-slide.options]
+repeat = 1
+synthetic = true
+allow_edge_clipping = false
+image_noise = 0.1
+reads_per_pixel = 10
+reads_per_bg_pixel = 0
+#+END_SRC

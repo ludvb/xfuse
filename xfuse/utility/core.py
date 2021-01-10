@@ -64,6 +64,13 @@ def center_crop(x: ArrayType, target_shape: Tuple[int, ...]) -> ArrayType:
     ]
 
 
+def chunks_of(n: Any, xs: List[Any]) -> Iterable[Any]:
+    r"""Generate chunks of size `n` from `xs`"""
+    while xs != []:
+        yield xs[:n]
+        xs = xs[n:]
+
+
 def rescale(
     image: np.ndarray, scaling_factor: float, resample: int = Image.NEAREST
 ) -> np.ndarray:

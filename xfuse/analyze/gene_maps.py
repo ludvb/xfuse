@@ -25,6 +25,21 @@ from ..utility.visualization import (
 from ..utility.tensor import to_device
 
 
+def _compute_grid_annotation(shape, scale=1.0):
+    scaled_shape = [x * scale for x in shape]
+    ys, xs = [
+        np.floor(np.linspace(0, scaled_x, x, endpoint=False)).astype(int)
+        for scaled_x, x in zip(scaled_shape, shape)
+    ]
+    annotation = 1 + torch.as_tensor((1 + xs.max()) * ys[:, None] + xs)
+    label_names = {
+        1 + (1 + xs.max()) * y + x: (y, x)
+        for y in np.unique(ys)
+        for x in np.unique(xs)
+    }
+    return annotation, label_names
+
+
 def generate_gene_maps(
     num_samples: int = 10,
     genes_per_batch: int = 10,
@@ -39,20 +54,6 @@ def generate_gene_maps(
 
     if scale <= 0 or scale > 1.0:
         raise ValueError("Argument `scale` must be in (0, 1]")
-
-    def _compute_annotation(shape):
-        scaled_shape = [x * scale for x in shape]
-        ys, xs = [
-            np.floor(np.linspace(0, scaled_x, x, endpoint=False)).astype(int)
-            for scaled_x, x in zip(scaled_shape, shape)
-        ]
-        annotation = 1 + torch.as_tensor((1 + xs.max()) * ys[:, None] + xs)
-        label_names = {
-            1 + (1 + xs.max()) * y + x: (y, x)
-            for y in np.unique(ys)
-            for x in np.unique(xs)
-        }
-        return annotation, label_names
 
     dataloader = make_dataloader(
         Dataset(
@@ -69,7 +70,7 @@ def generate_gene_maps(
                     )
                     for k, v in dataloader.dataset.data.slides.items()
                     for annotation, label_names in [
-                        _compute_annotation(v.data.label.shape)
+                        _compute_grid_annotation(v.data.label.shape, scale)
                     ]
                 },
                 design=dataloader.dataset.data.design,

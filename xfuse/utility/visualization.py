@@ -1,7 +1,9 @@
 import warnings
 from typing import Callable, Optional, Union, cast
 
+import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import pyro
 import torch
 from PIL import Image
@@ -11,6 +13,7 @@ from sklearn.decomposition import PCA
 from ..data import Data, Dataset
 from ..data.slide import FullSlideIterator, Slide
 from ..data.utility.misc import make_dataloader
+from ..model.experiment.st.st import ST, _encode_metagene_name
 from ..session import Session, get, require
 from ..utility.core import center_crop
 from ..utility.mask import cleanup_mask
@@ -105,6 +108,26 @@ def mask_background(
     border_mask &= ~mask
     image[border_mask] = border_color
     return image
+
+
+def visualize_metagene_profile(
+    profile, num_high=20, num_low=20, sort_by="mean", ax=None,
+):
+    r"""Creates metagene profile visualization"""
+    num_low = max(min(len(profile) - num_high, num_low), 0)
+    x = profile.sort_values(sort_by)
+    x = pd.concat([x.iloc[:num_low], x.iloc[-num_high:]])
+    (ax if ax else plt).errorbar(
+        x["mean"], x.index, xerr=x["stddev"], fmt="none", c="black"
+    )
+    (ax if ax else plt).vlines(
+        0.0,
+        ymin=x.index[0],
+        ymax=x.index[-1],
+        colors="red",
+        linestyles="--",
+        lw=1,
+    )
 
 
 def visualize_metagenes(

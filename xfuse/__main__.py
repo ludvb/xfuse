@@ -7,7 +7,7 @@ import os
 import sys
 import warnings
 from datetime import datetime as dt
-from functools import wraps
+from functools import reduce, wraps
 
 import click
 import h5py
@@ -36,6 +36,7 @@ from .utility.file import first_unique_filename
 from .session import Session, get
 from .session.io import load_session
 from .session.items.work_dir import WorkDir
+from .session.items.rng_state import RNGState
 
 
 def _init(f):
@@ -91,6 +92,68 @@ def _convert():
 
 
 cli.add_command(_convert)
+
+
+@click.command()
+@click.option("--tile-size", type=int, default=64)
+@click.option("--tile-padding", type=int, default=16)
+@click.option("--num-tiles", type=int, default=32)
+@click.option("--num-molecules", type=int, default=2048)
+@click.option("--molecule-size", type=int, default=16)
+@click.option("--reads-per-pixel", type=float, default=10.0)
+@click.option("--reads-per-bg-pixel", type=float, default=1.0)
+@click.option("--knockout", type=str, multiple=True)
+@click.option("--poisson-noise/--poisson-noise", type=bool, default=True)
+@click.option("--overlaps/--no-overlaps", type=bool, default=False)
+@click.option("--color-intensity", type=float, default=1.0)
+@click.option(
+    "--discard-expression-data/--no-discard-expression-data",
+    type=bool,
+    default=False,
+)
+@click.option("--rotate/--no-rotate", default=False)
+@_init
+def _convert_synthetic(
+    tile_size,
+    tile_padding,
+    num_tiles,
+    num_molecules,
+    molecule_size,
+    reads_per_pixel,
+    reads_per_bg_pixel,
+    knockout,
+    poisson_noise,
+    overlaps,
+    color_intensity,
+    discard_expression_data,
+    rotate,
+):
+    r"""Converts 10X Visium data"""
+    np.random.seed(
+        reduce(lambda a, x: a ^ x, map(hash, locals().values()))
+        % np.iinfo(np.int32).max
+    )
+    save_path = require("save_path")
+    output_file = os.path.join(save_path, "data.h5")
+    convert.synthetic.run(
+        output_file,
+        tile_size,
+        tile_padding,
+        num_tiles,
+        num_molecules,
+        molecule_size,
+        reads_per_pixel,
+        reads_per_bg_pixel,
+        knockout,
+        poisson_noise,
+        overlaps,
+        color_intensity,
+        discard_expression_data,
+        rotate,
+    )
+
+
+_convert.add_command(_convert_synthetic, "synthetic")
 
 
 @click.command()
@@ -488,6 +551,7 @@ def run(
         with Session(
             covariates=covariates,
             messengers=messengers,
+            rng_state=RNGState(0),
             stats_writers=stats_writers,
         ):
             _run(
