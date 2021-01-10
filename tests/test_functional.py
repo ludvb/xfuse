@@ -76,7 +76,6 @@ def test_train_stats_filewriter(shared_datadir, script_runner, tmp_path):
         os.path.join(
             save_path,
             "stats",
-            "image",
             "metagene-1",
             "profile",
             "ST",
@@ -87,7 +86,6 @@ def test_train_stats_filewriter(shared_datadir, script_runner, tmp_path):
         os.path.join(
             save_path,
             "stats",
-            "image",
             "metagene-1",
             "profile",
             "ST",
@@ -95,24 +93,20 @@ def test_train_stats_filewriter(shared_datadir, script_runner, tmp_path):
         )
     )
     assert os.path.exists(
-        os.path.join(save_path, "stats", "image", "image", "sample-1-1.png")
+        os.path.join(save_path, "stats", "image", "sample-1-1.png")
     )
     assert os.path.exists(
-        os.path.join(save_path, "stats", "image", "image", "mean-1-1.png")
+        os.path.join(save_path, "stats", "image", "mean-1-1.png")
     )
     assert os.path.exists(
-        os.path.join(
-            save_path, "stats", "image", "image", "ground_truth-1-1.png"
-        )
+        os.path.join(save_path, "stats", "image", "ground_truth-1-1.png")
+    )
+    assert os.path.exists(os.path.join(save_path, "stats", "scale-1-1.png"))
+    assert os.path.exists(
+        os.path.join(save_path, "stats", "z", "ST-1-1-1.png")
     )
     assert os.path.exists(
-        os.path.join(save_path, "stats", "image", "scale-1-1.png")
-    )
-    assert os.path.exists(
-        os.path.join(save_path, "stats", "image", "z", "ST-1-1-1.png")
-    )
-    assert os.path.exists(
-        os.path.join(save_path, "stats", "image", "z", "ST-0-1-1.png")
+        os.path.join(save_path, "stats", "z", "ST-0-1-1.png")
     )
 
 
@@ -141,7 +135,7 @@ def test_train_stats_tensorboardwriter(
     ]
     script_runner.run("xfuse", *arguments)
     log_file_pattern = os.path.join(
-        save_path, "stats", "tb", "events.out.tfevents.*"
+        save_path, "stats", "events.out.tfevents.*"
     )
     assert len(glob(log_file_pattern)) > 0
 

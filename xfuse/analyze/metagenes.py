@@ -104,10 +104,6 @@ def compute_metagene_summary(method: str = "pca") -> None:
     r"""Imputation analysis function"""
     # pylint: disable=too-many-locals
     dataloader = require("dataloader")
-    save_path = require("save_path")
-
-    output_dir = os.path.join(save_path, "metagenes")
-    os.makedirs(output_dir, exist_ok=True)
 
     with Session(
         default_device=torch.device("cpu"), messengers=[]
@@ -116,25 +112,17 @@ def compute_metagene_summary(method: str = "pca") -> None:
             dataloader.dataset.data.design.columns,
             visualize_metagenes(method),
         ):
-            os.makedirs(os.path.join(output_dir, slide_name), exist_ok=True)
+            os.makedirs(slide_name, exist_ok=True)
             imwrite(
-                os.path.join(output_dir, slide_name, "summary.png"),
-                summarization,
+                os.path.join(slide_name, "summary.png"), summarization,
             )
             for name, metagene in metagenes:
                 imwrite(
-                    os.path.join(
-                        output_dir, slide_name, f"metagene-{name}.png"
-                    ),
-                    metagene,
+                    os.path.join(slide_name, f"metagene-{name}.png"), metagene,
                 )
 
         for experiment, metagene_profiles in compute_metagene_profiles():
-            metagene_profiles.to_csv(
-                os.path.join(
-                    output_dir, f"{experiment}-metagene-log2fold.csv.gz"
-                ),
-            )
+            metagene_profiles.to_csv(f"{experiment}-metagene-log2fold.csv.gz")
             metagene_profiles["invcv"] = (
                 metagene_profiles["mean"] / metagene_profiles["stddev"]
             )
@@ -149,11 +137,7 @@ def compute_metagene_summary(method: str = "pca") -> None:
                 plt.title(f"{metagene=} ({experiment})")
                 plt.tight_layout(pad=0.0)
                 plt.savefig(
-                    os.path.join(
-                        output_dir,
-                        f"{experiment}-metagene-{metagene}-invcvsort.png",
-                    ),
-                    dpi=600,
+                    f"{experiment}-metagene-{metagene}-invcvsort.png", dpi=600,
                 )
                 plt.close()
 
@@ -167,11 +151,7 @@ def compute_metagene_summary(method: str = "pca") -> None:
                 plt.title(f"{metagene=} ({experiment})")
                 plt.tight_layout(pad=0.0)
                 plt.savefig(
-                    os.path.join(
-                        output_dir,
-                        f"{experiment}-metagene-{metagene}-meansort.png",
-                    ),
-                    dpi=600,
+                    f"{experiment}-metagene-{metagene}-meansort.png", dpi=600,
                 )
                 plt.close()
 

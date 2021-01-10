@@ -1,4 +1,3 @@
-import os
 from typing import Optional
 
 import torch
@@ -6,7 +5,7 @@ from torch.utils.tensorboard.writer import SummaryWriter
 
 from . import StatsWriter
 from ....logging import DEBUG, log
-from ....session import get, require
+from ....session import get
 
 
 __all__ = ["TensorboardWriter"]
@@ -20,8 +19,7 @@ class TensorboardWriter(StatsWriter):
 
     @property
     def _summary_writer(self) -> SummaryWriter:
-        save_path = require("save_path")
-        log_dir = os.path.join(save_path, "stats", "tb")
+        log_dir = get("work_dir").full_path
         if (
             self.__summary_writer is None
             or self.__summary_writer.log_dir != log_dir

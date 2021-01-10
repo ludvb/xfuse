@@ -30,9 +30,6 @@ def compute_gene_maps(
     genes = require("genes")
     model = require("model")
     dataloader = require("dataloader")
-    save_path = require("save_path")
-
-    output_dir = os.path.join(save_path, "gene_maps")
 
     dataloader = make_dataloader(
         Dataset(
@@ -120,10 +117,8 @@ def compute_gene_maps(
                 )
                 gene_map = greyscale2colormap(gene_map)
                 gene_map = mask_background(gene_map, mask)
-                filename = os.path.join(
-                    output_dir, slide_name, f"{gene_name}.png",
-                )
-                os.makedirs(os.path.dirname(filename), exist_ok=True)
+                filename = os.path.join(slide_name, f"{gene_name}.png")
+                os.makedirs(slide_name, exist_ok=True)
                 imwrite(filename, gene_map)
 
 

@@ -1,4 +1,3 @@
-import os
 import warnings
 from typing import Union
 
@@ -6,7 +5,7 @@ import torch
 
 from _io import BufferedReader
 
-from . import Session, get_session, require
+from . import Session, get_session
 from .session import _SESSION_STORE
 from ..logging import INFO, log
 from ..utility.file import first_unique_filename
@@ -17,15 +16,6 @@ __all__ = ["load_session", "save_session"]
 
 def save_session(filename_prefix: str) -> None:
     r"""Saves the current :class:`Session`"""
-    try:
-        save_path = require("save_path")
-    except RuntimeError:
-        return
-
-    path = first_unique_filename(
-        os.path.join(save_path, f"{filename_prefix}.session")
-    )
-    os.makedirs(os.path.dirname(path), exist_ok=True)
 
     def _can_pickle(name, x):
         try:
@@ -49,6 +39,7 @@ def save_session(filename_prefix: str) -> None:
         }
     )
 
+    path = first_unique_filename(f"{filename_prefix}.session")
     log(INFO, "Saving session to %s", path)
     torch.save((session, get_state_dict()), path)
 

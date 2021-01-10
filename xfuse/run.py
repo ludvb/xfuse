@@ -23,9 +23,9 @@ from .model.experiment.st.metagene_expansion_strategy import (
 from .model.experiment.st.metagene_eval import MetagenePurger, purge_metagenes
 from .model.experiment.st.metagene_expansion_strategy import Extra
 from .optim import Adam  # type: ignore  # pylint: disable=no-name-in-module
-from .session import Session, get, require
+from .session import Session, get
 from .train import test_convergence, train
-from .utility.file import first_unique_filename
+from .utility.file import chdir
 from .session.io import save_session
 
 
@@ -138,7 +138,8 @@ def run(
         optimizer = Adam({"amsgrad": True})
 
     def _panic(_session, _err_type, _err, _tb):
-        save_session("exception")
+        with chdir("/"):
+            save_session("exception")
 
     with Session(
         model=xfuse,
@@ -178,17 +179,12 @@ def run(
             save_session("final")
 
     with Session(
-        model=xfuse,
-        genes=genes,
-        dataloader=dataloader,
-        save_path=first_unique_filename(
-            os.path.join(require("save_path"), "analyses")
-        ),
-        eval=True,
+        model=xfuse, genes=genes, dataloader=dataloader, eval=True,
     ):
         for name, options in analyses.items():
             if name in analyses:
                 log(INFO, 'Running analysis "%s"', name)
-                _analyses[name].function(**options)
+                with chdir("analyses/name"):
+                    _analyses[name].function(**options)
             else:
                 warnings.warn(f'Unknown analysis "{name}"')

@@ -32,8 +32,9 @@ from .run import run as _run
 from .utility.core import temp_attr
 from .utility.design import design_matrix_from, extract_covariates
 from .utility.file import first_unique_filename
-from .session import Session, get, require
+from .session import Session, get
 from .session.io import load_session
+from .session.items.work_dir import WorkDir
 
 
 def _init(f):
@@ -48,29 +49,31 @@ def _init(f):
     @wraps(f)
     def _wrapped(*args, debug, save_path, **kwargs):
         logging.captureWarnings(True)
-        os.makedirs(save_path, exist_ok=True)
-        log_filename = first_unique_filename(os.path.join(save_path, "log"))
-        with open(log_filename, "w") as log_file:
-            with Session(
-                save_path=save_path,
-                log_file=[sys.stderr, log_file],
-                log_level=DEBUG if debug else INFO,
-            ):
-                sys.excepthook = lambda *_: None
-                with temp_attr(
-                    warnings,
-                    "formatwarning",
-                    lambda message, category, filename, lineno, _line: (
-                        f"{category.__name__:s}"
-                        f" ({filename:s}:{lineno:d}):"
-                        f" {str(message):s}"
-                    ),
+        with Session(work_dir=WorkDir(save_path)):
+            log_filename = first_unique_filename("log")
+            with open(log_filename, "w") as log_file:
+                with Session(
+                    log_file=[sys.stderr, log_file],
+                    log_level=DEBUG if debug else INFO,
                 ):
-                    log(
-                        INFO, "Running %s version %s", __package__, __version__
-                    )
-                    log(DEBUG, "Invoked by `%s`", " ".join(sys.argv))
-                    return f(*args, **kwargs)
+                    sys.excepthook = lambda *_: None
+                    with temp_attr(
+                        warnings,
+                        "formatwarning",
+                        lambda message, category, filename, lineno, _line: (
+                            f"{category.__name__:s}"
+                            f" ({filename:s}:{lineno:d}):"
+                            f" {str(message):s}"
+                        ),
+                    ):
+                        log(
+                            INFO,
+                            "Running %s version %s",
+                            __package__,
+                            __version__,
+                        )
+                        log(DEBUG, "Invoked by `%s`", " ".join(sys.argv))
+                        return f(*args, **kwargs)
 
     return _wrapped
 
@@ -110,8 +113,6 @@ def _convert_visium(
     rotate,
 ):
     r"""Converts 10X Visium data"""
-    save_path = require("save_path")
-
     tissue_positions = pd.read_csv(tissue_positions, index_col=0, header=None)
     tissue_positions = tissue_positions[[4, 5]]
     tissue_positions = tissue_positions.rename(columns={4: "y", 5: "x"})
@@ -128,15 +129,13 @@ def _convert_visium(
                 k: annotation_file[k][()] for k in annotation_file.keys()
             }
 
-    output_file = os.path.join(save_path, "data.h5")
-
     with h5py.File(bc_matrix, "r") as data:
         convert.visium.run(
             image_data,
             data,
             tissue_positions,
             spot_radius,
-            output_file,
+            output_file="data.h5",
             annotation=annotation,
             scale_factor=scale,
             mask=mask,
@@ -168,8 +167,6 @@ def _convert_st(
     rotate,
 ):
     r"""Converts Spatial Transcriptomics ("ST") data"""
-    save_path = require("save_path")
-
     if spots is not None and transformation_matrix is not None:
         raise RuntimeError(
             "Please pass either a spot data file or a text file containing a"
@@ -198,12 +195,10 @@ def _convert_st(
                 k: annotation_file[k][()] for k in annotation_file.keys()
             }
 
-    output_file = os.path.join(save_path, "data.h5")
-
     convert.st.run(
         counts_data,
         image_data,
-        output_file,
+        output_file="data.h5",
         spots=spots_data,
         transformation=transformation,
         annotation=annotation,
@@ -227,8 +222,6 @@ def _convert_image(
     image, annotation, scale, mask, rotate,
 ):
     r"""Converts image without any associated expression data"""
-    save_path = require("save_path")
-
     with temp_attr(Image, "MAX_IMAGE_PIXELS", None):
         image_data = imread(image)
 
@@ -238,11 +231,9 @@ def _convert_image(
                 k: annotation_file[k][()] for k in annotation_file.keys()
             }
 
-    output_file = os.path.join(save_path, "data.h5")
-
     convert.image.run(
         image_data,
-        output_file,
+        output_file="data.h5",
         annotation=annotation,
         scale_factor=scale,
         mask=mask,
@@ -285,7 +276,10 @@ cli.add_command(init)
 
 
 @click.command()
-@click.argument("project-file", type=click.File("rb"))
+@click.argument(
+    "project-file",
+    type=click.Path(dir_okay=False, readable=True, resolve_path=True),
+)
 @click.option("--session", type=click.File("rb"))
 @click.option("--tensorboard/--no-tensorboard", default=True)
 @click.option("--stats/--no-stats", default=False)
@@ -330,17 +324,17 @@ def run(
     # pylint: disable=too-many-branches
     # pylint: disable=too-many-statements
 
-    save_path = require("save_path")
     base_session = load_session(session) if session is not None else Session()
     with base_session:
-        config = dict(tomlkit.loads(project_file.read().decode()))
+        with open(project_file) as fp:
+            config = dict(tomlkit.loads(fp.read()))
         config = merge_config(config)
 
         def _expand_path(path):
             path = os.path.expanduser(path)
             if os.path.isabs(path):
                 return path
-            return os.path.join(os.path.dirname(project_file.name), path)
+            return os.path.join(os.path.dirname(project_file), path)
 
         for name, slide in config["slides"].items():
             try:
@@ -351,12 +345,7 @@ def run(
                 ) from exc
             config["slides"][name]["data"] = _expand_path(data_path)
 
-        with open(
-            first_unique_filename(
-                os.path.join(save_path, "merged_config.toml")
-            ),
-            "w",
-        ) as f:
+        with open(first_unique_filename("merged_config.toml"), "w") as f:
             f.write(tomlkit.dumps(config))
 
         slide_paths = {
