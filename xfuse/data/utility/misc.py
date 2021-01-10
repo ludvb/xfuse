@@ -2,7 +2,6 @@ import itertools as it
 from typing import Any, Dict
 
 import numpy as np
-import pandas as pd
 import torch
 from torch.utils.data.dataloader import default_collate  # type: ignore
 
@@ -10,7 +9,7 @@ from ...session import get
 from ...utility import center_crop
 from ..dataset import Dataset
 
-__all__ = ["make_dataloader", "spot_size"]
+__all__ = ["make_dataloader", "estimate_spot_size"]
 
 
 class _RepeatSampler:
@@ -42,26 +41,23 @@ class DataLoader(torch.utils.data.DataLoader):
         Reloads worker processes on the next call to `self.__iter__`. This
         should be called if the dataset in the main process has been changed.
         """
-        self.__iterator = None
+        self.__iterator = super().__iter__()
         return self
 
     def __len__(self):
         return len(self.batch_sampler.sampler)
 
     def __iter__(self):
-        if self.__iterator is None:
-            # pylint: disable=attribute-defined-outside-init
-            self.__iterator = super().__iter__()
         for _ in range(len(self)):
             # pylint: disable=stop-iteration-return
             yield next(self.__iterator)
 
 
-def spot_size(dataset: Dataset) -> Dict[str, float]:
+def estimate_spot_size(dataset: Dataset) -> Dict[str, float]:
     r"""Computes the mean spot size in the :class:`Dataset`"""
 
     def _compute_size(x):
-        if x["type"] == "ST":
+        if x["data_type"] == "ST":
             zero_count_idxs = 1 + torch.where(x["data"].sum(1) == 0)[0]
             partial_idxs = np.unique(
                 torch.cat(
@@ -90,7 +86,7 @@ def spot_size(dataset: Dataset) -> Dict[str, float]:
     return {
         k: np.concatenate([v[1] for v in vs]).mean()
         for k, vs in it.groupby(
-            [(x["type"], _compute_size(x)) for x in dataset],
+            [(x["data_type"], _compute_size(x)) for x in dataset],
             key=lambda x: x[0],
         )
     }
@@ -101,28 +97,40 @@ def make_dataloader(dataset: Dataset, **kwargs: Any) -> DataLoader:
 
     def _collate(xs):
         def _remove_key(v):
-            v.pop("type")
+            v.pop("data_type")
             return v
 
         def _sort_key(x):
-            return x["type"]
+            return x["data_type"]
 
         def _collate(ys):
+            collated_data = {}
+
             # we can't collate the count data as a tensor since its dimension
             # will differ between samples. therefore, we return it as a list
             # instead.
-            data = [y.pop("data") for y in ys]
+            try:
+                collated_data.update({"data": [y.pop("data") for y in ys]})
+            except KeyError:
+                pass
 
-            # collate effects as dataframe to keep its metadata
-            effects = pd.concat([y.pop("effects") for y in ys], axis=1)
-            effects = effects.transpose()
+            # Collate any other non-tensor as list
+            collated_data.update(
+                {
+                    k: [y.pop(k) for y in ys]
+                    for k in set(
+                        k
+                        for y in ys
+                        for k, v in y.items()
+                        if not torch.is_tensor(v)
+                    )
+                }
+            )
 
             # Crop image sizes to the minimum size over the batch
             min_size = {}
             for y in ys:
                 for k, v in y.items():
-                    if not isinstance(v, torch.Tensor):
-                        continue
                     if k in min_size:
                         min_size[k] = torch.min(
                             min_size[k], torch.as_tensor(v.shape)
@@ -131,10 +139,10 @@ def make_dataloader(dataset: Dataset, **kwargs: Any) -> DataLoader:
                         min_size[k] = torch.as_tensor(v.shape)
             for y in ys:
                 for k, v in min_size.items():
-                    if k in y and isinstance(y[k], torch.Tensor):
-                        y[k] = center_crop(y[k], v.numpy().tolist())
+                    y[k] = center_crop(y[k], v.numpy().tolist())
+            collated_data.update(default_collate(ys))
 
-            return {"data": data, "effects": effects, **default_collate(ys)}
+            return collated_data
 
         return {
             k: _collate([_remove_key(v) for v in vs])

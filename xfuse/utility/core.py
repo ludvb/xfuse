@@ -1,6 +1,9 @@
+import itertools as it
 from typing import (
     Any,
     ContextManager,
+    Iterable,
+    List,
     Protocol,
     Tuple,
     TypeVar,
@@ -16,6 +19,7 @@ from PIL import Image
 
 __all__ = [
     "center_crop",
+    "chunks_of",
     "rescale",
     "resize",
     "temp_attr",
@@ -129,3 +133,21 @@ def temp_attr(obj: object, attr: str, value: Any) -> ContextManager:
                 )
 
     return _TempAttr()
+
+
+T = TypeVar("T")
+
+
+def chunks_of(xs: Iterable[T], size: int) -> Iterable[List[T]]:
+    r"""
+    Yields size `size` chunks of `xs`.
+
+    >>> list(chunks_of([1, 2, 3, 4], 2))
+    [[1, 2], [3, 4]]
+    """
+
+    class _StopMarker:
+        pass
+
+    for chunk in it.zip_longest(*[iter(xs)] * size, fillvalue=_StopMarker):
+        yield list(filter(lambda x: x is not _StopMarker, chunk))

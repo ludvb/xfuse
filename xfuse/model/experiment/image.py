@@ -186,11 +186,10 @@ class Image(Experiment):
             image_distr,
             obs=center_crop(x["image"], image_distr.shape()),
         )
-        return image_distr
 
     def model(self, x, zs):
         decoded = self._decode(zs)
-        return self._sample_image(x, decoded)
+        self._sample_image(x, decoded)
 
     def guide(self, x):
         return self._encode(x["image"])

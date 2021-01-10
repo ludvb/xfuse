@@ -93,11 +93,14 @@ patch_size = 768
 
 [analyses]
 [analyses.metagenes]
+type = "metagenes"
+[analyses.metagenes.options]
 method = "pca"
 
 [analyses.gene_maps]
+type = "gene_maps"
+[analyses.gene_maps.options]
 gene_regex = ".*"
-normalize = false
 
 [slides]
 [slides.section1]

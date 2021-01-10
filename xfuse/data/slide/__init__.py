@@ -1,4 +1,9 @@
-from .slide import *
-from .full_slide import *
-from .data_slide import *
-from .random_slide import *
+from .slide import Slide
+from .data import AnnotatedImage, SlideData, STSlide
+from .iterator import (
+    SlideIterator,
+    DataIterator,
+    FullSlideIterator,
+    RandomIterator,
+)
+from . import data, iterator

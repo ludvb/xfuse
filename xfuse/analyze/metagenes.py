@@ -5,7 +5,6 @@ from typing import cast
 import matplotlib.pyplot as plt
 import pandas as pd
 import pyro
-import torch
 from imageio import imwrite
 
 from ..model.experiment.st.st import ST, _encode_metagene_name
@@ -31,7 +30,7 @@ def compute_metagene_profiles():
         with pyro.poutine.block():
             with pyro.poutine.trace() as trace:
                 # pylint: disable=protected-access
-                experiment._sample_globals()
+                experiment._sample_metagenes()
         return [
             (n, trace.trace.nodes[_encode_metagene_name(n)]["fn"])
             for n in experiment.metagenes
@@ -41,43 +40,39 @@ def compute_metagene_profiles():
 
     for experiment in model.experiments.keys():
         try:
-            names, profiles = zip(*_metagene_profile_fn[experiment]())
-            dataframe = (
-                pd.concat(
-                    [
-                        pd.DataFrame(
-                            [
-                                x.mean.detach().cpu().numpy(),
-                                x.stddev.detach().cpu().numpy(),
-                            ],
-                            columns=genes,
-                            index=pd.Index(
-                                ["mean", "stddev"], name="log2fold"
-                            ),
-                        )
-                        for x in profiles
-                    ],
-                    keys=pd.Index(names, name="metagene"),
-                )
-                .reset_index()
-                .melt(
-                    ["metagene", "log2fold"],
-                    var_name="gene",
-                    value_name="value",
-                )
-                .pivot_table(
-                    index=["metagene", "gene"],
-                    columns="log2fold",
-                    values="value",
-                )
-            )
-            yield experiment, dataframe
+            fn = _metagene_profile_fn[experiment]
         except KeyError:
             warnings.warn(
                 f'Metagene profiles for experiment of type "{experiment}"'
                 " not implemented"
             )
             continue
+
+        names, profiles = zip(*fn())
+        dataframe = (
+            pd.concat(
+                [
+                    pd.DataFrame(
+                        [
+                            x.mean.detach().cpu().numpy(),
+                            x.stddev.detach().cpu().numpy(),
+                        ],
+                        columns=genes,
+                        index=pd.Index(["mean", "stddev"], name="log2fold"),
+                    )
+                    for x in profiles
+                ],
+                keys=pd.Index(names, name="metagene"),
+            )
+            .reset_index()
+            .melt(
+                ["metagene", "log2fold"], var_name="gene", value_name="value",
+            )
+            .pivot_table(
+                index=["metagene", "gene"], columns="log2fold", values="value",
+            )
+        )
+        yield experiment, dataframe
 
 
 def visualize_metagene_profile(
@@ -101,16 +96,11 @@ def visualize_metagene_profile(
 
 
 def compute_metagene_summary(method: str = "pca") -> None:
-    r"""Imputation analysis function"""
+    r"""Computes metagene summary"""
     # pylint: disable=too-many-locals
-    dataloader = require("dataloader")
-
-    with Session(
-        default_device=torch.device("cpu"), messengers=[]
-    ), torch.no_grad():
-        for slide_name, (summarization, metagenes) in zip(
-            dataloader.dataset.data.design.columns,
-            visualize_metagenes(method),
+    with Session(messengers=[]):
+        for (slide_name, summarization, metagenes) in visualize_metagenes(
+            method
         ):
             os.makedirs(slide_name, exist_ok=True)
             imwrite(

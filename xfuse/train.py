@@ -1,11 +1,11 @@
 import itertools as it
 
-import numpy as np
 import pyro
 from pyro.poutine.runtime import effectful
 
 from .logging import DEBUG, INFO, Progressbar, log
 from .session import get, require
+from .utility.pyro import TraceWithDuplicates
 from .utility.tensor import to_device
 
 
@@ -31,7 +31,9 @@ def train(epochs: int = -1):
     @effectful(type="step")
     def _step(*, x):
         loss = pyro.infer.Trace_ELBO()
-        return -pyro.infer.SVI(model.model, model.guide, optim, loss).step(x)
+        with TraceWithDuplicates() as trace:
+            pyro.infer.SVI(model.model, model.guide, optim, loss).step(x)
+        return trace.trace
 
     @effectful(type="epoch")
     def _epoch(*, epoch):
@@ -40,11 +42,9 @@ def train(epochs: int = -1):
         with Progressbar(
             dataloader, desc=f"Epoch {epoch:05d}", leave=False,
         ) as iterator:
-            elbo = []
             for x in iterator:
                 training_data.step += 1
-                elbo.append(_step(x=to_device(x)))
-        return np.mean(elbo)
+                _step(x=to_device(x))
 
     with Progressbar(
         (
@@ -59,19 +59,13 @@ def train(epochs: int = -1):
     ) as iterator:
         for epoch in iterator:
             training_data.epoch = epoch
-            elbo = _epoch(epoch=epoch)
+            _epoch(epoch=epoch)
             log(
                 INFO,
                 " | ".join(
-                    [
-                        "Epoch %05d",
-                        "ELBO %+.3e",
-                        "Running ELBO %+.4e",
-                        "Running RMSE %.3f",
-                    ]
+                    ["Epoch %05d", "Running ELBO %+.4e", "Running RMSE %.3f"]
                 ),
                 epoch,
-                elbo,
                 training_data.elbo_long or 0.0,
                 training_data.rmse or 0.0,
             )

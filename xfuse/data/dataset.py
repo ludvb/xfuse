@@ -1,5 +1,5 @@
 from functools import reduce
-from typing import Dict, NamedTuple
+from typing import Dict, NamedTuple, Optional
 
 import numpy as np
 import pandas as pd
@@ -48,11 +48,11 @@ class Dataset(torch.utils.data.Dataset):
         }
         self.observations = pd.DataFrame(
             dict(
-                type=np.repeat(
-                    [x.data.type for x in self._data.slides.values()],
+                data_type=np.repeat(
+                    [x.data.data_type for x in self._data.slides.values()],
                     [len(x) for x in self._data_iterators.values()],
                 ),
-                sample=np.repeat(
+                slide=np.repeat(
                     list(self._data_iterators.keys()),
                     [len(x) for x in self._data_iterators.values()],
                 ),
@@ -61,9 +61,31 @@ class Dataset(torch.utils.data.Dataset):
                 ),
             )
         )
-        self.size = dict(
-            zip(*np.unique(self.observations["type"], return_counts=True))
-        )
+
+    def size(
+        self,
+        data_type: Optional[str] = None,
+        slide: Optional[str] = None,
+        covariate: Optional[str] = None,
+        condition: Optional[str] = None,
+    ) -> int:
+        """Returns the size of the dataset for a given `data_type`"""
+        observations = self.observations
+        if data_type is not None:
+            observations = observations[observations.data_type == data_type]
+        if slide is not None:
+            observations = observations[observations.slide == slide]
+        if covariate is not None:
+            observations = observations.merge(
+                self.data.design[covariate].rename("condition"),
+                left_on="slide",
+                right_index=True,
+            )
+            if condition is not None:
+                observations = observations[
+                    observations["condition"] == condition
+                ]
+        return len(observations)
 
     @property
     def genes(self):
@@ -85,13 +107,14 @@ class Dataset(torch.utils.data.Dataset):
         return len(self.observations)
 
     def __getitem__(self, idx):
-        slide = self.observations["sample"].iloc[idx]
+        slide = self.observations["slide"].iloc[idx]
         return dict(
-            type=self._data.slides[slide].data.type,
+            data_type=self._data.slides[slide].data.data_type,
+            slide=slide,
+            covariates=dict(self.data.design.loc[slide].iteritems()),
             **self._data_iterators[slide].__getitem__(
                 self.observations["idx"].iloc[idx]
             ),
-            effects=self._data.design[slide],
         )
 
     def __iter__(self):

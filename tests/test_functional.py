@@ -32,19 +32,45 @@ def test_train_exit_status(shared_datadir, script_runner, tmp_path, test_case):
 
 
 @pytest.mark.script_launch_mode("subprocess")
+@pytest.mark.parametrize("test_case", ["test_analysis_exit_status.1.toml"])
+def test_analysis_exit_status(
+    shared_datadir, script_runner, tmp_path, test_case
+):
+    r"""Test CLI run invocation"""
+    save_path = tmp_path / "output_dir"
+    arguments = [
+        "run",
+        str(shared_datadir / test_case),
+        f"--save-path={save_path}",
+        "--checkpoint-interval=0",
+        "--purge-interval=0",
+        "--no-tensorboard",
+        "--no-stats",
+        "--analysis-interval=5",
+    ]
+    ret = script_runner.run("xfuse", *arguments)
+    assert ret.success
+    assert "final.session" in os.listdir(save_path)
+    assert "log" in os.listdir(save_path)
+    assert "analyses" in os.listdir(save_path)
+    assert "step-000005" in os.listdir(save_path / "analyses")
+    assert "step-000010" in os.listdir(save_path / "analyses")
+    assert "final" in os.listdir(save_path / "analyses")
+
+
+@pytest.mark.script_launch_mode("subprocess")
 def test_train_stats_filewriter(shared_datadir, script_runner, tmp_path):
     r"""Test CLI invocation"""
     save_path = tmp_path / "output_dir"
     arguments = [
         "run",
-        str(shared_datadir / "test_train_exit_status.1.toml"),
+        str(shared_datadir / "test_stats_writers.1.toml"),
         f"--save-path={save_path}",
         "--no-tensorboard",
         "--stats",
         "--stats-elbo-interval=1",
         "--stats-image-interval=1",
         "--stats-latent-interval=1",
-        "--stats-loglikelihood-interval=1",
         "--stats-metagenefullsummary-interval=1",
         "--stats-metagenehistogram-interval=1",
         "--stats-metagenemean-interval=1",
@@ -57,17 +83,12 @@ def test_train_stats_filewriter(shared_datadir, script_runner, tmp_path):
         os.path.join(save_path, "stats", "accuracy", "rmse.csv.gz")
     )
     assert os.path.exists(
+        os.path.join(
+            save_path, "stats", "conditions", "toydata2", "condition.csv.gz"
+        )
+    )
+    assert os.path.exists(
         os.path.join(save_path, "stats", "loss", "elbo.csv.gz")
-    )
-    assert os.path.exists(
-        os.path.join(
-            save_path, "stats", "loss", "loglikelihood", "ST", "xsg.csv.gz"
-        )
-    )
-    assert os.path.exists(
-        os.path.join(
-            save_path, "stats", "loss", "loglikelihood", "ST", "image.csv.gz"
-        )
     )
     assert os.path.exists(
         os.path.join(save_path, "stats", "metagene-mean", "metagene-1.csv.gz")
@@ -118,14 +139,13 @@ def test_train_stats_tensorboardwriter(
     save_path = tmp_path / "output_dir"
     arguments = [
         "run",
-        str(shared_datadir / "test_train_exit_status.1.toml"),
+        str(shared_datadir / "test_stats_writers.1.toml"),
         f"--save-path={save_path}",
         "--tensorboard",
         "--no-stats",
         "--stats-elbo-interval=1",
         "--stats-image-interval=1",
         "--stats-latent-interval=1",
-        "--stats-loglikelihood-interval=1",
         "--stats-metagenefullsummary-interval=1",
         "--stats-metagenehistogram-interval=1",
         "--stats-metagenemean-interval=1",

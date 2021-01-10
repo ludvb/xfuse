@@ -184,15 +184,30 @@ _ANNOTATED_CONFIG = OrderedDict(
                 value=OrderedDict(
                     [
                         (
-                            name,
+                            f"analysis-{name}",
                             Item(
                                 comment=analysis.description,
                                 value=OrderedDict(
                                     [
-                                        (param_name, Item(value=param.default))
-                                        for param_name, param in signature(
-                                            analysis.function
-                                        ).parameters.items()
+                                        ("type", Item(value=name)),
+                                        (
+                                            "options",
+                                            Item(
+                                                value=OrderedDict(
+                                                    [
+                                                        (
+                                                            param_name,
+                                                            Item(
+                                                                value=param.default
+                                                            ),
+                                                        )
+                                                        for param_name, param in signature(
+                                                            analysis.function
+                                                        ).parameters.items()
+                                                    ]
+                                                )
+                                            ),
+                                        ),
                                     ]
                                 ),
                             ),
@@ -248,7 +263,10 @@ def _annotated_config2toml(
                 _add_items(subtable, item.value)
                 table.add(k, subtable)
             else:
-                table.add(k, item.value)
+                try:
+                    table.add(k, item.value)
+                except ValueError:
+                    continue
                 if item.comment:
                     try:
                         table[k].comment(item.comment)

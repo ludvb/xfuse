@@ -193,7 +193,7 @@ def write_data(
     counts: pd.DataFrame,
     image: np.ndarray,
     label: np.ndarray,
-    annotation: Dict[str, np.ndarray],
+    annotation: Dict[str, Tuple[np.ndarray, Dict[int, str]]],
     type_label: str,
     auto_rotate: bool = False,
     path: str = "data.h5",
@@ -236,8 +236,15 @@ def write_data(
             label, rect, interpolation_method=cv.INTER_NEAREST
         )
         annotation = {
-            k: crop_to_rect(v, rect, interpolation_method=cv.INTER_NEAREST)
-            for k, v in annotation.items()
+            k: (
+                crop_to_rect(
+                    annotation_label,
+                    rect,
+                    interpolation_method=cv.INTER_NEAREST,
+                ),
+                label_names,
+            )
+            for k, (annotation_label, label_names) in annotation.items()
         }
 
     counts, label = relabel(counts, label)
@@ -275,8 +282,25 @@ def write_data(
         data_file.create_dataset("image", image.shape, np.float32, image)
         data_file.create_dataset("label", label.shape, np.int16, label)
         data_file.create_group("annotation", track_order=True)
-        for k, v in annotation.items():
-            data_file.create_dataset(f"annotation/{k}", v.shape, np.uint16, v)
+        for k, (annotation_label, label_names) in annotation.items():
+            data_file.create_dataset(
+                f"annotation/{k}/label",
+                annotation_label.shape,
+                np.uint16,
+                annotation_label,
+            )
+            data_file.create_dataset(
+                f"annotation/{k}/names/keys",
+                len(label_names),
+                np.int64,
+                list(label_names.keys()),
+            )
+            data_file.create_dataset(
+                f"annotation/{k}/names/values",
+                len(label_names),
+                h5py.string_dtype(),
+                list(label_names.values()),
+            )
         data_file.create_dataset(
             "type", data=type_label, dtype=h5py.string_dtype()
         )

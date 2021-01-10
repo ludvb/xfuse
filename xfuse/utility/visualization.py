@@ -1,5 +1,5 @@
 import warnings
-from typing import Callable, List, Optional, Union, cast
+from typing import Callable, Optional, Union, cast
 
 import numpy as np
 import pyro
@@ -9,7 +9,7 @@ from scipy.ndimage.morphology import distance_transform_edt
 from sklearn.decomposition import PCA
 
 from ..data import Data, Dataset
-from ..data.slide import FullSlide, Slide
+from ..data.slide import FullSlideIterator, Slide
 from ..data.utility.misc import make_dataloader
 from ..session import Session, get, require
 from ..utility.core import center_crop
@@ -121,12 +121,15 @@ def visualize_metagenes(
         raise ValueError(f'Method "{method}" not supported')
 
     def _compute_st_activation(x):
-        with pyro.poutine.trace() as guide_trace:
-            model.guide(x)
+        x["ST"]["label"].zero_()
 
-        with pyro.poutine.replay(trace=guide_trace.trace):
-            with pyro.poutine.trace() as model_trace:
-                model.model(x)
+        with Session(default_device=torch.device("cpu")):
+            with pyro.poutine.trace() as guide_trace:
+                model.guide(x)
+
+            with pyro.poutine.replay(trace=guide_trace.trace):
+                with pyro.poutine.trace() as model_trace:
+                    model.model(x)
 
         activation = (
             model_trace.trace.nodes["rim"]["fn"]
@@ -136,10 +139,7 @@ def visualize_metagenes(
         )
 
         scale = (
-            model_trace.trace.nodes["scale"]["fn"]
-            .mean[0]
-            .permute(1, 2, 0)
-            .numpy()
+            model_trace.trace.nodes["scale"]["fn"].mean[0].squeeze().numpy()
         )
         scale = scale / scale.max()
 
@@ -167,9 +167,9 @@ def visualize_metagenes(
         mask = ~zero_label & thresholded_scale
         mask = cleanup_mask(mask, 0.01)
 
-        name = list(model.get_experiment("ST").metagenes.keys())
+        metagene_name = list(model.get_experiment("ST").metagenes.keys())
 
-        return activation, scale, mask, name
+        return activation, scale, mask, metagene_name
 
     compute_fn = {"ST": _compute_st_activation}
 
@@ -177,7 +177,7 @@ def visualize_metagenes(
         Dataset(
             Data(
                 slides={
-                    k: Slide(data=v.data, iterator=FullSlide)
+                    k: Slide(data=v.data, iterator=FullSlideIterator)
                     for k, v in dataloader.dataset.data.slides.items()
                 },
                 design=dataloader.dataset.data.design,
@@ -186,25 +186,14 @@ def visualize_metagenes(
         batch_size=1,
     )
 
-    with Session(default_device=torch.device("cpu"), eval=True):
-        activations: List[np.ndarray] = []
-        scales: List[torch.Tensor] = []
-        masks: List[torch.Tensor] = []
-        names: List[List[str]] = []
-        for x in dataloader:
-            data_type, *__this_should_be_empty = x.keys()
-            assert __this_should_be_empty == []
-            if data_type not in compute_fn:
-                warnings.warn(
-                    f'Metagene visualization for data type "{data_type}" not'
-                    " implemented",
-                )
-            with torch.no_grad():
-                activation, scale, mask, name = compute_fn[data_type](x)
-            activations.append(activation)
-            scales.append(scale.squeeze())
-            masks.append(mask)
-            names.append(name)
+    with Session(eval=True):
+        activations, scales, masks, metagene_names, slide_names = zip(
+            *[
+                (*compute_fn[datatype](batch), batch[datatype]["slide"][0])
+                for batch in dataloader
+                for datatype in batch
+            ]
+        )
 
     activations_flat = np.concatenate(
         [
@@ -243,8 +232,8 @@ def visualize_metagenes(
         except RuntimeWarning:
             transform = lambda x: x[..., :3]
 
-    for activation, scale, mask, name in zip(
-        activations, scales, masks, names
+    for activation, scale, mask, metagene_name, slide_name in zip(
+        activations, scales, masks, metagene_names, slide_names
     ):
         summarized_image = np.zeros((*activation.shape[:2], 4), dtype=float)
         summarized_activation = reduce_last_dimension(
@@ -262,6 +251,7 @@ def visualize_metagenes(
         summarized_image = summarized_image.astype(np.uint8)
         summarized_image = _cmyk2rgb(summarized_image)
         yield (
+            slide_name,
             mask_background(summarized_image, mask),
             [
                 (
@@ -273,7 +263,7 @@ def visualize_metagenes(
                         mask,
                     ),
                 )
-                for n, x in zip(name, activation.transpose(2, 0, 1))
+                for n, x in zip(metagene_name, activation.transpose(2, 0, 1))
             ],
         )
 

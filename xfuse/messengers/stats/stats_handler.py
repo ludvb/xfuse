@@ -103,3 +103,11 @@ def log_scalar(*args, **kwargs) -> None:
     with chdir("/stats"), torch.no_grad():
         for stats_writer in stats_writers:
             stats_writer.write_scalar(*args, **kwargs)
+
+
+def log_scalars(*args, **kwargs) -> None:
+    r"""Pushes scalars to the session `stats_writers`"""
+    stats_writers: List[StatsWriter] = get("stats_writers")
+    with chdir("/stats"), torch.no_grad():
+        for stats_writer in stats_writers:
+            stats_writer.write_scalars(*args, **kwargs)

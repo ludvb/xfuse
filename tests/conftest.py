@@ -11,13 +11,12 @@ import torch
 from scipy.ndimage import label as make_label
 from xfuse.convert.utility import write_data
 from xfuse.data import Data, Dataset
-from xfuse.data.slide import STSlide, FullSlide, Slide
+from xfuse.data.slide import STSlide, FullSlideIterator, Slide
 from xfuse.data.utility.misc import make_dataloader
 from xfuse.model import XFuse
 from xfuse.model.experiment.st import ST, MetageneDefault
 from xfuse.session import Session, get
 from xfuse.train import train
-from xfuse.utility.design import design_matrix_from, extract_covariates
 from xfuse.utility.state import reset_state
 
 
@@ -121,7 +120,7 @@ def toydata(tmp_path):
     annotation1 = np.arange(100) // 10 % 2 == 1
     annotation1 = annotation1[:, None] & annotation1[None]
     annotation1, _ = make_label(annotation1)
-    annotation2 = (annotation1 == 0).astype(np.uint8)
+    annotation2 = 1 + (annotation1 == 0).astype(np.uint8)
 
     filepath = tmp_path / "data.h5"
     write_data(
@@ -129,14 +128,20 @@ def toydata(tmp_path):
         image,
         label,
         type_label="ST",
-        annotation={"annotation1": annotation1, "annotation2": annotation2},
+        annotation={
+            "annotation1": (
+                annotation1,
+                {x: str(x) for x in np.unique(annotation1) if x != 0},
+            ),
+            "annotation2": (annotation2, {1: "false", 2: "true"}),
+        },
         auto_rotate=True,
         path=str(filepath),
     )
 
-    design_matrix = design_matrix_from({"toydata": {"ID": 1}})
-    slide = Slide(data=STSlide(str(filepath)), iterator=FullSlide)
-    data = Data(slides={"toydata": slide}, design=design_matrix)
+    design = pd.DataFrame({"ID": 1}, index=["toydata"]).astype("category")
+    slide = Slide(data=STSlide(str(filepath)), iterator=FullSlideIterator)
+    data = Data(slides={"toydata": slide}, design=design)
     dataset = Dataset(data)
     dataloader = make_dataloader(dataset)
 
@@ -157,7 +162,11 @@ def pretrained_toy_model(toydata):
         model=xfuse,
         optimizer=pyro.optim.Adam({"lr": 0.001}),
         dataloader=toydata,
-        covariates=extract_covariates(toydata.dataset.data.design),
+        genes=toydata.dataset.genes,
+        covariates={
+            covariate: values.cat.categories.values.tolist()
+            for covariate, values in toydata.dataset.data.design.iteritems()
+        },
     ):
         train(100 + get("training_data").epoch)
     return xfuse

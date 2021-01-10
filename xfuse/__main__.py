@@ -1,5 +1,6 @@
 # pylint: disable=missing-docstring, invalid-name, too-many-instance-attributes
 
+import itertools as it
 import json
 import logging
 import os
@@ -16,6 +17,7 @@ import tomlkit
 
 from imageio import imread
 from PIL import Image
+from tabulate import tabulate
 
 from . import __version__, convert
 from ._config import (  # type: ignore
@@ -23,14 +25,13 @@ from ._config import (  # type: ignore
     merge_config,
 )
 from .logging import DEBUG, INFO, log
-from .messengers import Checkpointer, stats as stats_trackers
+from .messengers import AnalysisRunner, Checkpointer, stats as stats_trackers
 from .messengers.stats.writer import FileWriter, TensorboardWriter
 from .model.experiment.st.metagene_expansion_strategy import (
     STRATEGIES as expansion_strategies,
 )
 from .run import run as _run
 from .utility.core import temp_attr
-from .utility.design import design_matrix_from, extract_covariates
 from .utility.file import first_unique_filename
 from .session import Session, get
 from .session.io import load_session
@@ -283,28 +284,29 @@ cli.add_command(init)
 @click.option("--session", type=click.File("rb"))
 @click.option("--tensorboard/--no-tensorboard", default=True)
 @click.option("--stats/--no-stats", default=False)
-@click.option("--stats-elbo-interval", default=1)
+@click.option("--stats-conditions-interval", default=10)
+@click.option("--stats-elbo-interval", default=10)
 @click.option("--stats-image-interval", default=1000)
 @click.option("--stats-latent-interval", default=1000)
-@click.option("--stats-loglikelihood-interval", default=1)
-@click.option("--stats-metagenefullsummary-interval", default=5000)
-@click.option("--stats-metagenehistogram-interval", default=100)
+@click.option("--stats-metagenefullsummary-interval", default=0)
+@click.option("--stats-metagenehistogram-interval", default=0)
 @click.option("--stats-metagenemean-interval", default=100)
 @click.option("--stats-metagenesummary-interval", default=1000)
-@click.option("--stats-rmse-interval", default=1)
+@click.option("--stats-rmse-interval", default=10)
 @click.option("--stats-scale-interval", default=1000)
 @click.option("--checkpoint-interval", default=1000)
 @click.option("--purge-interval", default=1000)
+@click.option("--analysis-interval", default=0)
 @_init
 def run(
     project_file,
     session,
     tensorboard,
     stats,
+    stats_conditions_interval,
     stats_elbo_interval,
     stats_image_interval,
     stats_latent_interval,
-    stats_loglikelihood_interval,
     stats_metagenefullsummary_interval,
     stats_metagenehistogram_interval,
     stats_metagenemean_interval,
@@ -313,6 +315,7 @@ def run(
     stats_scale_interval,
     checkpoint_interval,
     purge_interval,
+    analysis_interval,
 ):
     r"""
     Runs xfuse based on a project configuration file.
@@ -356,16 +359,52 @@ def run(
             for name, slide in config["slides"].items()
         }
         slide_covariates = {
-            name: slide["covariates"] if "covariates" in slide else {}
+            name: {
+                covariate: str(condition)
+                for covariate, condition in slide["covariates"].items()
+            }
+            if "covariates" in slide
+            else {}
             for name, slide in config["slides"].items()
         }
-        design = design_matrix_from(
-            slide_covariates, covariates=get("covariates")
+
+        covariates = {
+            **{
+                covariate: sorted(set(x[1] for x in group))
+                for covariate, group in it.groupby(
+                    sorted(
+                        (covariate, condition)
+                        for slide, covariates in slide_covariates.items()
+                        for covariate, condition in covariates.items()
+                    ),
+                    key=lambda x: x[0],
+                )
+            },
+            **get("covariates"),
+        }
+
+        design = pd.DataFrame(
+            index=slide_covariates.keys(), columns=covariates.keys()
         )
-        covariates = extract_covariates(design)
-        log(INFO, "Using the following design covariates:")
-        for name, values in covariates:
-            log(INFO, "  - %s: %s", name, ", ".join(map(str, values)))
+        for slide_name, slide_covariates in slide_covariates.items():
+            for slide_covariate, slide_condition in slide_covariates.items():
+                design.loc[slide_name, slide_covariate] = slide_condition
+        design = design.astype("category")
+        for covariate, conditions in covariates.items():
+            design[covariate].cat.set_categories(conditions)
+
+        log(INFO, "Using the following design table:")
+        log(INFO, "")
+        for x in tabulate(
+            design.astype(object).fillna("<inferred>"),
+            headers=[
+                "{} {{{}}}".format(c, ",".join(covariates[c]))
+                for c in design.columns
+            ],
+            tablefmt="orgtbl",
+        ).split("\n"):
+            log(INFO, x)
+        log(INFO, "")
 
         expansion_strategy = get("metagene_expansion_strategy")
         if expansion_strategy is None:
@@ -383,6 +422,11 @@ def run(
         if tensorboard:
             stats_writers.append(TensorboardWriter())
 
+        analyses = {
+            name: (settings["type"], settings["options"])
+            for name, settings in config["analyses"].items()
+        }
+
         def _every(n):
             def _predicate(**_msg):
                 return not get("eval") and get("training_data").step % n == 0
@@ -390,6 +434,10 @@ def run(
             return _predicate
 
         messengers = []
+        if stats_conditions_interval > 0:
+            messengers.append(
+                stats_trackers.Conditions(_every(stats_conditions_interval))
+            )
         if stats_elbo_interval > 0:
             messengers.append(stats_trackers.ELBO(_every(stats_elbo_interval)))
         if stats_image_interval > 0:
@@ -399,12 +447,6 @@ def run(
         if stats_latent_interval > 0:
             messengers.append(
                 stats_trackers.Latent(_every(stats_latent_interval))
-            )
-        if stats_loglikelihood_interval > 0:
-            messengers.append(
-                stats_trackers.LogLikelihood(
-                    _every(stats_loglikelihood_interval)
-                )
             )
         if stats_metagenefullsummary_interval > 0:
             messengers.append(
@@ -438,6 +480,10 @@ def run(
             )
         if checkpoint_interval > 0:
             messengers.append(Checkpointer(period=checkpoint_interval))
+        if analysis_interval > 0:
+            messengers.append(
+                AnalysisRunner(analyses=analyses, period=analysis_interval)
+            )
 
         with Session(
             covariates=covariates,
@@ -447,7 +493,7 @@ def run(
             _run(
                 design,
                 slide_paths,
-                analyses=config["analyses"],
+                analyses=analyses,
                 expansion_strategy=expansion_strategy,
                 purge_interval=purge_interval,
                 network_depth=config["xfuse"]["network_depth"],
