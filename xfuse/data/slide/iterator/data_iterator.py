@@ -1,11 +1,10 @@
 import torch
 
-from .slide import SlideIterator, STSlide
+from . import SlideIterator
+from ..data import STSlide
 
-__all__ = ["DataSlide"]
 
-
-class DataSlide(SlideIterator):
+class DataIterator(SlideIterator):
     r"""
     A :class:`SlideIterator` that yields only the count data from the slide
     """

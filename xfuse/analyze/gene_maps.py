@@ -1,47 +1,76 @@
-import os
+import itertools as it
 import re
 import warnings
-from typing import Any, Callable, Dict, Iterator, Tuple
+from typing import Any, Callable, Dict, Iterable, Tuple
 
 import numpy as np
-import pyro
 import torch
 from imageio import imwrite
-from tqdm import tqdm
+from scipy.ndimage.morphology import binary_fill_holes
 
 from .analyze import Analysis, _register_analysis
+from .prediction import predict
 from ..data import Data, Dataset
-from ..data.slide import FullSlide, Slide
+from ..data.slide import AnnotatedImage, FullSlideIterator, Slide
 from ..data.utility.misc import make_dataloader
+from ..logging import Progressbar
 from ..session import Session, require
-from ..utility.mask import cleanup_mask
+from ..utility.core import chunks_of, resize
+from ..utility.file import chdir
 from ..utility.visualization import (
+    balance_colors,
     greyscale2colormap,
     mask_background,
-    balance_colors,
 )
+from ..utility.tensor import to_device
 
 
-def compute_gene_maps(
-    gene_regex: str = r".*", normalize: bool = False
-) -> None:
-    r"""Gene maps analysis function"""
-    # pylint: disable=too-many-locals
+def generate_gene_maps(
+    num_samples: int = 10,
+    genes_per_batch: int = 10,
+    predict_mean: bool = True,
+    normalize: bool = False,
+    scale: float = 1.0,
+) -> Iterable[Tuple[str, str, np.ndarray]]:
+    """Generates gene maps on the active dataset"""
+
     genes = require("genes")
-    model = require("model")
     dataloader = require("dataloader")
+
+    if scale <= 0 or scale > 1.0:
+        raise ValueError("Argument `scale` must be in (0, 1]")
+
+    def _compute_annotation(shape):
+        scaled_shape = [x * scale for x in shape]
+        ys, xs = [
+            np.floor(np.linspace(0, scaled_x, x, endpoint=False)).astype(int)
+            for scaled_x, x in zip(scaled_shape, shape)
+        ]
+        annotation = 1 + torch.as_tensor((1 + xs.max()) * ys[:, None] + xs)
+        label_names = {
+            1 + (1 + xs.max()) * y + x: (y, x)
+            for y in np.unique(ys)
+            for x in np.unique(xs)
+        }
+        return annotation, label_names
 
     dataloader = make_dataloader(
         Dataset(
             Data(
                 slides={
                     k: Slide(
-                        data=v.data,
-                        # pylint: disable=unnecessary-lambda
-                        # ^ Necessary for type checking to pass
-                        iterator=lambda x: FullSlide(x),
+                        data=AnnotatedImage(
+                            torch.as_tensor(v.data.image[()]),
+                            annotation=annotation,
+                            name="coordinates",
+                            label_names=label_names,
+                        ),
+                        iterator=FullSlideIterator,
                     )
                     for k, v in dataloader.dataset.data.slides.items()
+                    for annotation, label_names in [
+                        _compute_annotation(v.data.label.shape)
+                    ]
                 },
                 design=dataloader.dataset.data.design,
             )
@@ -50,76 +79,134 @@ def compute_gene_maps(
         shuffle=False,
     )
 
-    all_genes = np.array(genes).astype(str)
-    selected_genes = np.array(
-        [x for x in all_genes if re.match(gene_regex, x, flags=re.IGNORECASE)]
-    )
+    def _process_batch(samples):
+        rows, cols = [x + 1 for x in samples[0]["rownames"][-1]]
+        data = torch.stack([x["data"] for x in samples])
+        data = data.reshape(data.shape[0], rows, cols, data.shape[-1])
+        for gene, gene_data in zip(
+            samples[0]["colnames"], data.permute(3, 0, 1, 2)
+        ):
+            yield samples[0]["section"], gene, gene_data
 
-    def _compute_gene_map_st(
-        guide_trace, model_trace, data  # pylint: disable=unused-argument
-    ):
-        rate_im = model_trace.nodes["rim"]["value"]
-        if not normalize:
-            rate_im *= model_trace.nodes["scale"]["value"]
-        rate_mg = model_trace.nodes["rate_mg"]["value"]
-        rate_mg = rate_mg[:, np.isin(all_genes, selected_genes).nonzero()[0]]
-        progress = tqdm(
-            zip(selected_genes, rate_mg.t()), total=len(selected_genes)
-        )
-        mask = (
-            model_trace.nodes["scale"]["value"]
-            > 0.01 * model_trace.nodes["scale"]["value"].max()
-        )
-        mask = mask.squeeze().cpu().numpy()
-        mask = cleanup_mask(mask, 0.01)
-        for name, rate_m in progress:
-            progress.set_description(name)
-            gene_map = torch.einsum("fyx,f->yx", rate_im[0], rate_m.exp())
-            yield name, gene_map, mask
+    with Progressbar(
+        chunks_of(genes, genes_per_batch),
+        total=int(np.ceil(len(genes) / genes_per_batch)),
+        leave=False,
+    ) as progress:
+        for genes_batch in progress:
+            with Session(dataloader=dataloader, genes=genes_batch):
+                for _, samples in it.groupby(
+                    sorted(
+                        [
+                            to_device(x, device=torch.device("cpu"))
+                            for x in predict(
+                                num_samples=num_samples,
+                                genes_per_batch=len(genes_batch),
+                                predict_mean=predict_mean,
+                                normalize_scale=normalize,
+                                normalize_size=True,
+                            )
+                        ],
+                        key=lambda x: x["section"],
+                    ),
+                    key=lambda x: x["section"],
+                ):
+                    yield from _process_batch(list(samples))
 
-    fns: Dict[
-        str,
-        Callable[
-            [pyro.poutine.Trace, pyro.poutine.Trace, Dict[str, Any]],
-            Iterator[Tuple[str, torch.Tensor, torch.Tensor]],
-        ],
-    ] = {"ST": _compute_gene_map_st}
+
+def _run_gene_maps_analysis(
+    gene_regex: str = r".*",
+    num_samples: int = 10,
+    genes_per_batch: int = 10,
+    predict_mean: bool = True,
+    normalize: bool = False,
+    mask_tissue: bool = True,
+    scale: float = 1.0,
+    writer: str = "image",
+    writer_args: Dict[str, Any] = None,
+) -> None:
+    r"""Gene maps analysis function"""
+
+    genes = require("genes")
+    slides = require("dataloader").dataset.data.slides
+
+    if writer_args is None:
+        writer_args = {}
+
+    def _save_image(gene, samples, tissue_mask, fileformat="jpg"):
+        def _prepare(x):
+            x = balance_colors(x, q=0, q_high=0.999)
+            x = greyscale2colormap(x)
+            if tissue_mask is not None:
+                x = mask_background(x, tissue_mask)
+            return x
+
+        imwrite(f"{gene}_mean.{fileformat}", _prepare(samples.mean(0)))
+        imwrite(f"{gene}_stdv.{fileformat}", _prepare(samples.std(0)))
+
+        lfc = np.log2(samples.transpose(1, 2, 0)) - np.log2(
+            samples.mean((1, 2))
+        )
+        imwrite(
+            f"{gene}_invcv+.{fileformat}",
+            _prepare(lfc.mean(-1).clip(0) / lfc.std(-1)),
+        )
+
+    def _save_tensor(gene, samples, tissue_mask):
+        if tissue_mask is not None:
+            samples[:, tissue_mask] = 0.0
+        torch.save(samples, f"{gene}.pt")
+
+    writers: Dict[str, Callable[..., None]] = {
+        "image": _save_image,
+        "tensor": _save_tensor,
+    }
+    try:
+        write = writers[writer]
+    except KeyError as exc:
+        raise ValueError(
+            'Invalid data format "{}" (choose between: {})'.format(
+                writer, ", ".join(f'"{x}"' for x in writers)
+            )
+        ) from exc
+
+    tissue_masks = {}
+    if mask_tissue:
+        for slide_name in slides:
+            try:
+                zero_count_idxs = np.where(
+                    np.array(slides[slide_name].data.counts.todense()).sum(1)
+                    == 0.0
+                )[0]
+                tissue_masks[slide_name] = binary_fill_holes(
+                    np.isin(
+                        slides[slide_name].data.label,
+                        1 + zero_count_idxs,
+                        invert=True,
+                    )
+                )
+            except AttributeError:
+                warnings.warn(f'Failed to mask "{slide_name}"')
 
     with Session(
-        default_device=torch.device("cpu"), messengers=[]
-    ), torch.no_grad():
-        progress = tqdm(dataloader, position=1)
-        for x in progress:
-            experiment_type = next(iter(x.keys()))
-            slide_name = x[experiment_type]["effects"].iloc[0].name
-            progress.set_description(slide_name)
-
-            if experiment_type not in fns.keys():
-                warnings.warn(
-                    "Gene map analysis is not implemented for experiment type"
-                    f' "{experiment_type}".'
-                    f' Sample "{slide_name}" will be skipped in this'
-                    " analysis.",
-                )
-                continue
-
-            with pyro.poutine.trace() as guide_trace:
-                model.guide(x)
-            with pyro.poutine.replay(trace=guide_trace.trace):
-                with pyro.poutine.trace() as model_trace:
-                    model.model(x)
-
-            for gene_name, gene_map, mask in fns[experiment_type](
-                guide_trace.trace, model_trace.trace, x[experiment_type]
-            ):
-                gene_map = balance_colors(
-                    gene_map.cpu().numpy(), q=0, q_high=0.999
-                )
-                gene_map = greyscale2colormap(gene_map)
-                gene_map = mask_background(gene_map, mask)
-                filename = os.path.join(slide_name, f"{gene_name}.png")
-                os.makedirs(slide_name, exist_ok=True)
-                imwrite(filename, gene_map)
+        genes=[
+            x for x in genes if re.match(gene_regex, x, flags=re.IGNORECASE)
+        ]
+    ):
+        for slide_name, gene, samples in generate_gene_maps(
+            num_samples=num_samples,
+            genes_per_batch=genes_per_batch,
+            predict_mean=predict_mean,
+            normalize=normalize,
+            scale=scale,
+        ):
+            try:
+                tissue_mask = tissue_masks[slide_name]
+                tissue_mask = resize(tissue_mask, samples.shape[1:])
+            except KeyError:
+                tissue_mask = None
+            with chdir(slide_name):
+                write(gene, samples.numpy(), tissue_mask, **writer_args)
 
 
 _register_analysis(
@@ -129,6 +216,6 @@ _register_analysis(
             "Constructs a map of imputed expression for each gene in the"
             " dataset."
         ),
-        function=compute_gene_maps,
+        function=_run_gene_maps_analysis,
     ),
 )

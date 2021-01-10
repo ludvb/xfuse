@@ -1,5 +1,5 @@
 from abc import ABCMeta, abstractmethod
-from typing import Optional
+from typing import Dict, Optional
 
 import torch
 
@@ -26,4 +26,8 @@ class StatsWriter(metaclass=ABCMeta):
 
     @abstractmethod
     def write_scalar(self, tag: str, scalar_value: float) -> None:
+        r"""Writes scalar data"""
+
+    @abstractmethod
+    def write_scalars(self, tag: str, scalar_values: Dict[str, float]) -> None:
         r"""Writes scalar data"""

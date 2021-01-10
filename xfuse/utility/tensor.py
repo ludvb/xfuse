@@ -24,14 +24,15 @@ def checkpoint(function, *args, **kwargs):
     return _checkpoint(function, *args, **kwargs)
 
 
+class NoDevice(Exception):
+    # pylint: disable=missing-class-docstring
+    pass
+
+
 def find_device(x: Any) -> torch.device:
     r"""
     Tries to find the :class:`torch.device` associated with the given object
     """
-
-    class NoDevice(Exception):
-        # pylint: disable=missing-class-docstring
-        pass
 
     if isinstance(x, torch.Tensor):
         return x.device

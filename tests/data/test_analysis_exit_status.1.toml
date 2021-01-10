@@ -1,0 +1,41 @@
+[xfuse]
+network_depth = 2
+
+[optimization]
+epochs = 10
+batch_size = 3
+patch_size = 32
+
+[analyses]
+[analyses.metagenes1]
+type = "metagenes"
+[analyses.metagenes1.options]
+
+[analyses.prediction1]
+type = "prediction"
+[analyses.prediction1.options]
+annotation_layer = "annotation1"
+num_samples = 10
+
+[analyses.differential_expression1]
+type = "differential_expression"
+[analyses.differential_expression1.options]
+annotation_layer = "annotation2"
+comparisons = [["true", "false"]]
+num_samples = 10
+genes_per_batch = 3
+
+[analyses.gene_maps1]
+type = "gene_maps"
+[analyses.gene_maps1.options]
+
+[slides]
+[slides.toydata1]
+data = "./files/toydata.h5"
+[slides.toydata1.covariates]
+slide = "1"
+
+[slides.toydata2]
+data = "./files/toydata.h5"
+[slides.toydata2.covariates]
+slide = "2"

@@ -1,0 +1,19 @@
+[xfuse]
+network_depth = 2
+
+[optimization]
+epochs = 1
+batch_size = 2
+patch_size = 32
+
+[slides]
+[slides.toydata1]
+data = "./files/toydata.h5"
+[slides.toydata1.covariates]
+section = 1
+condition = "A"
+
+[slides.toydata2]
+data = "./files/toydata.h5"
+[slides.toydata2.covariates]
+section = 2

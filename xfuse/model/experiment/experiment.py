@@ -1,23 +1,10 @@
 from abc import abstractmethod, abstractproperty
 
-import torch as t
-
-from ...session import get
+import torch
 
 
-class Experiment(t.nn.Module):
+class Experiment(torch.nn.Module):
     r"""Abstract class defining the experiment type"""
-
-    @property
-    def n(self):
-        r"""
-        Returns the size of the subset of the data corresponding to the `tag`
-        of the experiment.
-        """
-        dataloader = get("dataloader")
-        if dataloader is not None:
-            return dataloader.dataset.size[self.tag]
-        return 0
 
     @property
     def num_z(self):

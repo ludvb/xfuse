@@ -8,13 +8,12 @@ from torchvision.transforms.functional import (
     to_pil_image,
 )
 
-from ...utility import center_crop
-from .slide import SlideIterator, STSlide
+from ....utility import center_crop
+from ..data import STSlide
+from ..iterator import SlideIterator
 
-__all__ = ["RandomSlide"]
 
-
-class RandomSlide(SlideIterator):
+class RandomIterator(SlideIterator):
     r"""
     A :class:`SlideIterator` that yields randomly cropped patches of the sample
     """

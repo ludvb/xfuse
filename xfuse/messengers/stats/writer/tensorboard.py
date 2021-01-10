@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Dict, Optional
 
 import torch
 from torch.utils.tensorboard.writer import SummaryWriter
@@ -58,4 +58,10 @@ class TensorboardWriter(StatsWriter):
         r"""Logs a scalar"""
         self._summary_writer.add_scalar(
             tag, scalar_value, global_step=get("training_data").step
+        )
+
+    def write_scalars(self, tag: str, scalar_values: Dict[str, float]) -> None:
+        r"""Logs a set of associated scalars"""
+        self._summary_writer.add_scalars(
+            tag, scalar_values, global_step=get("training_data").step
         )

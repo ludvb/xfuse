@@ -3,7 +3,7 @@ import re
 import warnings
 from functools import partial, reduce
 from operator import add
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -11,7 +11,7 @@ import pandas as pd
 from ._config import _ANNOTATED_CONFIG as CONFIG  # type: ignore
 from .analyze import analyses as _analyses
 from .data import Data, Dataset
-from .data.slide import RandomSlide, Slide, STSlide
+from .data.slide import RandomIterator, Slide, STSlide
 from .data.utility.misc import make_dataloader
 from .logging import INFO, log
 from .model import XFuse
@@ -32,13 +32,13 @@ from .session.io import save_session
 def run(
     design: pd.DataFrame,
     slide_paths: Dict[str, str],
-    analyses: Dict[str, Dict[str, Any]] = None,
+    analyses: Optional[Dict[str, Tuple[str, Dict[str, Any]]]] = None,
     expansion_strategy: ExpansionStrategy = STRATEGIES[
         CONFIG["expansion_strategy"].value["type"].value
     ](),
-    purge_interval: int = CONFIG["expansion_strategy"]
-    .value["purge_interval"]
-    .value,
+    purge_interval: int = (
+        CONFIG["expansion_strategy"].value["purge_interval"].value
+    ),
     network_depth: int = CONFIG["xfuse"].value["network_depth"].value,
     network_width: int = CONFIG["xfuse"].value["network_width"].value,
     min_counts: int = CONFIG["xfuse"].value["min_counts"].value,
@@ -57,6 +57,9 @@ def run(
 
     if analyses is None:
         analyses = {}
+
+    if slide_options is None:
+        slide_options = {}
 
     if (available_cores := len(os.sched_getaffinity(0))) < num_data_workers:
         warnings.warn(
@@ -78,13 +81,13 @@ def run(
                 **(slide_options[slide] if slide_options is not None else {}),
             ),
             iterator=partial(
-                RandomSlide,
+                RandomIterator,
                 patch_size=(
                     None if patch_size < 0 else (patch_size, patch_size)
                 ),
             ),
         )
-        for slide in design.columns
+        for slide in design.index
     }
     dataset = Dataset(data=Data(slides=slides, design=design))
     dataloader = make_dataloader(
@@ -178,13 +181,13 @@ def run(
                         raise
             save_session("final")
 
-    with Session(
-        model=xfuse, genes=genes, dataloader=dataloader, eval=True,
-    ):
-        for name, options in analyses.items():
-            if name in analyses:
-                log(INFO, 'Running analysis "%s"', name)
-                with chdir("analyses/name"):
-                    _analyses[name].function(**options)
-            else:
-                warnings.warn(f'Unknown analysis "{name}"')
+    for name, (analysis_type, options) in analyses.items():
+        if analysis_type in _analyses:
+            log(INFO, 'Running analysis "%s"', name)
+            with Session(
+                model=xfuse, dataloader=dataloader, genes=genes, messengers=[],
+            ):
+                with chdir(f"analyses/final/{name}"):
+                    _analyses[analysis_type].function(**options)
+        else:
+            warnings.warn(f'Unknown analysis "{analysis_type}"')

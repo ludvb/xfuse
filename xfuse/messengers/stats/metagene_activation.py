@@ -106,17 +106,19 @@ class MetageneFullSummary(StatsHandler):
     def _handle(self, **msg):
         try:
             with pyro.poutine.block():
-                for i, (summarization, metagenes) in enumerate(
-                    visualize_metagenes(), 1,
-                ):
+                for (
+                    slide_name,
+                    summarization,
+                    metagenes,
+                ) in visualize_metagenes():
                     # pylint: disable=no-member
                     log_image(
-                        f"metagene-summary/sample-{i}",
+                        f"metagene-summary/{slide_name}",
                         torch.as_tensor(summarization),
                     )
                     for name, metagene in metagenes:
                         log_image(
-                            f"metagene-{name}/sample-{i}",
+                            f"metagene-{name}/{slide_name}",
                             torch.as_tensor(metagene),
                         )
         except ValueError:

@@ -88,9 +88,10 @@ class XFuse(torch.nn.Module):
                 )
                 for i in range(experiment.num_z)
             ]
-            return experiment.model(x, zs)
+            experiment.model(x, zs)
 
-        return {e: _go(self.get_experiment(e), x) for e, x in xs.items()}
+        for experiment, x in xs.items():
+            _go(self.get_experiment(experiment), x)
 
     @GuideWrapper()
     def guide(self, xs):
@@ -125,10 +126,8 @@ class XFuse(torch.nn.Module):
                     name, Normal(z_mu(y), 1e-8 + z_sd(y)).to_event(3)
                 )
 
-            ys = experiment.guide(x)
-            zs = [
-                _sample(f"z-{experiment.tag}-{i}", y) for i, y in enumerate(ys)
-            ]
-            return zs
+            for i, y in enumerate(experiment.guide(x)):
+                _sample(f"z-{experiment.tag}-{i}", y)
 
-        return {e: _go(self.get_experiment(e), x) for e, x in xs.items()}
+        for experiment, x in xs.items():
+            _go(self.get_experiment(experiment), x)

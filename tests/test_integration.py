@@ -14,7 +14,6 @@ from xfuse.model.experiment.st.metagene_expansion_strategy import (
 )
 from xfuse.session import Session, get
 from xfuse.train import train
-from xfuse.utility.design import extract_covariates
 
 
 @pytest.mark.fix_rng
@@ -33,7 +32,11 @@ def test_toydata(mocker, toydata):
         model=xfuse,
         optimizer=pyro.optim.Adam({"lr": 0.0001}),
         dataloader=toydata,
-        covariates=extract_covariates(toydata.dataset.data.design),
+        genes=toydata.dataset.genes,
+        covariates={
+            covariate: values.cat.categories.values.tolist()
+            for covariate, values in toydata.dataset.data.design.iteritems()
+        },
         messengers=[rmse],
     ):
         train(100 + get("training_data").epoch)
@@ -64,8 +67,8 @@ def test_metagene_expansion(
         expansion_strategies, compute_expected_metagenes(num_start_metagenes)
     ):
         with Session(
-            covariates=extract_covariates(toydata.dataset.data.design),
             dataloader=toydata,
+            genes=toydata.dataset.genes,
             metagene_expansion_strategy=expansion_strategy,
             model=pretrained_toy_model,
         ):

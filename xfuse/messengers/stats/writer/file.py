@@ -90,3 +90,27 @@ class FileWriter(StatsWriter):
                 )
             )
         )
+
+    def write_scalars(self, tag: str, scalar_values: Dict[str, float]) -> None:
+        r"""Logs a set of associated scalars"""
+        training_data = get("training_data")
+        *prefix, name = tag.split("/")
+        filename = os.path.join(*prefix, f"{name}.csv.gz")
+        if filename not in self._file_cons:
+            os.makedirs(os.path.dirname(filename), exist_ok=True)
+            if not os.path.exists(filename):
+                with gzip.open(filename, "wb") as fcon:
+                    fcon.write("time,epoch,step,name,value\n".encode())
+            self._file_cons[filename] = gzip.open(filename, "ab")
+        for name, value in scalar_values.items():
+            self._file_cons[filename].write(
+                str.encode(
+                    "{:f},{:d},{:d},{:s},{:f}\n".format(
+                        time.time(),
+                        training_data.epoch,
+                        training_data.step,
+                        name,
+                        value,
+                    )
+                )
+            )
