@@ -142,7 +142,7 @@ def predict(
                     data, batch_genes = next(iterator)
                 except StopIteration:
                     return
-                with Session(genes=batch_genes, model=model):
+                with Session(genes=batch_genes, model=conditional_model):
                     yield from _run_model(
                         data=data,
                         predict_mean=predict_mean,
