@@ -54,12 +54,10 @@ def center_crop(x: ArrayType, target_shape: Tuple[int, ...]) -> ArrayType:
     r"""Crops `x` to the given `target_shape` from the center"""
     return x[
         tuple(
-            [
-                slice(round((a - b) / 2), round((a - b) / 2) + b)
-                if b is not None
-                else slice(None)
-                for a, b in zip(x.shape, target_shape)
-            ]
+            slice(round((a - b) / 2), round((a - b) / 2) + b)
+            if b is not None
+            else slice(None)
+            for a, b in zip(x.shape, target_shape)
         )
     ]
 

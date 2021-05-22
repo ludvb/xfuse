@@ -33,6 +33,7 @@ class AnnotatedImage(SlideData):
         return self._label_names_array
 
     def set_label_names(self, x: Union[np.ndarray, Dict[int, str]]) -> None:
+        """Sets the label names"""
         if isinstance(x, np.ndarray):
             label_names = x
         elif isinstance(x, dict):
@@ -52,6 +53,7 @@ class AnnotatedImage(SlideData):
 
     @genes.setter
     def genes(self, genes: List[str]) -> AnnotatedImage:
+        # pylint: disable=unused-argument
         return self
 
     @classmethod
