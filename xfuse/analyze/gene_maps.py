@@ -1,7 +1,7 @@
 import itertools as it
 import re
 import warnings
-from typing import Any, Callable, Dict, Iterable, Tuple
+from typing import Any, Callable, Dict, Iterable, Tuple, cast
 
 import numpy as np
 import torch
@@ -86,7 +86,9 @@ def generate_gene_maps(
         for gene, gene_data in zip(
             samples[0]["colnames"], data.permute(3, 0, 1, 2)
         ):
-            yield samples[0]["section"], gene, gene_data
+            yield samples[0]["section"], gene, cast(
+                np.ndarray, gene_data.cpu().numpy()
+            )
 
     with Progressbar(
         chunks_of(genes, genes_per_batch),
@@ -206,7 +208,7 @@ def _run_gene_maps_analysis(
             except KeyError:
                 tissue_mask = None
             with chdir(slide_name):
-                write(gene, samples.numpy(), tissue_mask, **writer_args)
+                write(gene, samples, tissue_mask, **writer_args)
 
 
 _register_analysis(

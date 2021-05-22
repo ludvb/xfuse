@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Union
 
 import numpy as np
 import torch
@@ -25,22 +25,22 @@ class AnnotatedImage(SlideData):
         self.image = image
         self.label = annotation
         self.name = name
-        self.label_names = label_names
+        self.set_label_names(label_names)
 
     @property
     def label_names(self) -> np.ndarray:
         """Names corresponding to the integer labels in :attr:`label`"""
         return self._label_names_array
 
-    @label_names.setter
-    def label_names(self, x: Dict[int, str]):
-        self._label_names = x
-        self._label_names_array = np.full(
-            max(self._label_names.keys()) + 1, "", dtype="object"
-        )
-        self._label_names_array[list(self._label_names.keys())] = list(
-            self._label_names.values()
-        )
+    def set_label_names(self, x: Union[np.ndarray, Dict[int, str]]) -> None:
+        if isinstance(x, np.ndarray):
+            label_names = x
+        elif isinstance(x, dict):
+            label_names = np.full(max(x.keys()) + 1, "", dtype="object")
+            label_names[list(x.keys())] = list(x.values())
+        else:
+            raise ValueError(f"Unsupported {type(x)=}")
+        self._label_names_array = label_names
 
     @property
     def data_type(self) -> str:
@@ -52,7 +52,7 @@ class AnnotatedImage(SlideData):
 
     @genes.setter
     def genes(self, genes: List[str]) -> AnnotatedImage:
-        pass
+        return self
 
     @classmethod
     def from_st_slide(

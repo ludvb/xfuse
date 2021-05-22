@@ -37,12 +37,11 @@ def rescale(
     :param resample: Resampling filter
     :returns: The rescaled image
     """
-    image = Image.fromarray(image)
-    image = image.resize(
-        [round(x * scaling_factor) for x in image.size], resample=resample,
+    image_pil = Image.fromarray(image)
+    image_pil = image_pil.resize(
+        [round(x * scaling_factor) for x in image_pil.size], resample=resample,
     )
-    image = np.array(image)
-    return image
+    return np.array(image_pil)
 
 
 def labels_from_spots(dst: np.ndarray, spots: List[Spot]) -> None:

@@ -75,12 +75,11 @@ def rescale(
     :param resample: Resampling filter
     :returns: The rescaled image
     """
-    image = Image.fromarray(image)
-    image = image.resize(
-        [round(x * scaling_factor) for x in image.size], resample=resample,
+    image_pil = Image.fromarray(image)
+    image_pil = image_pil.resize(
+        [round(x * scaling_factor) for x in image_pil.size], resample=resample,
     )
-    image = np.array(image)
-    return image
+    return np.array(image_pil)
 
 
 def resize(
@@ -96,10 +95,9 @@ def resize(
     :param resample: Resampling filter
     :returns: The rescaled image
     """
-    image = Image.fromarray(image)
-    image = image.resize(target_shape[::-1], resample=resample)
-    image = np.array(image)
-    return image
+    image_pil = Image.fromarray(image)
+    image_pil = image_pil.resize(target_shape[::-1], resample=resample)
+    return np.array(image_pil)
 
 
 def temp_attr(obj: object, attr: str, value: Any) -> ContextManager:

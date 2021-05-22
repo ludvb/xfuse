@@ -110,7 +110,10 @@ def run(
         image,
         label,
         type_label="ST",
-        annotation=annotation,
+        annotation={
+            k: (v, {x: str(x) for x in np.unique(v)})
+            for k, v in annotation.items()
+        },
         auto_rotate=rotate,
         path=output_file,
     )

@@ -31,8 +31,8 @@ def run(
         }
 
     if mask:
-        mask = compute_tissue_mask(image)
-        label = np.array(mask == 0, dtype=np.int16)
+        tissue_mask = compute_tissue_mask(image)
+        label = np.array(tissue_mask == 0, dtype=np.int16)
     else:
         label = np.zeros(image.shape[:2], dtype=np.int16)
 
@@ -52,7 +52,10 @@ def run(
         image,
         label,
         type_label="ST",
-        annotation=annotation,
+        annotation={
+            k: (v, {x: str(x) for x in np.unique(v)})
+            for k, v in annotation.items()
+        },
         auto_rotate=rotate,
         path=output_file,
     )

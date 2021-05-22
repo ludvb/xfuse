@@ -1,5 +1,5 @@
 import warnings
-from typing import Callable, Optional, Union, cast
+from typing import Callable, Iterable, List, Optional, Tuple, Union, cast
 
 import numpy as np
 import pyro
@@ -109,7 +109,7 @@ def mask_background(
 
 def visualize_metagenes(
     method: str = "pca", num_training_samples: Optional[int] = None
-) -> np.ndarray:
+) -> Iterable[Tuple[str, np.ndarray, List[Tuple[str, np.ndarray]]]]:
     r"""Creates visualizations of metagenes"""
 
     # pylint: disable=too-many-locals,too-many-statements
@@ -284,13 +284,13 @@ def reduce_last_dimension(
         transformation = _default_transformation
 
     if mask is None:
-        mask = np.ones(x.shape[:-1], dtype=np.bool)
+        mask = np.ones(x.shape[:-1], dtype=bool)
     elif isinstance(mask, torch.Tensor):
         mask = mask.detach().cpu().numpy().astype(bool)
     mask = cast(np.ndarray, mask)
 
     if isinstance(x, torch.Tensor):
-        x = x.detach().cpu().numpy()
+        x = cast(np.ndarray, x.detach().cpu().numpy())
 
     values = transformation(x[mask])
     dst = np.zeros((*mask.shape, values.shape[-1]))
