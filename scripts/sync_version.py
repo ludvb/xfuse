@@ -13,7 +13,7 @@ project_file = sys.argv[1]
 with open(project_file, "r") as fp:
     project_config = tomlkit.loads(fp.read())
 
-version = project_config["tool"]["poetry"]["version"]
+version = project_config["tool"]["poetry"]["version"]  # type: ignore
 
 with open(
     os.path.join(os.path.dirname(project_file), "xfuse", "__version__.py"), "w"

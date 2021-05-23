@@ -1,5 +1,5 @@
 from copy import copy
-from typing import Any, Dict, NamedTuple, OrderedDict
+from typing import Any, Dict, NamedTuple
 
 import pyro
 import torch
@@ -16,7 +16,7 @@ class Param(NamedTuple):
 
 class StateDict(NamedTuple):
     r"""Data structure for the states of modules and non-module parameters"""
-    modules: Dict[str, OrderedDict[str, torch.Tensor]]  # type: ignore
+    modules: Dict[str, Dict[str, torch.Tensor]]  # type: ignore
     params: Dict[str, Param]
     optimizer: Dict[str, Dict[str, torch.Tensor]]
 

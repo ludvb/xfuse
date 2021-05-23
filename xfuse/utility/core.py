@@ -54,12 +54,10 @@ def center_crop(x: ArrayType, target_shape: Tuple[int, ...]) -> ArrayType:
     r"""Crops `x` to the given `target_shape` from the center"""
     return x[
         tuple(
-            [
-                slice(round((a - b) / 2), round((a - b) / 2) + b)
-                if b is not None
-                else slice(None)
-                for a, b in zip(x.shape, target_shape)
-            ]
+            slice(round((a - b) / 2), round((a - b) / 2) + b)
+            if b is not None
+            else slice(None)
+            for a, b in zip(x.shape, target_shape)
         )
     ]
 
@@ -75,12 +73,11 @@ def rescale(
     :param resample: Resampling filter
     :returns: The rescaled image
     """
-    image = Image.fromarray(image)
-    image = image.resize(
-        [round(x * scaling_factor) for x in image.size], resample=resample,
+    image_pil = Image.fromarray(image)
+    image_pil = image_pil.resize(
+        [round(x * scaling_factor) for x in image_pil.size], resample=resample,
     )
-    image = np.array(image)
-    return image
+    return np.array(image_pil)
 
 
 def resize(
@@ -96,10 +93,9 @@ def resize(
     :param resample: Resampling filter
     :returns: The rescaled image
     """
-    image = Image.fromarray(image)
-    image = image.resize(target_shape[::-1], resample=resample)
-    image = np.array(image)
-    return image
+    image_pil = Image.fromarray(image)
+    image_pil = image_pil.resize(target_shape[::-1], resample=resample)
+    return np.array(image_pil)
 
 
 def temp_attr(obj: object, attr: str, value: Any) -> ContextManager:

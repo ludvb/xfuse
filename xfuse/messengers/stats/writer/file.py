@@ -1,7 +1,6 @@
 import gzip
 import os
 import time
-from multiprocessing import Pool
 from typing import Dict, Optional
 from warnings import warn
 
@@ -21,8 +20,7 @@ __all__ = ["FileWriter"]
 class FileWriter(StatsWriter):
     r"""Stats writer emitting .jpg and .csv.gz files"""
 
-    def __init__(self, num_workers: int = 1):
-        self._worker_pool = Pool(num_workers)
+    def __init__(self):
         self._file_cons: Dict[str, gzip.GzipFile] = {}
 
     def write_histogram(
@@ -50,9 +48,7 @@ class FileWriter(StatsWriter):
         img = img_tensor.detach().cpu().numpy()
         img = _normalize(img)
         img = (255 * img).astype(np.uint8)
-        self._worker_pool.apply_async(
-            imwrite, (os.path.abspath(filename), img)
-        )
+        imwrite(os.path.abspath(filename), img)
 
     def write_images(self, tag: str, img_tensor: torch.Tensor) -> None:
         r"""Logs an image grid"""
