@@ -1,3 +1,4 @@
+import pickle
 import warnings
 from typing import Union
 
@@ -19,12 +20,11 @@ def save_session(filename_prefix: str) -> None:
 
     def _can_pickle(name, x):
         try:
-            with open("/dev/null", "wb") as null:
-                torch.save(x, null)
-        except Exception as exc:  # pylint: disable=broad-except
+            _ = pickle.dumps(x)
+        except pickle.PickleError as exc:
             warnings.warn(
-                f'Failed to store session item "{name}".'
-                f"The error returned was: {str(exc)}",
+                f'Session item "{name}" cannot be saved.'
+                f" The error returned was: {str(exc)}",
             )
             return False
         return True
