@@ -2,7 +2,11 @@
 
 [[https://github.com/ludvb/xfuse/actions?query=workflow%3Abuild+branch%3Amaster][https://github.com/ludvb/xfuse/workflows/build/badge.svg?branch=master]]
 
-BioRxiv preprint: https://www.biorxiv.org/content/10.1101/2020.02.28.963413v1
+This repository contains code for the paper "Super-resolved spatial transcriptomics by deep data fusion".
+
+Nature Biotechnology: https://doi.org/10.1038/s41587-021-01075-3
+
+BioRxiv preprint: https://doi.org/10.1101/2020.02.28.963413
 
 * Hardware requirements
 
