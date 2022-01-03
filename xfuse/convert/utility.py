@@ -1,6 +1,6 @@
 import os
 import warnings
-from typing import Dict, List, NamedTuple, Tuple
+from typing import Dict, List, NamedTuple, Optional, Tuple
 
 import h5py
 import numpy as np
@@ -125,13 +125,16 @@ def relabel(
 
 
 def mask_tissue(
-    image: np.ndarray, counts: pd.DataFrame, label: np.ndarray
+    image: np.ndarray,
+    counts: pd.DataFrame,
+    label: np.ndarray,
+    initial_mask: Optional[np.ndarray] = None,
 ) -> Tuple[pd.DataFrame, np.ndarray]:
     r"""
     Detects the tissue in `image`. The area outside of the tissue is given a
     new label with zero counts everywhere.
     """
-    mask = compute_tissue_mask(image)
+    mask = compute_tissue_mask(image, initial_mask=initial_mask)
 
     counts.index += 1
     label[label != 0] += 1

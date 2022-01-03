@@ -1,9 +1,11 @@
 from typing import Dict, Optional
 
+import cv2 as cv
 import h5py
 import numpy as np
 import pandas as pd
 from PIL import Image
+from scipy.ndimage.morphology import distance_transform_edt
 from scipy.sparse import csr_matrix
 
 from ..utility.core import rescale
@@ -61,9 +63,9 @@ def run(
         }
 
     spots = list(
-        tissue_positions.loc[
-            bc_matrix["matrix"]["barcodes"][()].astype(str)
-        ].apply(lambda x: Spot(x=x["x"], y=x["y"], r=spot_radius), 1)
+        tissue_positions[["x", "y"]]
+        .loc[bc_matrix["matrix"]["barcodes"][()].astype(str)]
+        .apply(lambda x: Spot(x=x["x"], y=x["y"], r=spot_radius), 1)
     )
 
     label = np.zeros(image.shape[:2]).astype(np.int16)
@@ -77,7 +79,25 @@ def run(
         label = label[1:-1, 1:-1]
 
     if mask:
-        counts, label = mask_tissue(image, counts, label)
+        (in_tissue_idxs,) = np.where(
+            tissue_positions["in_tissue"]
+            .loc[bc_matrix["matrix"]["barcodes"][()].astype(str)]
+            .values
+        )
+        in_tissue_idxs = in_tissue_idxs + 1
+        in_tissue = np.where(np.isin(label, in_tissue_idxs), True, False)
+        d1, d2 = distance_transform_edt(
+            label == 0, return_indices=True, return_distances=False
+        )
+        initial_mask = np.where(
+            label != 0,
+            np.where(in_tissue, cv.GC_FGD, cv.GC_BGD),
+            np.where(in_tissue[d1, d2], cv.GC_PR_FGD, cv.GC_PR_BGD),
+        )
+        initial_mask = initial_mask.astype(np.uint8)
+        counts, label = mask_tissue(
+            image, counts, label, initial_mask=initial_mask
+        )
 
     write_data(
         counts,

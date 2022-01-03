@@ -1,5 +1,6 @@
 import itertools as it
 import warnings
+from typing import Optional
 
 import cv2 as cv
 import numpy as np
@@ -26,6 +27,7 @@ def compute_tissue_mask(
     image: np.ndarray,
     convergence_threshold: float = 0.0001,
     size_threshold: float = 0.01,
+    initial_mask: Optional[np.ndarray] = None,
 ) -> np.ndarray:
     r"""
     Computes boolean mask indicating likely foreground elements in histology
@@ -37,14 +39,19 @@ def compute_tissue_mask(
     scale_factor = 1000 / max(original_shape)
 
     image = rescale(image, scale_factor, resample=Image.NEAREST)
-    initial_mask = (
-        cv.blur(cv.Canny(cv.blur(image, (5, 5)), 100, 200), (20, 20)) > 0
-    )
-    initial_mask = binary_fill_holes(initial_mask)
-    initial_mask = remove_fg_elements(initial_mask, 0.1)
 
-    mask = np.where(initial_mask, cv.GC_PR_FGD, cv.GC_PR_BGD)
-    mask = mask.astype(np.uint8)
+    if initial_mask is None:
+        initial_mask = (
+            cv.blur(cv.Canny(cv.blur(image, (5, 5)), 100, 200), (20, 20)) > 0
+        )
+        initial_mask = binary_fill_holes(initial_mask)
+        initial_mask = remove_fg_elements(initial_mask, 0.1)
+
+        mask = np.where(initial_mask, cv.GC_PR_FGD, cv.GC_PR_BGD)
+        mask = mask.astype(np.uint8)
+    else:
+        mask = initial_mask
+        mask = rescale(mask, scale_factor, resample=Image.NEAREST)
 
     bgd_model = np.zeros((1, 65), np.float64)
     fgd_model = bgd_model.copy()

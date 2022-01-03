@@ -115,8 +115,10 @@ def _convert_visium(
 ):
     r"""Converts 10X Visium data"""
     tissue_positions = pd.read_csv(tissue_positions, index_col=0, header=None)
-    tissue_positions = tissue_positions[[4, 5]]
-    tissue_positions = tissue_positions.rename(columns={4: "y", 5: "x"})
+    tissue_positions = tissue_positions[[1, 4, 5]]
+    tissue_positions = tissue_positions.rename(
+        columns={1: "in_tissue", 4: "y", 5: "x"}
+    )
 
     scale_factors = json.load(scale_factors)
     spot_radius = scale_factors["spot_diameter_fullres"] / 2
