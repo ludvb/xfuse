@@ -101,7 +101,7 @@ cli.add_command(_convert)
 @click.option("--scale-factors", type=click.File("rb"), required=True)
 @click.option("--scale", type=float)
 @click.option("--mask/--no-mask", default=True)
-@click.option("--rotate/--no-rotate", default=False)
+@click.option("--rotate/--no-rotate", default=True)
 @_init
 def _convert_visium(
     image,
@@ -155,7 +155,7 @@ _convert.add_command(_convert_visium, "visium")
 @click.option("--annotation", type=click.File("rb"))
 @click.option("--scale", type=float)
 @click.option("--mask/--no-mask", default=True)
-@click.option("--rotate/--no-rotate", default=False)
+@click.option("--rotate/--no-rotate", default=True)
 @_init
 def _convert_st(
     counts,
