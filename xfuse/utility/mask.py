@@ -45,7 +45,7 @@ def compute_tissue_mask(
             cv.blur(cv.Canny(cv.blur(image, (5, 5)), 100, 200), (20, 20)) > 0
         )
         initial_mask = binary_fill_holes(initial_mask)
-        initial_mask = remove_fg_elements(initial_mask, 0.1)
+        initial_mask = remove_fg_elements(initial_mask, 0.1)  # type: ignore
 
         mask = np.where(initial_mask, cv.GC_PR_FGD, cv.GC_PR_BGD)
         mask = mask.astype(np.uint8)
