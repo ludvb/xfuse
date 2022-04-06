@@ -94,13 +94,13 @@ def run(
             )
             in_tissue_idxs = in_tissue_idxs + 1
             in_tissue = np.where(np.isin(label, in_tissue_idxs), True, False)
-            d1, d2 = distance_transform_edt(
+            idx1, idx2 = distance_transform_edt(
                 label == 0, return_indices=True, return_distances=False
             )
             initial_mask = np.where(
                 label != 0,
                 np.where(in_tissue, cv.GC_FGD, cv.GC_BGD),
-                np.where(in_tissue[d1, d2], cv.GC_PR_FGD, cv.GC_PR_BGD),
+                np.where(in_tissue[idx1, idx2], cv.GC_PR_FGD, cv.GC_PR_BGD),
             )
             initial_mask = initial_mask.astype(np.uint8)
         counts, label = mask_tissue(
