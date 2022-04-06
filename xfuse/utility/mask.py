@@ -79,7 +79,7 @@ def compute_tissue_mask(
         if prop_changed < convergence_threshold:
             break
 
-    mask = mask == cv.GC_PR_FGD
+    mask = np.isin(mask, [cv.GC_FGD, cv.GC_PR_FGD])
     mask = cleanup_mask(mask, size_threshold)
 
     mask = resize(mask, target_shape=original_shape, resample=Image.NEAREST)

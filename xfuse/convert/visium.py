@@ -27,6 +27,7 @@ def run(
     annotation: Optional[Dict[str, np.ndarray]] = None,
     scale_factor: Optional[float] = None,
     mask: bool = True,
+    custom_mask: Optional[np.ndarray] = None,
     rotate: bool = False,
 ) -> None:
     r"""
@@ -61,6 +62,8 @@ def run(
             k: rescale(v, scale_factor, Image.NEAREST)
             for k, v in annotation.items()
         }
+        if custom_mask is not None:
+            custom_mask = rescale(custom_mask, scale_factor, Image.NEAREST)
 
     spots = list(
         tissue_positions[["x", "y"]]
@@ -77,24 +80,29 @@ def run(
         # downscaled the image. Therefore, remove one extra row/column.
         image = image[1:-1, 1:-1]
         label = label[1:-1, 1:-1]
+        if custom_mask is not None:
+            custom_mask = custom_mask[1:-1, 1:-1]
 
     if mask:
-        (in_tissue_idxs,) = np.where(
-            tissue_positions["in_tissue"]
-            .loc[bc_matrix["matrix"]["barcodes"][()].astype(str)]
-            .values
-        )
-        in_tissue_idxs = in_tissue_idxs + 1
-        in_tissue = np.where(np.isin(label, in_tissue_idxs), True, False)
-        d1, d2 = distance_transform_edt(
-            label == 0, return_indices=True, return_distances=False
-        )
-        initial_mask = np.where(
-            label != 0,
-            np.where(in_tissue, cv.GC_FGD, cv.GC_BGD),
-            np.where(in_tissue[d1, d2], cv.GC_PR_FGD, cv.GC_PR_BGD),
-        )
-        initial_mask = initial_mask.astype(np.uint8)
+        if custom_mask is not None:
+            initial_mask = custom_mask
+        else:
+            (in_tissue_idxs,) = np.where(
+                tissue_positions["in_tissue"]
+                .loc[bc_matrix["matrix"]["barcodes"][()].astype(str)]
+                .values
+            )
+            in_tissue_idxs = in_tissue_idxs + 1
+            in_tissue = np.where(np.isin(label, in_tissue_idxs), True, False)
+            d1, d2 = distance_transform_edt(
+                label == 0, return_indices=True, return_distances=False
+            )
+            initial_mask = np.where(
+                label != 0,
+                np.where(in_tissue, cv.GC_FGD, cv.GC_BGD),
+                np.where(in_tissue[d1, d2], cv.GC_PR_FGD, cv.GC_PR_BGD),
+            )
+            initial_mask = initial_mask.astype(np.uint8)
         counts, label = mask_tissue(
             image, counts, label, initial_mask=initial_mask
         )

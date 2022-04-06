@@ -24,6 +24,7 @@ def run(
     annotation: Optional[Dict[str, np.ndarray]] = None,
     scale_factor: Optional[float] = None,
     mask: bool = True,
+    custom_mask: Optional[np.ndarray] = None,
     rotate: bool = False,
 ) -> None:
     r"""
@@ -46,6 +47,8 @@ def run(
                 [[scale_factor, 0, 0], [0, scale_factor, 0], [0, 0, 1]]
             )
             transformation = transformation @ scale_matrix
+        if custom_mask is not None:
+            custom_mask = rescale(custom_mask, scale_factor, Image.NEAREST)
 
     if spots is not None:
         spots.index = spots[["x", "y"]].apply(
@@ -101,9 +104,13 @@ def run(
         # downscaled the image. Therefore, remove one extra row/column.
         image = image[1:-1, 1:-1]
         label = label[1:-1, 1:-1]
+        if custom_mask is not None:
+            custom_mask = custom_mask[1:-1, 1:-1]
 
     if mask:
-        counts, label = mask_tissue(image, counts, label)
+        counts, label = mask_tissue(
+            image, counts, label, initial_mask=custom_mask
+        )
 
     write_data(
         counts,

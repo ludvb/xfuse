@@ -10,6 +10,7 @@ from datetime import datetime as dt
 from functools import wraps
 
 import click
+import cv2 as cv
 import h5py
 import numpy as np
 import pandas as pd
@@ -101,6 +102,28 @@ cli.add_command(_convert)
 @click.option("--scale-factors", type=click.File("rb"), required=True)
 @click.option("--scale", type=float)
 @click.option("--mask/--no-mask", default=True)
+@click.option(
+    "--mask-file",
+    type=click.File("rb"),
+    help=" ".join(
+        [
+            "Custom mask.",
+            "Should be a single-channel image with the same size as the image.",
+            "Uses the following encoding: {}.".format(
+                ", ".join(
+                    sorted(
+                        [
+                            f"{cv.GC_BGD}=background",
+                            f"{cv.GC_PR_BGD}=likely background",
+                            f"{cv.GC_FGD}=foreground",
+                            f"{cv.GC_PR_FGD}=likely foreground",
+                        ]
+                    )
+                )
+            ),
+        ]
+    ),
+)
 @click.option("--rotate/--no-rotate", default=True)
 @_init
 def _convert_visium(
@@ -111,6 +134,7 @@ def _convert_visium(
     scale_factors,
     scale,
     mask,
+    mask_file,
     rotate,
 ):
     r"""Converts 10X Visium data"""
@@ -132,6 +156,12 @@ def _convert_visium(
                 k: annotation_file[k][()] for k in annotation_file.keys()
             }
 
+    if mask_file:
+        with temp_attr(Image, "MAX_IMAGE_PIXELS", None):
+            custom_mask = imread(mask_file)
+    else:
+        custom_mask = None
+
     with h5py.File(bc_matrix, "r") as data:
         convert.visium.run(
             image_data,
@@ -142,6 +172,7 @@ def _convert_visium(
             annotation=annotation,
             scale_factor=scale,
             mask=mask,
+            custom_mask=custom_mask,
             rotate=rotate,
         )
 
@@ -157,6 +188,28 @@ _convert.add_command(_convert_visium, "visium")
 @click.option("--annotation", type=click.File("rb"))
 @click.option("--scale", type=float)
 @click.option("--mask/--no-mask", default=True)
+@click.option(
+    "--mask-file",
+    type=click.File("rb"),
+    help=" ".join(
+        [
+            "Custom mask.",
+            "Should be a single-channel image with the same size as the image.",
+            "Uses the following encoding: {}.".format(
+                ", ".join(
+                    sorted(
+                        [
+                            f"{cv.GC_BGD}=background",
+                            f"{cv.GC_PR_BGD}=likely background",
+                            f"{cv.GC_FGD}=foreground",
+                            f"{cv.GC_PR_FGD}=likely foreground",
+                        ]
+                    )
+                )
+            ),
+        ]
+    ),
+)
 @click.option("--rotate/--no-rotate", default=True)
 @_init
 def _convert_st(
@@ -167,6 +220,7 @@ def _convert_st(
     annotation,
     scale,
     mask,
+    mask_file,
     rotate,
 ):
     r"""Converts Spatial Transcriptomics ("ST") data"""
@@ -198,6 +252,12 @@ def _convert_st(
                 k: annotation_file[k][()] for k in annotation_file.keys()
             }
 
+    if mask_file:
+        with temp_attr(Image, "MAX_IMAGE_PIXELS", None):
+            custom_mask = imread(mask_file)
+    else:
+        custom_mask = None
+
     convert.st.run(
         counts_data,
         image_data,
@@ -207,6 +267,7 @@ def _convert_st(
         annotation=annotation,
         scale_factor=scale,
         mask=mask,
+        custom_mask=custom_mask,
         rotate=rotate,
     )
 
