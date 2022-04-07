@@ -83,7 +83,7 @@ curl -LO https://raw.githubusercontent.com/ludvb/xfuse/master/scripts/visualize_
 python visualize_tissue_masks.py */data.h5
 #+END_SRC
 The script will show the tissue images with the detected backgrounds blacked out:
-file:./scripts/visualize_tissue_masks.jpg
+[[file:./scripts/visualize_tissue_masks.jpg]]
 
 If tissue detection fails, a custom mask can be passed to ~xfuse convert~ using the ~--mask-file~ argument (see ~xfuse conver visium --help~ for further info).
 
