@@ -82,7 +82,7 @@ This can be done using the script ~./scripts/visualize_tissue_masks.py~ included
 curl -LO https://raw.githubusercontent.com/ludvb/xfuse/master/scripts/visualize_tissue_masks.py
 python visualize_tissue_masks.py */data.h5
 #+END_SRC
-The script will show the tissue images with the detected backgrounds blacked out. If tissue detection fails, a custom mask can be passed to ~xfuse convert~ using the ~--mask-file~ argument (see ~xfuse convert visium --help~ for further info).
+The script will show the tissue images with the detected backgrounds blacked out. If tissue detection fails, a custom mask can be passed to ~xfuse convert~ using the ~--mask-file~ argument (see ~xfuse convert visium --help~ for more information).
 
 ** Configuring and starting the run
 
