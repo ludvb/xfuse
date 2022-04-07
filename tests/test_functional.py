@@ -3,7 +3,10 @@ r"""Functional tests"""
 import os
 from glob import glob
 
+import h5py
+import numpy as np
 import pytest
+from imageio import imread
 
 from xfuse.__main__ import construct_default_config_toml
 from xfuse.session import Session, Unset, get
@@ -259,6 +262,31 @@ def test_convert_image(extra_args, shared_datadir, script_runner, tmp_path):
     assert os.path.exists(tmp_path / "data.h5")
 
 
+def test_convert_image_with_mask(shared_datadir, script_runner, tmp_path):
+    r"""Test convert image data"""
+
+    mask_file = shared_datadir / "files" / "st" / "mask.png"
+
+    ret = script_runner.run(
+        "xfuse",
+        "convert",
+        "image",
+        "--image=" + str(shared_datadir / "files" / "st" / "image.jpg"),
+        "--mask",
+        "--mask-file=" + str(mask_file),
+        "--no-rotate",
+        "--save-path=" + str(tmp_path),
+    )
+
+    assert ret.success
+
+    mask_original = imread(mask_file)
+    with h5py.File(tmp_path / "data.h5") as data:
+        mask_final = data["label"][()] != 1  # type: ignore
+
+    assert abs(mask_final.sum() - mask_original.sum()) / mask_final.size < 0.05
+
+
 @pytest.mark.parametrize("extra_args", [[], ["--no-mask", "--scale=0.5"]])
 def test_convert_st(extra_args, shared_datadir, script_runner, tmp_path):
     r"""Test convert Spatial Transcriptomics Pipeline run"""
@@ -275,6 +303,33 @@ def test_convert_st(extra_args, shared_datadir, script_runner, tmp_path):
     )
     assert ret.success
     assert os.path.exists(tmp_path / "data.h5")
+
+
+def test_convert_st_with_mask(shared_datadir, script_runner, tmp_path):
+    r"""Test convert Spatial Transcriptomics Pipeline run with custom mask"""
+
+    mask_file = shared_datadir / "files" / "st" / "mask.png"
+
+    ret = script_runner.run(
+        "xfuse",
+        "convert",
+        "st",
+        "--counts=" + str(shared_datadir / "files" / "st" / "counts.tsv"),
+        "--image=" + str(shared_datadir / "files" / "st" / "image.jpg"),
+        "--spots=" + str(shared_datadir / "files" / "st" / "spots.tsv"),
+        "--mask",
+        "--mask-file=" + str(mask_file),
+        "--no-rotate",
+        "--save-path=" + str(tmp_path),
+    )
+
+    assert ret.success
+
+    mask_original = imread(mask_file)
+    with h5py.File(tmp_path / "data.h5") as data:
+        mask_final = data["label"][()] != 1  # type: ignore
+
+    assert abs(mask_final.sum() - mask_original.sum()) / mask_final.size < 0.05
 
 
 @pytest.mark.parametrize("extra_args", [[], ["--no-mask", "--scale=0.5"]])
@@ -296,3 +351,33 @@ def test_convert_visium(extra_args, shared_datadir, script_runner, tmp_path):
     )
     assert ret.success
     assert os.path.exists(tmp_path / "data.h5")
+
+
+def test_convert_visium_with_mask(shared_datadir, script_runner, tmp_path):
+    r"""Test convert Spatial Transcriptomics Pipeline run with custom mask"""
+
+    mask_file = shared_datadir / "files" / "visium" / "mask.png"
+
+    ret = script_runner.run(
+        "xfuse",
+        "convert",
+        "visium",
+        "--image=" + str(shared_datadir / "files" / "visium" / "image.jpg"),
+        "--bc-matrix=" + str(shared_datadir / "files" / "visium" / "data.h5"),
+        "--tissue-positions="
+        + str(shared_datadir / "files" / "visium" / "tissue_positions.csv"),
+        "--scale-factors="
+        + str(shared_datadir / "files" / "visium" / "scale_factors.json"),
+        "--mask",
+        "--mask-file=" + str(mask_file),
+        "--no-rotate",
+        "--save-path=" + str(tmp_path),
+    )
+
+    assert ret.success
+
+    mask_original = imread(mask_file)
+    with h5py.File(tmp_path / "data.h5") as data:
+        mask_final = data["label"][()] != 1  # type: ignore
+
+    assert abs(mask_final.sum() - mask_original.sum()) / mask_final.size < 0.05
