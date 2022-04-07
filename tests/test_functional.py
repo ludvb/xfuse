@@ -4,7 +4,6 @@ import os
 from glob import glob
 
 import h5py
-import numpy as np
 import pytest
 from imageio import imread
 
