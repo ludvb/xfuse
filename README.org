@@ -74,6 +74,19 @@ xfuse convert st --counts section4.tsv --image section4.jpg --transformation-mat
 It may be worthwhile to try out different values for the ~--scale~ argument, which downsamples the image data by the given factor.
 Essentially, a higher scale increases the resolution of the model but requires considerably more compute power.
 
+*** Verifying tissue masks
+
+It is usually a good idea to verify that the computed tissue masks look good.
+This can be done using the script ~./scripts/visualize_tissue_masks.py~ included in this repository:
+#+BEGIN_SRC sh
+curl -LO https://raw.githubusercontent.com/ludvb/xfuse/master/scripts/visualize_tissue_masks.py
+python visualize_tissue_masks.py */data.h5
+#+END_SRC
+The script will show the tissue images with the detected backgrounds blacked out:
+file:./scripts/visualize_tissue_masks.jpg
+
+If tissue detection fails, a custom mask can be passed to ~xfuse convert~ using the ~--mask-file~ argument (see ~xfuse conver visium --help~ for further info).
+
 ** Configuring and starting the run
 
 Settings for the run are specified in a configuration file.
