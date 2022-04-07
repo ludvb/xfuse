@@ -280,10 +280,32 @@ _convert.add_command(_convert_st, "st")
 @click.option("--annotation", type=click.File("rb"))
 @click.option("--scale", type=float)
 @click.option("--mask/--no-mask", default=True)
+@click.option(
+    "--mask-file",
+    type=click.File("rb"),
+    help=" ".join(
+        [
+            "Custom mask.",
+            "Should be a single-channel image with the same size as the image.",
+            "Uses the following encoding: {}.".format(
+                ", ".join(
+                    sorted(
+                        [
+                            f"{cv.GC_BGD}=background",
+                            f"{cv.GC_PR_BGD}=likely background",
+                            f"{cv.GC_FGD}=foreground",
+                            f"{cv.GC_PR_FGD}=likely foreground",
+                        ]
+                    )
+                )
+            ),
+        ]
+    ),
+)
 @click.option("--rotate/--no-rotate", default=False)
 @_init
 def _convert_image(
-    image, annotation, scale, mask, rotate,
+    image, annotation, scale, mask, mask_file, rotate,
 ):
     r"""Converts image without any associated expression data"""
     with temp_attr(Image, "MAX_IMAGE_PIXELS", None):
@@ -295,12 +317,19 @@ def _convert_image(
                 k: annotation_file[k][()] for k in annotation_file.keys()
             }
 
+    if mask_file:
+        with temp_attr(Image, "MAX_IMAGE_PIXELS", None):
+            custom_mask = imread(mask_file)
+    else:
+        custom_mask = None
+
     convert.image.run(
         image_data,
         output_file="data.h5",
         annotation=annotation,
         scale_factor=scale,
         mask=mask,
+        custom_mask=custom_mask,
         rotate=rotate,
     )
 

@@ -11,9 +11,9 @@ from scipy.sparse import csr_matrix
 from ..utility.core import rescale
 from .utility import (
     Spot,
+    find_margin,
     labels_from_spots,
     mask_tissue,
-    trim_margin,
     write_data,
 )
 
@@ -74,7 +74,12 @@ def run(
     label = np.zeros(image.shape[:2]).astype(np.int16)
     labels_from_spots(label, spots)
 
-    image, label = trim_margin(image, label)
+    col_mask, row_mask = find_margin(image)
+    image = image[row_mask][:, col_mask]
+    label = label[row_mask][:, col_mask]
+    if custom_mask is not None:
+        custom_mask = custom_mask[row_mask][:, col_mask]
+
     if scale_factor is not None:
         # The outermost pixels may belong in part to the margin if we
         # downscaled the image. Therefore, remove one extra row/column.
