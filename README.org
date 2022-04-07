@@ -85,7 +85,7 @@ python visualize_tissue_masks.py */data.h5
 The script will show the tissue images with the detected backgrounds blacked out:
 [[file:./scripts/visualize_tissue_masks.jpg]]
 
-If tissue detection fails, a custom mask can be passed to ~xfuse convert~ using the ~--mask-file~ argument (see ~xfuse conver visium --help~ for further info).
+If tissue detection fails, a custom mask can be passed to ~xfuse convert~ using the ~--mask-file~ argument (see ~xfuse convert visium --help~ for further info).
 
 ** Configuring and starting the run
 
