@@ -6,7 +6,7 @@ from PIL import Image
 
 from ..utility.core import rescale
 from ..utility.mask import compute_tissue_mask
-from .utility import trim_margin, write_data
+from .utility import find_margin, write_data
 
 
 def run(
@@ -15,6 +15,7 @@ def run(
     annotation: Optional[Dict[str, np.ndarray]] = None,
     scale_factor: Optional[float] = None,
     mask: bool = True,
+    custom_mask: Optional[np.ndarray] = None,
     rotate: bool = False,
 ) -> None:
     r"""
@@ -29,9 +30,23 @@ def run(
             k: rescale(v, scale_factor, Image.NEAREST)
             for k, v in annotation.items()
         }
+        if custom_mask is not None:
+            custom_mask = rescale(custom_mask, scale_factor, Image.NEAREST)
+
+    col_mask, row_mask = find_margin(image)
+    image = image[row_mask][:, col_mask]
+    if custom_mask is not None:
+        custom_mask = custom_mask[row_mask][:, col_mask]
+
+    if scale_factor is not None:
+        # The outermost pixels may belong in part to the margin if we
+        # downscaled the image. Therefore, remove one extra row/column.
+        image = image[1:-1, 1:-1]
+        if custom_mask is not None:
+            custom_mask = custom_mask[1:-1, 1:-1]
 
     if mask:
-        tissue_mask = compute_tissue_mask(image)
+        tissue_mask = compute_tissue_mask(image, initial_mask=custom_mask)
         label = np.array(tissue_mask == 0, dtype=np.int16)
     else:
         label = np.zeros(image.shape[:2], dtype=np.int16)
@@ -39,13 +54,6 @@ def run(
     counts = pd.DataFrame(
         index=pd.Series(np.unique(label[label != 0]), name="n")
     )
-
-    image, label = trim_margin(image, label)
-    if scale_factor is not None:
-        # The outermost pixels may belong in part to the margin if we
-        # downscaled the image. Therefore, remove one extra row/column.
-        image = image[1:-1, 1:-1]
-        label = label[1:-1, 1:-1]
 
     write_data(
         counts,

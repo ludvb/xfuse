@@ -1,6 +1,6 @@
 import os
 import warnings
-from typing import Dict, List, NamedTuple, Tuple
+from typing import Dict, List, NamedTuple, Optional, Tuple
 
 import h5py
 import numpy as np
@@ -125,13 +125,16 @@ def relabel(
 
 
 def mask_tissue(
-    image: np.ndarray, counts: pd.DataFrame, label: np.ndarray
+    image: np.ndarray,
+    counts: pd.DataFrame,
+    label: np.ndarray,
+    initial_mask: Optional[np.ndarray] = None,
 ) -> Tuple[pd.DataFrame, np.ndarray]:
     r"""
     Detects the tissue in `image`. The area outside of the tissue is given a
     new label with zero counts everywhere.
     """
-    mask = compute_tissue_mask(image)
+    mask = compute_tissue_mask(image, initial_mask=initial_mask)
 
     counts.index += 1
     label[label != 0] += 1
@@ -153,17 +156,16 @@ def mask_tissue(
     return counts, label
 
 
-def trim_margin(
-    image: np.ndarray, label: np.ndarray, margin_color=None, tol: float = 0.2
+def find_margin(
+    image: np.ndarray, margin_color=None, tol: float = 0.2
 ) -> Tuple[np.ndarray, np.ndarray]:
     r"""
-    Trims margins from `image` and removes the corresponding regions in
-    `label`.
+    Finds unicolored margins in `image` and returns the corresponding column and
+    row masks.
 
     >>> image = np.array([[1, 1], [1, 0]])
-    >>> label = np.array([[1, 2], [3, 4]])
-    >>> trim_margin(image, label)
-    (array([[0]]), array([[4]]))
+    >>> find_margin(image)
+    (array([False,  True]), array([False,  True]))
     """
     if margin_color is None:
         margin_color = image.max((0, 1))
@@ -182,10 +184,7 @@ def trim_margin(
     col_mask = binary_fill_holes(np.invert(is_margin.all(0)))
     row_mask = binary_fill_holes(np.invert(is_margin.all(1)))
 
-    image = image[row_mask][:, col_mask]
-    label = label[row_mask][:, col_mask]
-
-    return image, label
+    return col_mask, row_mask
 
 
 def write_data(

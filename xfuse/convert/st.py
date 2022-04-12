@@ -8,9 +8,9 @@ from PIL import Image
 from ..utility.core import rescale
 from .utility import (
     Spot,
+    find_margin,
     labels_from_spots,
     mask_tissue,
-    trim_margin,
     write_data,
 )
 
@@ -24,6 +24,7 @@ def run(
     annotation: Optional[Dict[str, np.ndarray]] = None,
     scale_factor: Optional[float] = None,
     mask: bool = True,
+    custom_mask: Optional[np.ndarray] = None,
     rotate: bool = False,
 ) -> None:
     r"""
@@ -46,6 +47,8 @@ def run(
                 [[scale_factor, 0, 0], [0, scale_factor, 0], [0, 0, 1]]
             )
             transformation = transformation @ scale_matrix
+        if custom_mask is not None:
+            custom_mask = rescale(custom_mask, scale_factor, Image.NEAREST)
 
     if spots is not None:
         spots.index = spots[["x", "y"]].apply(
@@ -95,15 +98,24 @@ def run(
     label = np.zeros(image.shape[:2]).astype(np.int16)
     labels_from_spots(label, spots)
 
-    image, label = trim_margin(image, label)
+    col_mask, row_mask = find_margin(image)
+    image = image[row_mask][:, col_mask]
+    label = label[row_mask][:, col_mask]
+    if custom_mask is not None:
+        custom_mask = custom_mask[row_mask][:, col_mask]
+
     if scale_factor is not None:
         # The outermost pixels may belong in part to the margin if we
         # downscaled the image. Therefore, remove one extra row/column.
         image = image[1:-1, 1:-1]
         label = label[1:-1, 1:-1]
+        if custom_mask is not None:
+            custom_mask = custom_mask[1:-1, 1:-1]
 
     if mask:
-        counts, label = mask_tissue(image, counts, label)
+        counts, label = mask_tissue(
+            image, counts, label, initial_mask=custom_mask
+        )
 
     write_data(
         counts,

@@ -1,17 +1,19 @@
 from typing import Dict, Optional
 
+import cv2 as cv
 import h5py
 import numpy as np
 import pandas as pd
 from PIL import Image
+from scipy.ndimage.morphology import distance_transform_edt
 from scipy.sparse import csr_matrix
 
 from ..utility.core import rescale
 from .utility import (
     Spot,
+    find_margin,
     labels_from_spots,
     mask_tissue,
-    trim_margin,
     write_data,
 )
 
@@ -25,6 +27,7 @@ def run(
     annotation: Optional[Dict[str, np.ndarray]] = None,
     scale_factor: Optional[float] = None,
     mask: bool = True,
+    custom_mask: Optional[np.ndarray] = None,
     rotate: bool = False,
 ) -> None:
     r"""
@@ -59,25 +62,55 @@ def run(
             k: rescale(v, scale_factor, Image.NEAREST)
             for k, v in annotation.items()
         }
+        if custom_mask is not None:
+            custom_mask = rescale(custom_mask, scale_factor, Image.NEAREST)
 
     spots = list(
-        tissue_positions.loc[
-            bc_matrix["matrix"]["barcodes"][()].astype(str)
-        ].apply(lambda x: Spot(x=x["x"], y=x["y"], r=spot_radius), 1)
+        tissue_positions[["x", "y"]]
+        .loc[bc_matrix["matrix"]["barcodes"][()].astype(str)]
+        .apply(lambda x: Spot(x=x["x"], y=x["y"], r=spot_radius), 1)
     )
 
     label = np.zeros(image.shape[:2]).astype(np.int16)
     labels_from_spots(label, spots)
 
-    image, label = trim_margin(image, label)
+    col_mask, row_mask = find_margin(image)
+    image = image[row_mask][:, col_mask]
+    label = label[row_mask][:, col_mask]
+    if custom_mask is not None:
+        custom_mask = custom_mask[row_mask][:, col_mask]
+
     if scale_factor is not None:
         # The outermost pixels may belong in part to the margin if we
         # downscaled the image. Therefore, remove one extra row/column.
         image = image[1:-1, 1:-1]
         label = label[1:-1, 1:-1]
+        if custom_mask is not None:
+            custom_mask = custom_mask[1:-1, 1:-1]
 
     if mask:
-        counts, label = mask_tissue(image, counts, label)
+        if custom_mask is not None:
+            initial_mask = custom_mask
+        else:
+            (in_tissue_idxs,) = np.where(
+                tissue_positions["in_tissue"]
+                .loc[bc_matrix["matrix"]["barcodes"][()].astype(str)]
+                .values
+            )
+            in_tissue_idxs = in_tissue_idxs + 1
+            in_tissue = np.where(np.isin(label, in_tissue_idxs), True, False)
+            idx1, idx2 = distance_transform_edt(
+                label == 0, return_indices=True, return_distances=False
+            )
+            initial_mask = np.where(
+                label != 0,
+                np.where(in_tissue, cv.GC_FGD, cv.GC_BGD),
+                np.where(in_tissue[idx1, idx2], cv.GC_PR_FGD, cv.GC_PR_BGD),
+            )
+            initial_mask = initial_mask.astype(np.uint8)
+        counts, label = mask_tissue(
+            image, counts, label, initial_mask=initial_mask
+        )
 
     write_data(
         counts,
