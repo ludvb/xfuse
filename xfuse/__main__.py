@@ -295,7 +295,7 @@ cli.add_command(init)
 @click.option("--stats-rmse-interval", default=10)
 @click.option("--stats-scale-interval", default=1000)
 @click.option("--checkpoint-interval", default=1000)
-@click.option("--purge-interval", default=1000)
+@click.option("--purge-interval", type=int)
 @click.option("--analysis-interval", default=0)
 @_init
 def run(
@@ -415,6 +415,9 @@ def run(
                     config["expansion_strategy"]["type"]
                 ]
             )
+
+        if purge_interval is None:
+            purge_interval = config["expansion_strategy"]["purge_interval"]
 
         stats_writers = []
         if stats:
