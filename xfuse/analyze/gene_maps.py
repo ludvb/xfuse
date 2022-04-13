@@ -156,7 +156,7 @@ def _run_gene_maps_analysis(
 
     def _save_tensor(gene, samples, tissue_mask):
         if tissue_mask is not None:
-            samples[:, tissue_mask] = 0.0
+            samples[:, ~tissue_mask] = 0.0
         torch.save(samples, f"{gene}.pt")
 
     writers: Dict[str, Callable[..., None]] = {
