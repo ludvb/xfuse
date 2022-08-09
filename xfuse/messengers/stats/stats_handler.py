@@ -58,9 +58,9 @@ class StatsHandler(Messenger, metaclass=ABCMeta):
             self._handle(**msg)
 
 
-def log_figure(tag: str, figure: plt.figure.Figure, **kwargs,) -> None:
+def log_figure(tag: str, figure: plt.Figure, **kwargs,) -> None:
     r"""
-    Converts :class:`~plt.figure.Figure`` to image data and logs it
+    Converts :class:`~plt.Figure`` to image data and logs it
     using :func:`log_image`
     """
     if "format" not in kwargs:
