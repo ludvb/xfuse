@@ -62,7 +62,7 @@ def run(
     if slide_options is None:
         slide_options = {}
 
-    if (available_cores := multiprocessing.cpu_count() < num_data_workers:
+    if (available_cores := multiprocessing.cpu_count()) < num_data_workers:
         warnings.warn(
             " ".join(
                 [

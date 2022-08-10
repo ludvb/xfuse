@@ -153,6 +153,15 @@ def make_dataloader(dataset: Dataset, **kwargs: Any) -> DataLoader:
         np.random.seed(np.random.get_state()[1][0] + get("training_data").step)
         np.random.seed(np.random.randint(np.iinfo(np.int32).max) + n)
 
-    return DataLoader(
-        dataset, collate_fn=_collate, worker_init_fn=_worker_init, **kwargs
-    )
+    if np.isin(platform.system(),['Darwin','Windows']):
+        return torch.utils.data.DataLoader(
+        dataset = dataset,
+        collate_fn = torch.utils.data.dataloader.default_collate,
+        worker_init_fn = torch.utils.data.dataloader._worker_init_fn_t,
+        **kwargs )
+    else:
+        return DataLoader(
+        dataset = dataset,
+        collate_fn = _collate,
+        worker_init_fn = _worker_init,
+        **kwargs )
