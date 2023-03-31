@@ -2,7 +2,7 @@ from abc import ABCMeta, abstractmethod
 from io import BytesIO
 from typing import Callable, List, Optional
 
-import matplotlib
+import matplotlib.pyplot as plt
 import torch
 from imageio import imread
 from pyro.poutine.messenger import Messenger
@@ -58,9 +58,9 @@ class StatsHandler(Messenger, metaclass=ABCMeta):
             self._handle(**msg)
 
 
-def log_figure(tag: str, figure: matplotlib.figure.Figure, **kwargs,) -> None:
+def log_figure(tag: str, figure: plt.Figure, **kwargs,) -> None:
     r"""
-    Converts :class:`~matplotlib.figure.Figure`` to image data and logs it
+    Converts :class:`~plt.Figure`` to image data and logs it
     using :func:`log_image`
     """
     if "format" not in kwargs:

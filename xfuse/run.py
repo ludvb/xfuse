@@ -1,6 +1,7 @@
 import os
 import re
 import warnings
+import multiprocessing
 from functools import partial, reduce
 from operator import add
 from typing import Any, Dict, Optional, Tuple
@@ -61,7 +62,7 @@ def run(
     if slide_options is None:
         slide_options = {}
 
-    if (available_cores := len(os.sched_getaffinity(0))) < num_data_workers:
+    if (available_cores := multiprocessing.cpu_count()) < num_data_workers:
         warnings.warn(
             " ".join(
                 [
